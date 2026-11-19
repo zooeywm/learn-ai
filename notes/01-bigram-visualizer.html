@@ -128,6 +128,15 @@
           <span data-stage="5" class="stage-pill">⑤ 梯度回流推拉</span>
         </div>
         <div class="flex">
+          <label class="flex muted" style="margin-right:4px;">
+            速度:
+            <select id="speedSelect" class="mono">
+              <option value="0.5">0.5x 慢放</option>
+              <option value="1" selected>1.0x 正常</option>
+              <option value="2">2.0x 快速</option>
+              <option value="3">3.0x 极速</option>
+            </select>
+          </label>
           <button id="camIso">立体视角</button>
           <button id="camTop">俯视矩阵</button>
           <button id="camSide">平视柱高</button>
@@ -294,8 +303,13 @@
     let mode = "idle";
     let currentStage = 0;
     let stageStartMs = 0;
+    let animSpeed = 1.0;
     const STEP_ANIM_MS = 1300;
     const AUTO_HOLD_MS = 850;
+    const stepAnimMs = () => STEP_ANIM_MS / animSpeed;
+    const autoHoldMs = () => AUTO_HOLD_MS / animSpeed;
+    const hopDurationMs = () => HOP_DURATION / animSpeed;
+    const growTickMs = () => 50 / animSpeed;
     let stage5Applied = false;
     const STAGE_NAMES = ["① 词典编码", "② 扫描矩阵行", "③ Softmax 概率塔", "④ Loss 能量柱", "⑤ 反向梯度推拉"];
 
@@ -597,7 +611,8 @@
 
       const [curX, curY] = PAIRS[selectedPairIdx];
 
-      let stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / STEP_ANIM_MS) : 0;
+      const curStepMs = stepAnimMs(), curHoldMs = autoHoldMs(), curHopMs = hopDurationMs();
+      let stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / curStepMs) : 0;
       const progWrap = document.getElementById("stageProgressWrap");
       const progBar = document.getElementById("stageProgressBar");
 
@@ -610,12 +625,12 @@
       } else if (mode === "autoplay") {
         progWrap.classList.remove("hidden");
         const elapsed = nowMs - stageStartMs;
-        stageT = Math.min(1, elapsed / STEP_ANIM_MS);
+        stageT = Math.min(1, elapsed / curStepMs);
         progBar.style.width = `${((currentStage - 1 + stageT) / 5) * 100}%`;
         if (currentStage === 5 && stageT >= 0.42 && !stage5Applied) {
           trainOneEpoch(false); stage5Applied = true; updateHud();
         }
-        if (elapsed >= STEP_ANIM_MS + AUTO_HOLD_MS) {
+        if (elapsed >= curStepMs + curHoldMs) {
           if (currentStage < 5) enterStage(currentStage + 1, nowMs);
           else {
             mode = "step"; updateHud();
@@ -625,7 +640,7 @@
         }
       } else if (mode === "grow50") {
         progWrap.classList.remove("hidden");
-        if (nowMs - lastGrowTick >= 50 && growRemaining > 0) {
+        if (nowMs - lastGrowTick >= growTickMs() && growRemaining > 0) {
           trainOneEpoch(true); growRemaining -= 1; lastGrowTick = nowMs;
           progBar.style.width = `${((50 - growRemaining) / 50) * 100}%`;
           updateHud();
@@ -639,7 +654,7 @@
         }
       } else if (mode === "hop") {
         progWrap.classList.add("hidden");
-        const u = Math.min(1, (nowMs - hopStartMs) / HOP_DURATION);
+        const u = Math.min(1, (nowMs - hopStartMs) / curHopMs);
         if (u >= 1 && !hopLanded && hopTo) {
           hopLanded = true;
           genIds.push(hopTo[1]); if (genIds.length > 20) genIds.shift();
@@ -653,13 +668,14 @@
         progWrap.classList.add("hidden");
       }
 
-      for (let i = 0; i < V * V; i++) visualHeights[i] += (table[i] - visualHeights[i]) * 0.16;
+      const lerpRate = Math.min(0.45, 0.16 * Math.sqrt(animSpeed));
+      for (let i = 0; i < V * V; i++) visualHeights[i] += (table[i] - visualHeights[i]) * lerpRate;
       for (let j = 0; j < V; j++) {
         const targetP = hasComputedSoftmax ? displayedProbs[j] : 0.0;
-        visualProbs[j] += (targetP - visualProbs[j]) * 0.18;
+        visualProbs[j] += (targetP - visualProbs[j]) * Math.min(0.48, lerpRate * 1.15);
       }
       const targetLossVal = hasComputedLoss ? displayedLoss : 0.0;
-      visualLoss += (targetLossVal - visualLoss) * 0.16;
+      visualLoss += (targetLossVal - visualLoss) * lerpRate;
 
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
@@ -856,7 +872,7 @@
         ctx.stroke(); ctx.restore();
       }
       if (hopFrom && hopTo) {
-        const u = Math.min(1, (nowMs - hopStartMs) / HOP_DURATION);
+        const u = Math.min(1, (nowMs - hopStartMs) / curHopMs);
         const aC = cellWorld(hopFrom[0], hopFrom[1]), bC = cellWorld(hopTo[0], hopTo[1]);
         const a = { x: aC.x, y: Math.max(0.3, visualHeights[hopFrom[0] * V + hopFrom[1]] * 0.88 + 0.4), z: aC.z };
         const b = { x: bC.x, y: Math.max(0.3, visualHeights[hopTo[0] * V + hopTo[1]] * 0.88 + 0.4), z: bC.z };
@@ -939,6 +955,7 @@
       setNarrator("已重置所有权重为 0.0（Loss 与概率塔归零，等待首次前向计算）",
         "点击「⏭ 下一步」严格按 ①→②→③→④→⑤ 单向推进，或点「+1 推进 1 轮」！");
     };
+    document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
     document.getElementById("camIso").onclick = () => { cam.autoOrbit = false; cam.targetYaw = -0.62; cam.targetPitch = 0.56; cam.targetDist = 24.5; };
     document.getElementById("camTop").onclick = () => { cam.autoOrbit = false; cam.targetYaw = 0.0; cam.targetPitch = 1.38; cam.targetDist = 24.0; };
     document.getElementById("camSide").onclick = () => { cam.autoOrbit = false; cam.targetYaw = -0.25; cam.targetPitch = 0.24; cam.targetDist = 24.0; };
