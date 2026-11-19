@@ -6,21 +6,52 @@
   <title>Step 02：Autograd 与三字上下文 MLP 3D 建模动画（离线版）</title>
   <link rel="stylesheet" href="./assets/visualizer.css" />
   <style>
-    .section-tag {
-      padding: 2px 8px;
+    .mode-switch {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      gap: 2px;
+    }
+    .mode-btn {
+      padding: 3px 10px;
       border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
       font-size: 12px;
       font-weight: 600;
+      cursor: pointer;
     }
-    .section-tag.train {
-      background: color-mix(in srgb, var(--primary) 18%, var(--content));
-      border: 1px solid color-mix(in srgb, var(--primary) 55%, var(--border));
+    .mode-btn.active-train {
+      background: color-mix(in srgb, var(--primary) 22%, var(--card));
+      border-color: var(--primary);
       color: var(--primary);
     }
-    .section-tag.infer {
-      background: color-mix(in srgb, var(--success) 16%, var(--content));
-      border: 1px solid color-mix(in srgb, var(--success) 55%, var(--border));
+    .mode-btn.active-infer {
+      background: color-mix(in srgb, var(--success) 20%, var(--card));
+      border-color: var(--success);
       color: var(--success);
+    }
+    .infer-pill {
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      color: var(--muted-foreground);
+      font-size: 11px;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .infer-pill.active {
+      border-color: var(--success);
+      background: color-mix(in srgb, var(--success) 18%, var(--content));
+      color: var(--success);
+      font-weight: 700;
+    }
+    .infer-pill.done {
+      border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+      color: var(--foreground);
     }
     .corpus-strip {
       display: flex;
@@ -137,65 +168,23 @@
       font-weight: 700;
     }
     .chip.latest {
-      background: var(--primary);
-      color: var(--primary-foreground);
-      border-color: var(--primary);
+      background: var(--success);
+      color: #062814;
+      border-color: var(--success);
       font-weight: 700;
     }
-    /* Independent Inference Card Probability Bar Chart */
-    .infer-card {
-      border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+    .infer-strip {
+      border-left: 3px solid var(--success);
+      padding-left: 10px;
     }
-    .prob-bars {
-      display: grid;
-      grid-template-columns: repeat(10, minmax(0, 1fr));
-      gap: 6px;
-      margin-top: 8px;
-      align-items: end;
-    }
-    @media (max-width: 720px) {
-      .prob-bars { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    }
-    .prob-col {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      padding: 6px 4px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--card);
-      transition: border-color 0.2s ease, background-color 0.2s ease;
-    }
-    .prob-col.picked {
-      border-color: var(--success);
-      background: color-mix(in srgb, var(--success) 16%, var(--card));
-    }
-    .prob-track {
-      width: 100%;
-      max-width: 28px;
-      height: 76px;
-      border-radius: 5px;
-      background: var(--content);
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: flex-end;
-      overflow: hidden;
-    }
-    .prob-fill {
-      width: 100%;
-      background: var(--primary);
-      transition: height 0.25s ease, background-color 0.2s ease;
-    }
-    .prob-col.picked .prob-fill { background: var(--success); }
     .roulette-bar {
       position: relative;
-      height: 18px;
+      height: 16px;
       border-radius: 6px;
       overflow: hidden;
       border: 1px solid var(--border);
       display: flex;
-      margin-top: 8px;
+      margin-top: 6px;
       background: var(--card);
     }
     .roulette-marker {
@@ -239,12 +228,11 @@
   <div class="wrap">
 
     <!-- =================================================================== -->
-    <!-- CARD 1: TRAINING (训练区 — 独立清晰，只负责前向/Tape/反传/AdamW)      -->
+    <!-- HEADER BAR: Title + Corpus Highlight + Training Actions             -->
     <!-- =================================================================== -->
     <div class="card row">
       <div>
         <div class="flex">
-          <span class="section-tag train mono">训练 Training</span>
           <span class="badge mono">Step 02 · 3D 建模</span>
           <h1>Arena-Tape 自动求导 &amp; 三字上下文 MLP 语言模型</h1>
         </div>
@@ -265,26 +253,50 @@
       </div>
     </div>
 
+    <!-- =================================================================== -->
+    <!-- MAIN UNIFIED 3D STAGE CARD (Single Canvas · Clear Train/Infer Mode) -->
+    <!-- =================================================================== -->
     <div class="card">
-      <!-- Read-only 8-Stage Training Ribbon + Speed + 3D Camera -->
+      <!-- Row 1: Mode Switch + Context-Sensitive Ribbon + Speed & Camera -->
       <div class="row xs">
-        <div class="flex" id="stagePills" title="训练流水线严格单向推进：请使用「⏭ 下一步」逐步执行">
-          <span data-stage="1" class="stage-pill">① 编码与取样</span>
-          <span class="muted">→</span>
-          <span data-stage="2" class="stage-pill">② Embed拼接</span>
-          <span class="muted">→</span>
-          <span data-stage="3" class="stage-pill">③ MatMul+b1</span>
-          <span class="muted">→</span>
-          <span data-stage="4" class="stage-pill">④ ReLU门控</span>
-          <span class="muted">→</span>
-          <span data-stage="5" class="stage-pill">⑤ MatMul+b2</span>
-          <span class="muted">→</span>
-          <span data-stage="6" class="stage-pill">⑥ 概率与Loss</span>
-          <span class="muted">→</span>
-          <span data-stage="7" class="stage-pill">⑦ Tape反传</span>
-          <span class="muted">→</span>
-          <span data-stage="8" class="stage-pill">⑧ AdamW更新</span>
+        <div class="flex" style="gap:8px;">
+          <div class="mode-switch" role="tablist" aria-label="3D 舞台模式切换">
+            <button id="btnModeTrain" class="mode-btn active-train" role="tab" aria-selected="true">🔵 训练模式</button>
+            <button id="btnModeInfer" class="mode-btn" role="tab" aria-selected="false">🟢 推理模式</button>
+          </div>
+
+          <!-- Train Mode Ribbon (8 stages) -->
+          <div class="flex" id="stagePills" title="训练流水线严格单向推进：请使用「⏭ 下一步」逐步执行">
+            <span data-stage="1" class="stage-pill">① 编码与取样</span>
+            <span class="muted">→</span>
+            <span data-stage="2" class="stage-pill">② Embed拼接</span>
+            <span class="muted">→</span>
+            <span data-stage="3" class="stage-pill">③ MatMul+b1</span>
+            <span class="muted">→</span>
+            <span data-stage="4" class="stage-pill">④ ReLU门控</span>
+            <span class="muted">→</span>
+            <span data-stage="5" class="stage-pill">⑤ MatMul+b2</span>
+            <span class="muted">→</span>
+            <span data-stage="6" class="stage-pill">⑥ 概率与Loss</span>
+            <span class="muted">→</span>
+            <span data-stage="7" class="stage-pill">⑦ Tape反传</span>
+            <span class="muted">→</span>
+            <span data-stage="8" class="stage-pill">⑧ AdamW更新</span>
+          </div>
+
+          <!-- Infer Mode Ribbon (4 pure-forward stages; no Tape/Loss/Backprop) -->
+          <div class="flex hidden" id="inferPills">
+            <span data-phase="1" class="infer-pill">① 末尾3字输入</span>
+            <span class="muted">→</span>
+            <span data-phase="2" class="infer-pill">② MLP纯前向</span>
+            <span class="muted">→</span>
+            <span data-phase="3" class="infer-pill">③ 温度掷骰抽字</span>
+            <span class="muted">→</span>
+            <span data-phase="4" class="infer-pill">④ 新字回流滑窗</span>
+            <span class="muted mono" style="margin-left:4px;">（无 Tape · 无 Loss · 不改权重）</span>
+          </div>
         </div>
+
         <div class="flex">
           <label class="flex muted" style="margin-right:4px;">
             速度:
@@ -302,13 +314,15 @@
         </div>
       </div>
 
-      <!-- Training 3D Canvas (Dedicated exclusively to Training!) -->
+      <!-- Unified 3D Canvas (Same MLP weights! Training shows Tape+Loss+Grad; Inference hides them!) -->
       <div class="viewport">
         <canvas id="scene3d"></canvas>
 
-        <div class="hud hud-tl mono">
+        <!-- Top-Left HUD: Clear Visual Distinction Between Train & Infer -->
+        <div class="hud hud-tl mono" id="hudTrainBox">
           <div>
-            Step: <strong id="hudStep">0</strong>
+            <strong style="color:var(--primary)">🔵 训练模式</strong>
+            &nbsp;|&nbsp; Step: <strong id="hudStep">0</strong>
             &nbsp;|&nbsp; Batch平均Loss(9窗): <strong id="hudBatchLoss">未计算 (0)</strong>
           </div>
           <div class="muted">
@@ -320,28 +334,49 @@
           </div>
         </div>
 
-        <div class="hud hud-tr">
+        <div class="hud hud-tl mono hidden" id="hudInferBox">
+          <div>
+            <strong style="color:var(--success)">🟢 推理模式（纯前向 · 无Tape · 无Loss · 不改权重）</strong>
+            &nbsp;|&nbsp; 共享权重: <strong id="hudInferStep">Step 0</strong>
+          </div>
+          <div class="muted">
+            当前3字窗口: <strong id="hudInferWin" style="color:var(--foreground)">「床前明」</strong>
+            &nbsp;|&nbsp; 温度 T = <strong id="hudInferTemp" style="color:var(--primary)">0.7</strong>
+          </div>
+          <div class="muted">
+            已隐藏 Tape / Loss / Target；点「⏭ 下一步」可无缝切回刚才的训练进度
+          </div>
+        </div>
+
+        <!-- Top-Right Legend HUD -->
+        <div class="hud hud-tr" id="legendTrain">
           <span><span class="dot" style="background:var(--primary)"></span>前向张量/概率</span>
           <span><span class="dot" style="background:var(--warning)"></span>反向梯度/Loss</span>
           <span><span class="dot" style="background:var(--success)"></span>正值/目标/ReLU通</span>
           <span><span class="dot" style="background:var(--error)"></span>负值/ReLU断(×0)</span>
         </div>
+        <div class="hud hud-tr hidden" id="legendInfer">
+          <span><span class="dot" style="background:var(--primary)"></span>3字窗口/概率塔</span>
+          <span><span class="dot" style="background:var(--success)"></span>ReLU激活/抽中字</span>
+          <span><span class="dot" style="background:var(--warning)"></span>金色骰子与回流</span>
+        </div>
 
+        <!-- Bottom Narrator HUD -->
         <div class="hud hud-bottom">
           <div class="row">
             <strong id="narratorTitle">准备就绪：已选中「床前明 → 月」，点一次「⏭ 下一步」开始训练拆解！</strong>
             <div id="stageProgressWrap" class="prog-track hidden"><div id="stageProgressBar" class="prog-fill"></div></div>
           </div>
           <div id="narratorDesc" class="muted" style="margin-top:3px;">
-            本区只负责训练（建 Tape、算 Loss、反传梯度、AdamW 更新权重）。下方独立卡片是用同一份权重做纯前向推理接龙。
+            当前为 🔵 训练模式（含 Tape、Loss 与反传）。想用同一套 3D 权重接龙？直接点下方「🎲 推理下一个字」，舞台会自动切入 🟢 推理模式！
           </div>
         </div>
       </div>
 
-      <!-- Sample Selector + Learning Rate + Teaching Config Banner -->
+      <!-- Strip 1: Training Samples & Learning Rate (Like Step 01) -->
       <div class="row divider xs">
         <div class="flex">
-          <span class="muted">选择观察样本（切换样本只改观察对象，不改权重）：</span>
+          <span class="muted">🔵 训练观察样本（切换样本只改观察对象，不改权重）：</span>
           <div id="sampleButtons" class="flex"></div>
         </div>
         <div class="flex">
@@ -352,12 +387,50 @@
           </label>
         </div>
       </div>
-      <div class="xs muted" style="margin-top:6px;">
-        <strong>网页教学配置</strong>：默认用短语料全部 <strong>9 个三字窗口</strong>组成 1 个完整 batch（所有样本均参与当前更新，方便对照 <span class="mono" style="color:var(--foreground)">前明月→光</span> 与 <span class="mono" style="color:var(--foreground)">望明月→。</span>）；维度 <span class="mono">V=10, ctx=3, emb=4, H=8</span>（共 234 参数，全真实计算）。Rust 命令行版 <span class="mono">crates/step02-autograd/src/main.rs</span> 每步随机抽取 64 个窗口（<span class="mono">emb=24, H=96</span>）。
+
+      <!-- Strip 2: 3D Autoregressive Inference (Directly under Canvas, Like Step 01!) -->
+      <div class="divider xs infer-strip">
+        <div class="row">
+          <div class="flex" style="gap:10px;">
+            <strong style="color:var(--success)">🟢 3D 自回归接龙推理</strong>
+            <span id="inferWeightTag" class="badge mono">共享权重 Step 0</span>
+            <label class="flex muted">
+              起始3字:
+              <select id="genStartSelect" class="mono"></select>
+            </label>
+            <label class="flex muted">
+              温度 T:
+              <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.7" />
+              <span id="tempVal" class="mono" style="color:var(--foreground); min-width:24px;">0.7</span>
+            </label>
+          </div>
+          <div class="flex">
+            <button id="btnGenNext" class="primary">🎲 推理下一个字</button>
+            <button id="btnGenReset">↺ 重置接龙</button>
+          </div>
+        </div>
+        <div class="tape-box row">
+          <div class="flex">
+            <span class="muted">接龙序列（蓝框=末尾3字输入）：</span>
+            <div id="genTape" class="flex mono"></div>
+          </div>
+          <span id="genReadout" class="mono muted">点「🎲 推理下一个字」在同一 3D 模型上看纯前向采样与滑窗回流！</span>
+        </div>
+        <div id="inferRoulette" class="roulette-bar" title="当前3字窗口的温度 Softmax 轮盘赌区间与最近一次骰子落点 r"></div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TRAINING DEEP-DIVE INSPECTOR: Arena Tape (12 Nodes) + ReLU Gate     -->
+    <!-- =================================================================== -->
+    <div class="card xs">
+      <div class="row">
+        <div class="muted">
+          <strong>网页教学配置</strong>：默认用短语料全部 <strong>9 个三字窗口</strong>组成 1 个完整 batch（所有样本均参与当前更新，方便对照 <span class="mono" style="color:var(--foreground)">前明月→光</span> 与 <span class="mono" style="color:var(--foreground)">望明月→。</span>）；维度 <span class="mono">V=10, ctx=3, emb=4, H=8</span>（共 234 参数，全真实计算）。Rust 命令行版 <span class="mono">crates/step02-autograd/src/main.rs</span> 每步随机抽取 64 个窗口（<span class="mono">emb=24, H=96</span>）。
+        </div>
       </div>
 
-      <!-- Training Inspector: 12-Node Arena Tape (Left) + ReLU Gate & Contrast (Right) -->
-      <div class="grid-2 xs">
+      <div class="grid-2">
         <!-- Left: Arena Tape 12 Nodes -->
         <div class="subpanel">
           <div class="row">
@@ -420,78 +493,6 @@
         </div>
       </div>
     </div>
-
-    <!-- =================================================================== -->
-    <!-- CARD 2: INFERENCE (推理区 — 独立卡片！纯前向接龙，不建Tape不改权重)   -->
-    <!-- =================================================================== -->
-    <section class="card infer-card" aria-labelledby="inferTitle">
-      <div class="row">
-        <div class="flex">
-          <span class="section-tag infer mono">推理 Inference</span>
-          <h2 id="inferTitle" style="margin:0; font-size:15px;">三字自回归接龙（共享上方同一份已训练权重）</h2>
-          <span id="inferWeightTag" class="badge mono">当前权重：Step 0</span>
-        </div>
-        <div class="flex xs">
-          <label class="flex muted">
-            起始3字窗口:
-            <select id="genStartSelect" class="mono"></select>
-          </label>
-          <label class="flex muted">
-            温度 T:
-            <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.7" />
-            <span id="tempVal" class="mono" style="color:var(--foreground); min-width:24px;">0.7</span>
-          </label>
-          <button id="btnGenNext" class="primary">🎲 推理下一个字</button>
-          <button id="btnGenReset">↺ 重置接龙</button>
-        </div>
-      </div>
-
-      <div class="xs muted" style="margin-top:6px;">
-        <strong>与上方训练区的区别</strong>：推理阶段<strong>没有 target、不建 Tape、不算 Loss、不修改任何权重</strong>。下方专属 3D 推理舞台只保留纯前向路径：末尾 3 字 → MLP 前向 → 温度 Softmax 概率塔 → 3D 骰子抽字 → 新字飞回窗口右滑！
-      </div>
-
-      <!-- Dedicated 3D Inference Stage (Pure Forward + Sampling + Window Slide!) -->
-      <div class="viewport" style="margin-top:8px;">
-        <canvas id="infer3d" style="height:310px;"></canvas>
-        <div class="hud hud-tl mono">
-          <div>模式: <strong style="color:var(--success)">纯前向推理（无 Tape / 无 Loss / 不改权重）</strong></div>
-          <div class="muted">当前窗口: <strong id="inferHudWin" style="color:var(--foreground)">「床前明」</strong> &nbsp;|&nbsp; 温度 T = <strong id="inferHudTemp" style="color:var(--primary)">0.7</strong></div>
-        </div>
-        <div class="hud hud-tr">
-          <span><span class="dot" style="background:var(--primary)"></span>输入/概率塔</span>
-          <span><span class="dot" style="background:var(--success)"></span>ReLU激活/抽中字</span>
-          <span><span class="dot" style="background:var(--warning)"></span>骰子与回流</span>
-        </div>
-        <div class="hud hud-bottom">
-          <div class="row">
-            <strong id="inferAnimTitle">推理待命：点击「🎲 推理下一个字」观看 3D 前向采样与窗口滑动动画（左键可旋转视角）</strong>
-            <div id="inferProgWrap" class="prog-track hidden"><div id="inferProgBar" class="prog-fill" style="background:var(--success);"></div></div>
-          </div>
-          <div id="inferAnimDesc" class="muted" style="margin-top:2px;">
-            拖动上方「温度 T」滑块，右侧 10 座 3D 概率塔会立刻实时变形；点「🎲 推理下一个字」看小球穿过 MLP 抽字并飞回输入槽！
-          </div>
-        </div>
-      </div>
-
-      <!-- Sliding Window Sequence Tape -->
-      <div class="tape-box row xs">
-        <div class="flex">
-          <span class="muted">接龙序列（蓝框 = 下一步输入的最后 3 字）：</span>
-          <div id="genTape" class="flex mono"></div>
-        </div>
-        <span id="genWindowBadge" class="mono" style="color:var(--primary); font-weight:600;">下一步输入窗口：「床前明」</span>
-      </div>
-
-      <!-- Independent Live Temperature Softmax Distribution & Roulette -->
-      <div style="margin-top:10px;" class="xs">
-        <div class="row">
-          <span id="inferDistTitle" class="muted mono">当前输入窗口「床前明」的温度 Softmax(logits / T=0.7) 概率分布：</span>
-          <span id="genReadout" class="mono" style="color:var(--foreground)">点击「🎲 推理下一个字」体验单步采样与窗口右滑</span>
-        </div>
-        <div id="inferProbBars" class="prob-bars mono"></div>
-        <div id="inferRoulette" class="roulette-bar" title="轮盘赌区间与最近一次骰子落点 r"></div>
-      </div>
-    </section>
 
   </div>
 
@@ -805,13 +806,17 @@
     }
 
     // =========================================================================
-    // 3. Shared Model Weights + Strictly Separated Training & Inference Helpers
+    // 3. Shared Model Weights + Strictly Isolated Train & Infer State
     // =========================================================================
     let model = null;
     let trainStepCount = 0;
     let lr = 0.03;
 
-    // Training state (Card 1)
+    // Unified Stage View Mode: "train" | "infer"
+    // Switching viewMode NEVER destroys the other mode's state!
+    let viewMode = "train";
+
+    // Training state (completely preserved while viewing Inference!)
     let selectedSampleIdx = 0; // Default: 「床前明 → 月」
     let selectedNodeId = 5;
     let selectedNeuron = 0;
@@ -820,12 +825,22 @@
     let hasComputedBackward = false;
     let hasEverUpdated = false;
     let lastUpdateReport = null;
+    let trainNarrator = {
+      title: "准备就绪：已选中「床前明 → 月」，点一次「⏭ 下一步」开始训练拆解！",
+      desc: "当前为 🔵 训练模式（含 Tape、Loss 与反传）。想用同一套 3D 权重接龙？直接点下方「🎲 推理下一个字」，舞台会自动切入 🟢 推理模式！",
+    };
 
-    // Inference state (Card 2 — completely independent of Card 1 UI/3D stage!)
+    // Inference state (completely preserved while training!)
     let temperature = 0.7;
     let genStartSampleIdx = 0; // Default: 「床前明」
     let genIds = [...SAMPLES[0].ctxIds];
     let lastGenDraw = null; // { prevWinText, nextId, prob, dice, newWinText }
+    let inferAnim = null;   // { startMs, prevWinIds, prevWinText, nextId, prob, dice, probs, x, z1, h, committed }
+    const INFER_ANIM_MS = 1650;
+    let inferNarrator = {
+      title: "🟢 推理模式：纯前向接龙（已隐藏 Tape / Loss / Target，绝不修改权重）",
+      desc: "拖动「温度 T」实时看右侧 10 座 3D 概率塔变形；点「🎲 推理下一个字」看 3 字穿过同一套 MLP 抽字并飞回输入槽！",
+    };
 
     function createModel(seed = 42, deadRelu = false) {
       const rng = new Rng(seed);
@@ -867,10 +882,12 @@
         const tok = ctxIds[slot];
         for (let j = 0; j < EMB_DIM; j++) x[slot * EMB_DIM + j] = model.emb.data[tok * EMB_DIM + j];
       }
+      const z1 = new Float32Array(HIDDEN);
       const h = new Float32Array(HIDDEN);
       for (let k = 0; k < HIDDEN; k++) {
         let acc = model.b1.data[k];
         for (let i = 0; i < IN_DIM; i++) acc += x[i] * model.w1.data[i * HIDDEN + k];
+        z1[k] = acc;
         h[k] = acc > 0 ? acc : 0;
       }
       const logits = new Float32Array(V);
@@ -879,11 +896,7 @@
         for (let k = 0; k < HIDDEN; k++) acc += h[k] * model.w2.data[k * V + j];
         logits[j] = acc;
       }
-      return { x, h, logits };
-    }
-
-    function inferLogitsForWindow(ctxIds) {
-      return inferForwardForWindow(ctxIds).logits;
+      return { x, z1, h, logits };
     }
 
     function getParamByNodeId(id) {
@@ -906,7 +919,6 @@
       model.w2.adamwStep(oldTape.nodes[3].grad, lr, wd, trainStepCount);
       model.b2.adamwStep(oldTape.nodes[4].grad, lr, wd, trainStepCount);
 
-      // Re-forward on the NEW weights so post-update Loss comes strictly from NEW logits!
       const newTape = runTrainingForward();
       for (let i = 0; i < 12; i++) newTape.nodes[i].grad.set(oldTape.nodes[i].grad);
       activeTape = newTape;
@@ -925,7 +937,7 @@
     }
 
     // =========================================================================
-    // 4. Training 8-Stage State Machine (Strict Forward-Only Single Step)
+    // 4. Training 8-Stage State Machine + Clean Mode Switcher
     // =========================================================================
     let mode = "idle"; // "idle" | "step" | "autoplay" | "train40"
     let currentStage = 0; // 0 or 1..8
@@ -963,6 +975,71 @@
       }
     }
 
+    function flushPendingInfer() {
+      if (inferAnim && !inferAnim.committed) {
+        inferAnim.committed = true;
+        genIds.push(inferAnim.nextId);
+        if (genIds.length > 24) genIds.shift();
+        const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
+        lastGenDraw = {
+          prevWinText: inferAnim.prevWinText,
+          nextId: inferAnim.nextId,
+          prob: inferAnim.prob,
+          dice: inferAnim.dice,
+          newWinText,
+        };
+        renderInferenceStrip();
+        document.getElementById("genReadout").textContent =
+          `输入「${inferAnim.prevWinText}」(T=${temperature.toFixed(1)}) 骰子 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」(p=${(inferAnim.prob * 100).toFixed(1)}%) → 新窗口「${newWinText}」`;
+      }
+    }
+
+    function setTrainNarrator(title, desc) {
+      trainNarrator = { title, desc };
+      if (viewMode === "train") applyNarratorDom(title, desc);
+    }
+
+    function setInferNarrator(title, desc) {
+      inferNarrator = { title, desc };
+      if (viewMode === "infer") applyNarratorDom(title, desc);
+    }
+
+    function applyNarratorDom(title, desc) {
+      document.getElementById("narratorTitle").textContent = title;
+      document.getElementById("narratorDesc").textContent = desc;
+    }
+
+    function setViewMode(nextView) {
+      if (viewMode === nextView) return;
+      if (nextView === "infer") {
+        flushPendingStage8();
+        if (mode === "autoplay" || mode === "train40") mode = currentStage > 0 ? "step" : "idle";
+      } else {
+        flushPendingInfer();
+        inferAnim = null;
+      }
+      viewMode = nextView;
+      updateModeChrome();
+      const curN = viewMode === "train" ? trainNarrator : inferNarrator;
+      applyNarratorDom(curN.title, curN.desc);
+    }
+
+    function updateModeChrome() {
+      const isTrain = viewMode === "train";
+      document.getElementById("btnModeTrain").className = `mode-btn${isTrain ? " active-train" : ""}`;
+      document.getElementById("btnModeInfer").className = `mode-btn${!isTrain ? " active-infer" : ""}`;
+      document.getElementById("btnModeTrain").setAttribute("aria-selected", String(isTrain));
+      document.getElementById("btnModeInfer").setAttribute("aria-selected", String(!isTrain));
+
+      document.getElementById("stagePills").classList.toggle("hidden", !isTrain);
+      document.getElementById("inferPills").classList.toggle("hidden", isTrain);
+      document.getElementById("hudTrainBox").classList.toggle("hidden", !isTrain);
+      document.getElementById("hudInferBox").classList.toggle("hidden", isTrain);
+      document.getElementById("legendTrain").classList.toggle("hidden", !isTrain);
+      document.getElementById("legendInfer").classList.toggle("hidden", isTrain);
+      document.getElementById("stageProgressBar").style.background = isTrain ? "var(--primary)" : "var(--success)";
+    }
+
     function countOpenNeurons(sampleIdx) {
       if (!activeTape) return 0;
       let cnt = 0;
@@ -971,6 +1048,7 @@
     }
 
     function enterStage(stageNum, nowMs) {
+      setViewMode("train");
       flushPendingStage8();
       currentStage = stageNum;
       stageStartMs = nowMs;
@@ -982,7 +1060,7 @@
         hasComputedForwardStage = 1;
         hasComputedBackward = false;
         selectedNodeId = 0;
-        setNarrator(
+        setTrainNarrator(
           `① 字符编码与取样：「${s.ctxText}」→ 输入 ID [${s.ctxIds.join(", ")}]；正确答案「${s.targetChar}」→ target = ${s.targetId}`,
           `前 3 个字将查词向量拼成输入 x 送进网络；「${s.targetChar}」是 target，要等到第 ⑥ 步算 Loss 时才使用！`
         );
@@ -990,7 +1068,7 @@
         if (!activeTape) activeTape = runTrainingForward();
         hasComputedForwardStage = 2;
         selectedNodeId = 5;
-        setNarrator(
+        setTrainNarrator(
           `② Embedding 查表并拼接（Tape 写入 Node[5] x）：3 个 4 维词向量拼成 12 维输入 x`,
           `9 个窗口一起组成形状 (9, 12) 的张量 x。因为带上了前两个字，「前明月」和「望明月」拼出的 x 完全不同！`
         );
@@ -998,7 +1076,7 @@
         hasComputedForwardStage = 3;
         selectedNodeId = 7;
         const zVal = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron];
-        setNarrator(
+        setTrainNarrator(
           `③ 第一层线性变换（Node[6] MatMul → Node[7] +b1）：x(9,12) @ w1(12,8) + b1 → z1(9,8)`,
           `选中的神经元 #${selectedNeuron} 线性输出 z = ${zVal.toFixed(3)}（绿=正，红=负），即将进入 ReLU 闸门！`
         );
@@ -1008,7 +1086,7 @@
         const zVal = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron];
         const hVal = activeTape.nodes[8].data[selectedSampleIdx * HIDDEN + selectedNeuron];
         const openCount = countOpenNeurons(selectedSampleIdx);
-        setNarrator(
+        setTrainNarrator(
           `④ ReLU 门控激活（Node[8] h = max(0, z1)）：本样本 8 个神经元中 ${openCount} 个开启、${HIDDEN - openCount} 个归零`,
           zVal > 0
             ? `神经元 #${selectedNeuron} 的 z = ${zVal.toFixed(3)} > 0，绿色大门开启，输出 h = ${hVal.toFixed(3)}！`
@@ -1018,7 +1096,7 @@
         hasComputedForwardStage = 5;
         selectedNodeId = 10;
         const logits = activeTape.nodes[10].data.subarray(selectedSampleIdx * V, (selectedSampleIdx + 1) * V);
-        setNarrator(
+        setTrainNarrator(
           `⑤ 输出层线性变换（Node[9] MatMul → Node[10] +b2）：h(9,8) @ w2(8,10) + b2 → logits(9,10)`,
           `模型对词表 10 个字打出原始分 logits，正确答案「${s.targetChar}」当前打分 = ${logits[s.targetId].toFixed(2)}。`
         );
@@ -1029,7 +1107,7 @@
         const probs = softmaxRow(logits, 1.0);
         const sLoss = activeTape.nodes[11].sampleLosses[selectedSampleIdx];
         const bLoss = activeTape.nodes[11].data[0];
-        setNarrator(
+        setTrainNarrator(
           `⑥ 概率与交叉熵（Tape 写入融合节点 Node[11] CrossEntropy）：「${s.targetChar}」概率 ${(probs[s.targetId] * 100).toFixed(1)}%`,
           `橙色柱 = 当前样本 Loss (${sLoss.toFixed(4)})，顶部显示 9 窗 Batch 平均 Loss (${bLoss.toFixed(4)})。前向完成，下一步倒序反传！`
         );
@@ -1040,7 +1118,7 @@
         const zVal = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron];
         const dH = activeTape.nodes[8].grad[selectedSampleIdx * HIDDEN + selectedNeuron];
         const dZ = activeTape.nodes[7].grad[selectedSampleIdx * HIDDEN + selectedNeuron];
-        setNarrator(
+        setTrainNarrator(
           `⑦ Tape 倒序自动反传（11 → 0）：已按每个节点的 op 规则算出全部 grad（权重尚未修改！）`,
           zVal > 0
             ? `神经元 #${selectedNeuron} 的 ReLU 门开启，dH=${dH.toFixed(3)} × 1 → dZ=${dZ.toFixed(3)}。点击下方任意 Tape 节点查看 grad！`
@@ -1048,7 +1126,7 @@
         );
       } else if (stageNum === 8) {
         selectedNodeId = 1;
-        setNarrator(
+        setTrainNarrator(
           `⑧ AdamW 更新 5 组权重（lr = ${lr.toFixed(3)}）：用第 ⑦ 步的 grad 计算 Δw 更新参数，并重算新 Loss！`,
           `3D 箭头标注的是参数变化量 Δw（与节点详情里的 grad 方向相反），顶部 HUD 同时对照更新前/后两次前向的真实 Loss。`
         );
@@ -1057,13 +1135,8 @@
     }
 
     // =========================================================================
-    // 5. UI Rendering (Card 1 Training + Card 2 Independent Inference)
+    // 5. UI Rendering
     // =========================================================================
-    function setNarrator(title, desc) {
-      document.getElementById("narratorTitle").textContent = title;
-      document.getElementById("narratorDesc").textContent = desc;
-    }
-
     function renderCorpusStrip() {
       const wrap = document.getElementById("corpusChars");
       wrap.innerHTML = "";
@@ -1091,20 +1164,20 @@
         b.textContent = `${s.ctxText}→${s.targetChar}`;
         b.title = idx === 1 || idx === 8 ? "重点对照样本：末尾都是「月」，但前两个字不同" : `样本 #${idx}`;
         b.onclick = () => {
+          setViewMode("train");
           flushPendingStage8();
           selectedSampleIdx = idx;
-          // Switching sample ONLY changes observation target — NEVER modifies weights or trainStepCount!
           renderAllUi();
           const cur = SAMPLES[idx];
           if (hasComputedForwardStage >= 6 && activeTape) {
             const sLoss = activeTape.nodes[11].sampleLosses[idx];
             const probs = softmaxRow(activeTape.nodes[10].data.subarray(idx * V, (idx + 1) * V), 1.0);
-            setNarrator(
+            setTrainNarrator(
               `已切换观察样本为「${cur.ctxText} → ${cur.targetChar}」（权重与步数保持不变）`,
               `当前权重下，该样本给「${cur.targetChar}」的概率 = ${(probs[cur.targetId] * 100).toFixed(1)}%，样本 Loss = ${sLoss.toFixed(4)}（3D 橙柱与概率塔已同步刷新）。`
             );
           } else {
-            setNarrator(
+            setTrainNarrator(
               `已切换观察样本为「${cur.ctxText} → ${cur.targetChar}」（输入 ID [${cur.ctxIds.join(",")}]，target = ${cur.targetId}）`,
               `切换样本只改变观察对象，不会修改权重。点击「⏭ 下一步」观察它的前向与反传！`
             );
@@ -1177,7 +1250,6 @@
       const deltasEl = document.getElementById("ndDeltas");
       valsEl.innerHTML = ""; gradsEl.innerHTML = ""; deltasEl.innerHTML = "";
 
-      // Special rich 3-token grouping for Node[5] x so user clearly sees 3 chars × 4 dims = 12 dims!
       if (selectedNodeId === 5 && isVisibleVal && node) {
         document.getElementById("ndValLabel").textContent = `前向值 data（当前样本「${s.ctxText}」拼接的 3×4 = 12 维输入 x）：`;
         const rowOff = selectedSampleIdx * IN_DIM;
@@ -1364,52 +1436,26 @@
       rowB.textContent = fmt(8);
     }
 
-    // Card 2: Independent Inference UI Renderer (Never touches Training 3D Canvas!)
-    function renderInferenceCard() {
-      document.getElementById("inferWeightTag").textContent = `当前权重：Step ${trainStepCount}`;
+    function renderInferenceStrip() {
+      document.getElementById("inferWeightTag").textContent = `共享权重 Step ${trainStepCount}`;
+      document.getElementById("hudInferStep").textContent = `Step ${trainStepCount}`;
 
-      // Sequence chips with blue sliding 3-char window
       const tape = document.getElementById("genTape");
       tape.innerHTML = "";
       const winStart = Math.max(0, genIds.length - CTX_LEN);
       genIds.forEach((id, i) => {
         const chip = document.createElement("span");
         chip.className = "chip";
-        if (i === genIds.length - 1) chip.classList.add("latest");
+        if (i === genIds.length - 1 && genIds.length > CTX_LEN) chip.classList.add("latest");
         else if (i >= winStart) chip.classList.add("win");
         chip.textContent = VOCAB[id];
         tape.appendChild(chip);
       });
 
       const curWin = genIds.slice(-CTX_LEN);
-      const curWinText = curWin.map(id => VOCAB[id]).join("");
-      document.getElementById("genWindowBadge").textContent = `下一步输入窗口：「${curWinText}」`;
+      const fwd = inferForwardForWindow(curWin);
+      const probs = softmaxRow(fwd.logits, temperature);
 
-      // Compute LIVE pure-forward Softmax(logits / T) for curWin using shared `model` weights!
-      const logits = inferLogitsForWindow(curWin);
-      const probs = softmaxRow(logits, temperature);
-      document.getElementById("inferDistTitle").textContent =
-        `当前输入窗口「${curWinText}」经温度 Softmax(logits / T=${temperature.toFixed(1)}) 的 10 字预测分布：`;
-
-      const barsEl = document.getElementById("inferProbBars");
-      barsEl.innerHTML = "";
-      let bestId = 0;
-      for (let j = 1; j < V; j++) if (probs[j] > probs[bestId]) bestId = j;
-      for (let j = 0; j < V; j++) {
-        const p = probs[j];
-        const col = document.createElement("div");
-        col.className = "prob-col";
-        if (j === bestId) col.classList.add("picked");
-        col.innerHTML = `
-          <div class="muted" style="font-size:10px;">${(p * 100).toFixed(0)}%</div>
-          <div class="prob-track"><div class="prob-fill" style="height:${Math.max(2, p * 100).toFixed(1)}%"></div></div>
-          <div style="font-weight:700;">${VOCAB[j]}</div>
-          <div class="muted" style="font-size:10px;">z=${logits[j].toFixed(1)}</div>
-        `;
-        barsEl.appendChild(col);
-      }
-
-      // Roulette wheel bar
       const rBar = document.getElementById("inferRoulette");
       rBar.innerHTML = "";
       const palette = ["#4f8cff", "#22c55e", "#f59e0b", "#a855f7", "#ec4899", "#06b6d4"];
@@ -1425,7 +1471,7 @@
         seg.style.overflow = "hidden";
         seg.className = "mono";
         seg.title = `「${VOCAB[j]}」 ${(probs[j] * 100).toFixed(1)}%`;
-        if (probs[j] >= 0.08) seg.textContent = VOCAB[j];
+        if (probs[j] >= 0.08) seg.textContent = `${VOCAB[j]} ${(probs[j] * 100).toFixed(0)}%`;
         rBar.appendChild(seg);
       }
       if (lastGenDraw) {
@@ -1472,17 +1518,18 @@
     }
 
     function renderAllUi() {
+      updateModeChrome();
       renderCorpusStrip();
       renderSampleButtons();
       renderTapeAndNodeInspector();
       renderReluInspector();
       renderContrastBox();
       updateTrainingHud();
-      renderInferenceCard();
+      renderInferenceStrip();
     }
 
     // =========================================================================
-    // 6. Training 3D Canvas (Dedicated 100% to Training!)
+    // 6. Unified 3D Canvas Renderer (Same Model! Train Mode vs Infer Mode!)
     // =========================================================================
     const canvas = document.getElementById("scene3d");
     const ctx = canvas.getContext("2d");
@@ -1503,77 +1550,175 @@
       loss:   { x:  9.8,  z: -0.8 },
     };
 
+    function updateInferPills(activePhase) {
+      document.querySelectorAll("#inferPills .infer-pill").forEach(el => {
+        const ph = parseInt(el.dataset.phase, 10);
+        el.classList.toggle("active", ph === activePhase);
+        el.classList.toggle("done", activePhase > 0 && ph < activePhase);
+      });
+    }
+
     function renderFrame(nowMs) {
       cam.step();
-      const curStepMs = stepAnimMs(), curHoldMs = autoHoldMs();
-      let stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / curStepMs) : 0;
-      const progWrap = document.getElementById("stageProgressWrap"), progBar = document.getElementById("stageProgressBar");
+      const progWrap = document.getElementById("stageProgressWrap");
+      const progBar = document.getElementById("stageProgressBar");
 
-      if (mode === "step") {
-        progWrap.classList.remove("hidden");
-        progBar.style.width = `${(currentStage / 8) * 100}%`;
-        if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
-          performOneAdamWStep(true); stage8Applied = true; renderAllUi();
-        }
-      } else if (mode === "autoplay") {
-        progWrap.classList.remove("hidden");
-        const elapsed = nowMs - stageStartMs;
-        stageT = Math.min(1, elapsed / curStepMs);
-        progBar.style.width = `${((currentStage - 1 + stageT) / 8) * 100}%`;
-        if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
-          performOneAdamWStep(true); stage8Applied = true; renderAllUi();
-        }
-        if (elapsed >= curStepMs + curHoldMs) {
-          if (currentStage < 8) enterStage(currentStage + 1, nowMs);
-          else {
-            mode = "step"; updateTrainingHud();
-            const r = lastUpdateReport;
-            setNarrator(
-              `✓ Step ${r.step} 完整 8 步走完！Batch Loss: ${r.beforeBatch.toFixed(3)} → ${r.afterBatch.toFixed(3)}（已用新权重重算）`,
-              `现在可以继续点「⚡ 快速训练 40 step」，再去下方「推理区」用同一份权重接龙！`
+      // --- A. Advance Training OR Inference State Machine ---
+      let stageT = 0;
+      let inferU = 0;
+      let activeInferPhase = 0;
+
+      if (viewMode === "train") {
+        const curStepMs = stepAnimMs(), curHoldMs = autoHoldMs();
+        stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / curStepMs) : 0;
+
+        if (mode === "step") {
+          progWrap.classList.remove("hidden");
+          progBar.style.width = `${(currentStage / 8) * 100}%`;
+          if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
+            performOneAdamWStep(true); stage8Applied = true; renderAllUi();
+          }
+        } else if (mode === "autoplay") {
+          progWrap.classList.remove("hidden");
+          const elapsed = nowMs - stageStartMs;
+          stageT = Math.min(1, elapsed / curStepMs);
+          progBar.style.width = `${((currentStage - 1 + stageT) / 8) * 100}%`;
+          if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
+            performOneAdamWStep(true); stage8Applied = true; renderAllUi();
+          }
+          if (elapsed >= curStepMs + curHoldMs) {
+            if (currentStage < 8) enterStage(currentStage + 1, nowMs);
+            else {
+              mode = "step"; updateTrainingHud();
+              const r = lastUpdateReport;
+              setTrainNarrator(
+                `✓ Step ${r.step} 完整 8 步走完！Batch Loss: ${r.beforeBatch.toFixed(3)} → ${r.afterBatch.toFixed(3)}（已用新权重重算）`,
+                `现在可继续点「⚡ 快速训练 40 step」，或直接点下方「🎲 推理下一个字」在同一 3D 舞台上接龙！`
+              );
+            }
+          }
+        } else if (mode === "train40") {
+          progWrap.classList.remove("hidden");
+          if (nowMs - lastTrainTick >= trainTickMs() && train40Remaining > 0) {
+            performOneAdamWStep(false); train40Remaining -= 1; lastTrainTick = nowMs;
+            progBar.style.width = `${((40 - train40Remaining) / 40) * 100}%`;
+            renderAllUi();
+            setTrainNarrator(
+              `⚡ 快速训练中... Step ${trainStepCount}（Batch Loss = ${activeTape.nodes[11].data[0].toFixed(4)}）`,
+              `「前明月→光」和「望明月→。」正在分开！训练完直接点「🎲 推理下一个字」测试这组权重！`
             );
           }
-        }
-      } else if (mode === "train40") {
-        progWrap.classList.remove("hidden");
-        if (nowMs - lastTrainTick >= trainTickMs() && train40Remaining > 0) {
-          performOneAdamWStep(false); train40Remaining -= 1; lastTrainTick = nowMs;
-          progBar.style.width = `${((40 - train40Remaining) / 40) * 100}%`;
-          renderAllUi();
-          setNarrator(
-            `⚡ 快速训练中... Step ${trainStepCount}（Batch Loss = ${activeTape.nodes[11].data[0].toFixed(4)}）`,
-            `右下「对照观察」里「前明月→光」和「望明月→。」正在分开，下方推理区也已实时同步新权重！`
-          );
-        }
-        if (train40Remaining <= 0) {
-          mode = "idle"; currentStage = 0; progWrap.classList.add("hidden"); renderAllUi();
-          setNarrator(
-            `🎉 训练完成（Step ${trainStepCount}，Batch Loss = ${activeTape.nodes[11].data[0].toFixed(4)}）！`,
-            `现在可切换「前明月→光」和「望明月→。」对照，或直接滚到下方「推理 Inference」卡片开玩接龙！`
-          );
+          if (train40Remaining <= 0) {
+            mode = "idle"; currentStage = 0; progWrap.classList.add("hidden"); renderAllUi();
+            setTrainNarrator(
+              `🎉 训练完成（Step ${trainStepCount}，Batch Loss = ${activeTape.nodes[11].data[0].toFixed(4)}）！`,
+              `现在可点样本对照「前明月→光」和「望明月→。」，或直接点「🎲 推理下一个字」切到 🟢 推理模式看接龙！`
+            );
+          }
+        } else {
+          progWrap.classList.add("hidden");
         }
       } else {
-        progWrap.classList.add("hidden");
+        // Inference mode animation (4 phases on the SAME 3D MLP!)
+        const dur = INFER_ANIM_MS / animSpeed;
+        if (inferAnim) {
+          inferU = Math.min(1, (nowMs - inferAnim.startMs) / dur);
+          progWrap.classList.remove("hidden");
+          progBar.style.width = `${(inferU * 100).toFixed(1)}%`;
+
+          if (inferU < 0.28) {
+            activeInferPhase = 1;
+            setInferNarrator(
+              `🟢 ① 推理输入：末尾 3 字「${inferAnim.prevWinText}」查词向量拼成 12 维 x（不建 Tape）`,
+              `共用同一份 Step ${trainStepCount} 权重，只走纯前向路径，不记录计算图、不算 Loss！`
+            );
+          } else if (inferU < 0.56) {
+            activeInferPhase = 2;
+            setInferNarrator(
+              `🟢 ② MLP 纯前向：x → ReLU 隐藏层 → 温度概率塔 Softmax(z / T=${temperature.toFixed(1)})`,
+              `右侧 10 座 3D 概率塔实时展示每个字的抽中概率（拖动温度 T 可变尖或变平）。`
+            );
+          } else if (inferU < 0.78) {
+            activeInferPhase = 3;
+            setInferNarrator(
+              `🟢 ③ 3D 轮盘掷骰 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」（概率 ${(inferAnim.prob * 100).toFixed(1)}%）！`,
+              `金色骰子光球精准落到被抽中的候选字概率塔顶，权重纹丝不动！`
+            );
+          } else {
+            activeInferPhase = 4;
+            setInferNarrator(
+              `🟢 ④ 自回归回流：「${VOCAB[inferAnim.nextId]}」飞回左侧输入槽，3 字窗口右滑！`,
+              `最老的字滑出窗口，新 3 字窗口立刻准备好推理下一个字！`
+            );
+          }
+
+          if (inferU >= 0.98 && !inferAnim.committed) {
+            flushPendingInfer();
+            const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
+            setInferNarrator(
+              `✓ 推理完成：抽出「${VOCAB[inferAnim.nextId]}」，窗口已滑至「${newWinText}」（权重 Step ${trainStepCount} 未变）`,
+              `继续点「🎲 推理下一个字」接龙，或点「🔵 训练模式 / ⏭ 下一步」无缝回到刚才的训练进度！`
+            );
+          }
+          if (inferU >= 1) {
+            inferAnim = null;
+            progWrap.classList.add("hidden");
+            activeInferPhase = 0;
+          }
+        } else {
+          progWrap.classList.add("hidden");
+        }
+        updateInferPills(activeInferPhase);
       }
 
-      // Smooth interpolation for Training 3D visuals
+      // --- B. Compute Live Targets for 3D Interpolation ---
+      const isTrain = viewMode === "train";
       const lerpRate = Math.min(0.45, 0.17 * Math.sqrt(animSpeed));
-      const targetProbs = (activeTape && hasComputedForwardStage >= 6)
-        ? softmaxRow(activeTape.nodes[10].data.subarray(selectedSampleIdx * V, (selectedSampleIdx + 1) * V), 1.0)
-        : new Float32Array(V);
-      for (let j = 0; j < V; j++) visualProbs[j] += (targetProbs[j] - visualProbs[j]) * lerpRate;
+      const s = SAMPLES[selectedSampleIdx];
 
-      const targetLoss = (activeTape && hasComputedForwardStage >= 6)
-        ? activeTape.nodes[11].sampleLosses[selectedSampleIdx] : 0.0;
-      visualSampleLoss += (targetLoss - visualSampleLoss) * lerpRate;
+      let dispWinIds, liveX = null, targetZ1 = null, targetH = null, targetProbs = null;
+      if (isTrain) {
+        dispWinIds = s.ctxIds;
+        liveX = activeTape && hasComputedForwardStage >= 2
+          ? activeTape.nodes[5].data.subarray(selectedSampleIdx * IN_DIM, (selectedSampleIdx + 1) * IN_DIM)
+          : null;
+        targetZ1 = activeTape && hasComputedForwardStage >= 3
+          ? activeTape.nodes[7].data.subarray(selectedSampleIdx * HIDDEN, (selectedSampleIdx + 1) * HIDDEN)
+          : null;
+        targetH = activeTape && hasComputedForwardStage >= 4
+          ? activeTape.nodes[8].data.subarray(selectedSampleIdx * HIDDEN, (selectedSampleIdx + 1) * HIDDEN)
+          : null;
+        targetProbs = activeTape && hasComputedForwardStage >= 6
+          ? softmaxRow(activeTape.nodes[10].data.subarray(selectedSampleIdx * V, (selectedSampleIdx + 1) * V), 1.0)
+          : null;
+      } else {
+        dispWinIds = (inferAnim && !inferAnim.committed) ? inferAnim.prevWinIds : genIds.slice(-CTX_LEN);
+        const dispWinText = dispWinIds.map(id => VOCAB[id]).join("");
+        document.getElementById("hudInferWin").textContent = `「${dispWinText}」`;
+        document.getElementById("hudInferTemp").textContent = temperature.toFixed(1);
 
+        const fwd = inferForwardForWindow(dispWinIds);
+        liveX = (inferAnim && !inferAnim.committed) ? inferAnim.x : fwd.x;
+        targetZ1 = (inferAnim && !inferAnim.committed) ? inferAnim.z1 : fwd.z1;
+        targetH = (inferAnim && !inferAnim.committed) ? inferAnim.h : fwd.h;
+        targetProbs = (inferAnim && !inferAnim.committed) ? inferAnim.probs : softmaxRow(fwd.logits, temperature);
+      }
+
+      for (let j = 0; j < V; j++) {
+        const tp = targetProbs ? targetProbs[j] : 0;
+        visualProbs[j] += (tp - visualProbs[j]) * lerpRate;
+      }
       for (let k = 0; k < HIDDEN; k++) {
-        const tz = (activeTape && hasComputedForwardStage >= 3) ? activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + k] : 0;
-        const th = (activeTape && hasComputedForwardStage >= 4) ? activeTape.nodes[8].data[selectedSampleIdx * HIDDEN + k] : 0;
+        const tz = targetZ1 ? targetZ1[k] : 0;
+        const th = targetH ? targetH[k] : 0;
         visualZ1[k] += (tz - visualZ1[k]) * lerpRate;
         visualH[k] += (th - visualH[k]) * lerpRate;
       }
+      const targetLoss = (isTrain && activeTape && hasComputedForwardStage >= 6)
+        ? activeTape.nodes[11].sampleLosses[selectedSampleIdx] : 0.0;
+      visualSampleLoss += (targetLoss - visualSampleLoss) * lerpRate;
 
+      // --- C. Begin 3D Drawing ---
       const theme = M.getThemeColors();
       const { W, H } = M.beginFrame(canvas, ctx, theme);
       const { project, eye } = M.makeProjector(W, H, cam, 1.15, 0.46);
@@ -1581,7 +1726,9 @@
       const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border), rgbPrimary = M.parseRgb(theme.primary);
       const rgbSuccess = M.parseRgb(theme.success), rgbError = M.parseRgb(theme.error), rgbWarning = M.parseRgb(theme.warning);
 
-      ctx.strokeStyle = M.shade(rgbBorder, 1, 0.25); ctx.lineWidth = 1;
+      // Floor Grid (Subtle green tint in Infer mode, standard border in Train mode)
+      ctx.strokeStyle = isTrain ? M.shade(rgbBorder, 1, 0.25) : M.shade(rgbSuccess, 0.8, 0.16);
+      ctx.lineWidth = 1;
       for (let gx = -12; gx <= 12; gx += 2) {
         const a = project(gx, 0, -4.8), b = project(gx, 0, 6.4);
         if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
@@ -1591,28 +1738,34 @@
         if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
       }
 
-      for (const [a, b] of [
+      // 3D Pipes (Note: Softmax -> Loss pipe ONLY drawn in Training Mode!)
+      const pipes = [
         [POS.input, POS.xVec], [POS.emb, POS.xVec],
         [POS.xVec, POS.z1], [POS.w1, POS.z1], [POS.b1, POS.z1],
         [POS.z1, POS.relu], [POS.relu, POS.hVec],
         [POS.hVec, POS.sm], [POS.w2, POS.sm], [POS.b2, POS.sm],
-        [POS.sm, POS.loss],
-      ]) {
+      ];
+      if (isTrain) pipes.push([POS.sm, POS.loss]);
+      for (const [a, b] of pipes) {
         M.drawPipe3D(ctx, project, { x: a.x, y: 0.45, z: a.z }, { x: b.x, y: 0.45, z: b.z }, M.shade(rgbBorder, 1.05, 0.65), 1.8);
       }
 
       const dl = [];
-      const s = SAMPLES[selectedSampleIdx];
 
-      // A. Input 3-Char Training Window Cubes
+      // 1. Input 3-Char Window Cubes
+      const inputCol = isTrain ? rgbPrimary : M.lerpRgb(rgbPrimary, rgbSuccess, 0.25);
       for (let slot = 0; slot < CTX_LEN; slot++) {
         const cz = POS.input.z + (slot - 1) * 1.35;
-        M.pushBox(dl, ctx, project, eye, POS.input.x - 0.5, 0, cz - 0.48, POS.input.x + 0.5, 1.05, cz + 0.48, rgbPrimary, 0.92, theme.fg);
-        M.pushLabel3D(dl, ctx, project, POS.input.x, 1.48, cz, `${VOCAB[s.ctxIds[slot]]}:${s.ctxIds[slot]}`, theme.fg, "bold 11px monospace");
+        M.pushBox(dl, ctx, project, eye, POS.input.x - 0.5, 0, cz - 0.48, POS.input.x + 0.5, 1.05, cz + 0.48, inputCol, 0.92, theme.fg);
+        M.pushLabel3D(dl, ctx, project, POS.input.x, 1.48, cz, `${VOCAB[dispWinIds[slot]]}:${dispWinIds[slot]}`, theme.fg, "bold 11px monospace");
       }
-      M.pushLabel3D(dl, ctx, project, POS.input.x, 0.12, POS.input.z + 2.35, "3字训练窗口", theme.primary, "bold 11px sans-serif");
+      M.pushLabel3D(
+        dl, ctx, project, POS.input.x, 0.12, POS.input.z + 2.35,
+        isTrain ? "3字训练窗口" : "3字推理窗口",
+        isTrain ? theme.primary : theme.success, "bold 11px sans-serif"
+      );
 
-      // B. 5 Trainable Parameter Blocks (emb, w1, b1, w2, b2)
+      // 2. Shared 5 Parameter Blocks (emb, w1, b1, w2, b2) — SAME weights in both modes!
       for (const pb of [
         { id: 0, p: model.emb, pos: POS.emb, label: "emb(10×4)" },
         { id: 1, p: model.w1,  pos: POS.w1,  label: "w1(12×8)"  },
@@ -1624,12 +1777,13 @@
         for (let i = 0; i < pb.p.data.length; i++) rms += pb.p.data[i] * pb.p.data[i];
         rms = Math.sqrt(rms / pb.p.data.length);
         const h = Math.max(0.45, Math.min(2.6, rms * 2.1 + 0.35));
-        const isSel = selectedNodeId === pb.id;
-        const col = isSel ? rgbPrimary : M.lerpRgb(rgbCard, rgbSuccess, 0.35);
+        const isSel = isTrain && selectedNodeId === pb.id;
+        const col = isSel ? rgbPrimary : M.lerpRgb(rgbCard, rgbSuccess, isTrain ? 0.35 : 0.45);
         M.pushBox(dl, ctx, project, eye, pb.pos.x - 0.62, 0, pb.pos.z - 0.55, pb.pos.x + 0.62, h, pb.pos.z + 0.55, col, 0.94, isSel ? theme.fg : theme.border);
         M.pushLabel3D(dl, ctx, project, pb.pos.x, h + 0.42, pb.pos.z, pb.label, theme.fg, "bold 10px monospace");
 
-        if (currentStage === 8) {
+        // Δw update arrows ONLY in Training Stage 8
+        if (isTrain && currentStage === 8) {
           const pulse = Math.sin(nowMs * 0.012) * 0.14;
           let maxAbsD = 0, signedTop = 0;
           for (let i = 0; i < pb.p.lastDelta.length; i++) {
@@ -1644,339 +1798,216 @@
         }
       }
 
-      // C. x (12-dim concatenated embedding mini-bars)
-      const xLit = hasComputedForwardStage >= 2;
+      // 3. x (12-dim concatenated embedding mini-bars)
+      const xLit = isTrain ? hasComputedForwardStage >= 2 : true;
       for (let i = 0; i < 6; i++) {
         const xz = POS.xVec.z + (i - 2.5) * 0.55;
-        const val = xLit && activeTape ? activeTape.nodes[5].data[selectedSampleIdx * IN_DIM + i * 2] : 0;
+        const val = xLit && liveX ? liveX[i * 2] : 0;
         const bh = xLit ? Math.max(0.18, Math.min(2.2, Math.abs(val) * 1.4 + 0.25)) : 0.15;
         const col = !xLit ? rgbCard : (val >= 0 ? M.lerpRgb(rgbCard, rgbPrimary, 0.75) : M.lerpRgb(rgbCard, rgbError, 0.65));
         M.pushBox(dl, ctx, project, eye, POS.xVec.x - 0.35, 0, xz - 0.2, POS.xVec.x + 0.35, bh, xz + 0.2, col, 0.92, theme.border);
       }
       M.pushLabel3D(dl, ctx, project, POS.xVec.x, 2.55, POS.xVec.z, "x (拼接12维)", xLit ? theme.primary : theme.muted, "bold 11px monospace");
 
-      // D. z1 (8 pre-activations)
-      const zLit = hasComputedForwardStage >= 3;
+      // 4. z1 (8 pre-activations)
+      const zLit = isTrain ? hasComputedForwardStage >= 3 : true;
       for (let k = 0; k < HIDDEN; k++) {
         const zz = POS.z1.z + (k - 3.5) * 0.52;
-        const v = visualZ1[k], isSelN = k === selectedNeuron;
+        const v = visualZ1[k], isSelN = isTrain && k === selectedNeuron;
         const bh = zLit ? Math.max(0.14, Math.min(2.6, Math.abs(v) * 0.9 + 0.18)) : 0.12;
         const col = !zLit ? rgbCard : (v > 0 ? rgbSuccess : rgbError);
         M.pushBox(dl, ctx, project, eye, POS.z1.x - 0.34, 0, zz - 0.19, POS.z1.x + 0.34, bh, zz + 0.19, col, isSelN ? 1.0 : 0.78, isSelN ? theme.fg : theme.border);
       }
       M.pushLabel3D(dl, ctx, project, POS.z1.x, 2.85, POS.z1.z, "z1 = xW1+b1 (8维)", zLit ? theme.fg : theme.muted, "bold 11px monospace");
 
-      // E. 3D ReLU Gate
-      const selZ = activeTape && hasComputedForwardStage >= 3 ? activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron] : 1.0;
-      const selOpen = selZ > 0;
-      const gateRgb = !zLit ? rgbBorder : (selOpen ? rgbSuccess : rgbError);
+      // 5. 3D ReLU Gate
+      let gateOpen = true, gateLabel = "ReLU 门";
+      if (isTrain) {
+        const selZ = activeTape && hasComputedForwardStage >= 3 ? activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron] : 1.0;
+        gateOpen = selZ > 0;
+        gateLabel = !zLit ? "ReLU 门" : (gateOpen ? `ReLU #${selectedNeuron} 通(×1)` : `ReLU #${selectedNeuron} 断(×0!)`);
+      } else {
+        let openCnt = 0;
+        for (let k = 0; k < HIDDEN; k++) if (targetZ1 && targetZ1[k] > 0) openCnt += 1;
+        gateOpen = openCnt > 0;
+        gateLabel = `ReLU (${openCnt}/${HIDDEN} 通)`;
+      }
+      const gateRgb = !zLit ? rgbBorder : (gateOpen ? rgbSuccess : rgbError);
       M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.22, 0, POS.relu.z - 1.9, POS.relu.x + 0.22, 2.7, POS.relu.z - 1.62, rgbBorder, 0.95, theme.fg);
       M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.22, 0, POS.relu.z + 1.62, POS.relu.x + 0.22, 2.7, POS.relu.z + 1.9, rgbBorder, 0.95, theme.fg);
       M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.22, 2.42, POS.relu.z - 1.9, POS.relu.x + 0.22, 2.75, POS.relu.z + 1.9, gateRgb, 0.95, theme.fg);
-      if (zLit && !selOpen) M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.1, 0.05, POS.relu.z - 1.6, POS.relu.x + 0.1, 2.4, POS.relu.z + 1.6, rgbError, 0.65, theme.error);
+      if (zLit && !gateOpen) M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.1, 0.05, POS.relu.z - 1.6, POS.relu.x + 0.1, 2.4, POS.relu.z + 1.6, rgbError, 0.65, theme.error);
       else if (zLit) M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.06, 0.05, POS.relu.z - 1.6, POS.relu.x + 0.06, 2.4, POS.relu.z + 1.6, rgbSuccess, 0.16, theme.success);
-      M.pushLabel3D(dl, ctx, project, POS.relu.x, 3.55, POS.relu.z, !zLit ? "ReLU 门" : (selOpen ? `ReLU #${selectedNeuron} 通(×1)` : `ReLU #${selectedNeuron} 断(×0!)`), !zLit ? theme.muted : (selOpen ? theme.success : theme.error), "bold 11px sans-serif");
+      M.pushLabel3D(dl, ctx, project, POS.relu.x, 3.55, POS.relu.z, gateLabel, !zLit ? theme.muted : (gateOpen ? theme.success : theme.error), "bold 11px sans-serif");
 
-      // F. h = ReLU(z1)
-      const hLit = hasComputedForwardStage >= 4;
+      // 6. h = ReLU(z1)
+      const hLit = isTrain ? hasComputedForwardStage >= 4 : true;
       for (let k = 0; k < HIDDEN; k++) {
         const hz = POS.hVec.z + (k - 3.5) * 0.52;
-        const v = visualH[k], isSelN = k === selectedNeuron;
+        const v = visualH[k], isSelN = isTrain && k === selectedNeuron;
         const bh = hLit ? Math.max(0.08, Math.min(2.6, v * 0.9 + 0.08)) : 0.10;
         const col = !hLit ? rgbCard : (v > 0.001 ? rgbSuccess : rgbBorder);
         M.pushBox(dl, ctx, project, eye, POS.hVec.x - 0.34, 0, hz - 0.19, POS.hVec.x + 0.34, bh, hz + 0.19, col, isSelN ? 1.0 : 0.8, isSelN ? theme.fg : theme.border);
       }
-      M.pushLabel3D(dl, ctx, project, POS.hVec.x + 0.25, 2.15, POS.hVec.z - 2.35, "h = ReLU(z1)", hLit ? theme.success : theme.muted, "bold 11px monospace");
+      M.pushLabel3D(dl, ctx, project, POS.hVec.x + 0.35, 3.05, POS.hVec.z + 0.9, "h = ReLU(z1)", hLit ? theme.success : theme.muted, "bold 11px monospace");
 
-      // G. Training Softmax 10 Probability Towers (T = 1.0, Target highlighted green)
-      const smLit = hasComputedForwardStage >= 6;
+      // 7. 10 Softmax Probability Towers (Train: T=1.0 + target green; Infer: T slider + picked green!)
+      const smLit = isTrain ? hasComputedForwardStage >= 6 : true;
+      const pickedNow = (!isTrain && inferAnim && inferU >= 0.56) ? inferAnim.nextId : -1;
+      let topInferJ = 0;
+      for (let j = 1; j < V; j++) if (visualProbs[j] > visualProbs[topInferJ]) topInferJ = j;
+
       for (let j = 0; j < V; j++) {
         const sz = POS.sm.z + (j - 4.5) * 0.62;
-        const p = visualProbs[j], isTgt = j === s.targetId;
+        const p = visualProbs[j];
         const bh = smLit ? Math.max(0.08, p * 4.5) : 0.08;
-        const col = !smLit ? rgbBorder : (isTgt ? rgbSuccess : rgbPrimary);
-        M.pushBox(dl, ctx, project, eye, POS.sm.x - 0.28, 0, sz - 0.22, POS.sm.x + 0.28, bh, sz + 0.22, col, smLit ? 0.92 : 0.45, isTgt ? theme.fg : theme.border);
+        let col, strokeCol, lblCol, isBold;
+        if (isTrain) {
+          const isTgt = j === s.targetId;
+          col = !smLit ? rgbBorder : (isTgt ? rgbSuccess : rgbPrimary);
+          strokeCol = isTgt ? theme.fg : theme.border;
+          lblCol = isTgt ? theme.success : theme.muted;
+          isBold = isTgt;
+        } else {
+          const isPicked = j === pickedNow;
+          col = isPicked ? rgbSuccess : (j === topInferJ ? M.lerpRgb(rgbPrimary, rgbSuccess, 0.35) : rgbPrimary);
+          strokeCol = isPicked ? theme.fg : theme.border;
+          lblCol = isPicked ? theme.success : theme.muted;
+          isBold = isPicked;
+        }
+        M.pushBox(dl, ctx, project, eye, POS.sm.x - 0.28, 0, sz - 0.22, POS.sm.x + 0.28, bh, sz + 0.22, col, smLit ? 0.92 : 0.45, strokeCol);
         const lbl = smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`;
-        M.pushLabel3D(dl, ctx, project, POS.sm.x + 0.85, 0.15, sz, lbl, isTgt ? theme.success : theme.muted, isTgt ? "bold 11px monospace" : "10px monospace");
+        M.pushLabel3D(dl, ctx, project, POS.sm.x + 0.85, 0.15, sz, lbl, lblCol, isBold ? "bold 11px monospace" : "10px monospace");
       }
-      M.pushLabel3D(dl, ctx, project, POS.sm.x, 4.95, POS.sm.z, "训练 Softmax 概率塔", theme.primary, "bold 11px monospace");
+      M.pushLabel3D(
+        dl, ctx, project, POS.sm.x, 4.95, POS.sm.z,
+        isTrain ? "训练 Softmax 概率塔 (T=1.0)" : `推理温度概率塔 Softmax(z / T=${temperature.toFixed(1)})`,
+        isTrain ? theme.primary : theme.success, "bold 11px monospace"
+      );
 
-      // H. Current Sample Loss 3D Energy Pillar
-      if (visualSampleLoss < 0.01 && hasComputedForwardStage < 6) {
-        M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.65, 0, POS.loss.z - 0.65, POS.loss.x + 0.65, 0.08, POS.loss.z + 0.65, rgbBorder, 0.5, theme.border);
-        M.pushLabel3D(dl, ctx, project, POS.loss.x, 0.55, POS.loss.z, "样本Loss: 0 (未计算)", theme.muted, "bold 10px monospace");
-      } else {
-        const lh = Math.max(0.14, Math.min(4.6, visualSampleLoss * 1.45));
-        M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.65, 0, POS.loss.z - 0.65, POS.loss.x + 0.65, lh, POS.loss.z + 0.65, rgbWarning, 0.92, theme.fg);
-        M.pushLabel3D(dl, ctx, project, POS.loss.x, lh + 0.5, POS.loss.z, `样本Loss ${visualSampleLoss.toFixed(2)}`, theme.warning, "bold 11px monospace");
-      }
-
-      // I. Front 12-Slot 3D Arena Tape
+      // 8. TRAINING-ONLY: Sample Loss Pillar + Front 12-Slot Arena Tape (Hidden in Infer Mode!)
       const tapeZ = 4.35;
-      const stageMaxNode = [-1, 4, 5, 7, 8, 10, 11, 11, 11][currentStage] ?? -1;
-      const revealedMax = hasComputedForwardStage >= 6 ? 11 : stageMaxNode;
-      const shortNames = ["emb", "w1", "b1", "w2", "b2", "x", "z1r", "z1", "h", "z2r", "log", "L"];
-      M.pushLabel3D(dl, ctx, project, -10.8, 0.25, tapeZ, "Tape:", theme.muted, "bold 11px monospace");
-      for (let i = 0; i < 12; i++) {
-        const tx = -9.1 + i * 1.65;
-        const isFwd = i <= revealedMax, isBwd = hasComputedBackward, isSel = i === selectedNodeId;
-        const col = isBwd ? rgbWarning : (isFwd ? (i <= 4 ? rgbSuccess : rgbPrimary) : rgbCard);
-        const h = isBwd ? 0.58 : (isFwd ? 0.42 : 0.18);
-        M.pushBox(dl, ctx, project, eye, tx - 0.58, 0, tapeZ - 0.45, tx + 0.58, h, tapeZ + 0.45, col, 0.9, isSel ? theme.fg : theme.border);
-        M.pushLabel3D(dl, ctx, project, tx, h + 0.28, tapeZ, `[${i}]${shortNames[i]}`, isSel ? theme.fg : (isBwd ? theme.warning : (isFwd ? theme.primary : theme.muted)), "bold 10px monospace");
+      if (isTrain) {
+        if (visualSampleLoss < 0.01 && hasComputedForwardStage < 6) {
+          M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.65, 0, POS.loss.z - 0.65, POS.loss.x + 0.65, 0.08, POS.loss.z + 0.65, rgbBorder, 0.5, theme.border);
+          M.pushLabel3D(dl, ctx, project, POS.loss.x, 0.55, POS.loss.z, "样本Loss: 0 (未计算)", theme.muted, "bold 10px monospace");
+        } else {
+          const lh = Math.max(0.14, Math.min(4.6, visualSampleLoss * 1.45));
+          M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.65, 0, POS.loss.z - 0.65, POS.loss.x + 0.65, lh, POS.loss.z + 0.65, rgbWarning, 0.92, theme.fg);
+          M.pushLabel3D(dl, ctx, project, POS.loss.x, lh + 0.5, POS.loss.z, `样本Loss ${visualSampleLoss.toFixed(2)}`, theme.warning, "bold 11px monospace");
+        }
+
+        const stageMaxNode = [-1, 4, 5, 7, 8, 10, 11, 11, 11][currentStage] ?? -1;
+        const revealedMax = hasComputedForwardStage >= 6 ? 11 : stageMaxNode;
+        const shortNames = ["emb", "w1", "b1", "w2", "b2", "x", "z1r", "z1", "h", "z2r", "log", "L"];
+        M.pushLabel3D(dl, ctx, project, -10.8, 0.25, tapeZ, "Tape:", theme.muted, "bold 11px monospace");
+        for (let i = 0; i < 12; i++) {
+          const tx = -9.1 + i * 1.65;
+          const isFwd = i <= revealedMax, isBwd = hasComputedBackward, isSel = i === selectedNodeId;
+          const col = isBwd ? rgbWarning : (isFwd ? (i <= 4 ? rgbSuccess : rgbPrimary) : rgbCard);
+          const h = isBwd ? 0.58 : (isFwd ? 0.42 : 0.18);
+          M.pushBox(dl, ctx, project, eye, tx - 0.58, 0, tapeZ - 0.45, tx + 0.58, h, tapeZ + 0.45, col, 0.9, isSel ? theme.fg : theme.border);
+          M.pushLabel3D(dl, ctx, project, tx, h + 0.28, tapeZ, `[${i}]${shortNames[i]}`, isSel ? theme.fg : (isBwd ? theme.warning : (isFwd ? theme.primary : theme.muted)), "bold 10px monospace");
+        }
+      } else {
+        // Subtle floor badge reminding the user why Tape & Loss are gone in Inference Mode
+        M.pushLabel3D(dl, ctx, project, 0.0, 0.22, tapeZ, "🟢 推理模式：不建 Arena Tape · 不算 Loss · 权重只读", theme.success, "bold 12px sans-serif");
       }
 
-      // J. Stage-Specific 3D Motion Trajectories
+      // 9. Stage-Specific 3D Motion Trajectories
       const ptOf = (p, y = 1.0) => ({ x: p.x, y, z: p.z });
-      if (currentStage === 1) {
-        for (let slot = 0; slot < CTX_LEN; slot++) {
-          const from = { x: POS.input.x, y: 1.0, z: POS.input.z + (slot - 1) * 1.35 };
-          const to = ptOf(POS.emb, 1.2);
-          M.drawBezierArc3D(ctx, project, from, to, 1.8, stageT, theme.primary, 2.2, true);
-          const cur = M.evalArc(from, to, 1.8, stageT);
-          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.24, theme.primary, theme.primary, VOCAB[s.ctxIds[slot]], "#fff");
+      if (isTrain) {
+        if (currentStage === 1) {
+          for (let slot = 0; slot < CTX_LEN; slot++) {
+            const from = { x: POS.input.x, y: 1.0, z: POS.input.z + (slot - 1) * 1.35 };
+            const to = ptOf(POS.emb, 1.2);
+            M.drawBezierArc3D(ctx, project, from, to, 1.8, stageT, theme.primary, 2.2, true);
+            const cur = M.evalArc(from, to, 1.8, stageT);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.24, theme.primary, theme.primary, VOCAB[s.ctxIds[slot]], "#fff");
+          }
+        } else if (currentStage === 2) {
+          const cur = M.evalArc(ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stageT);
+          M.drawBezierArc3D(ctx, project, ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stageT, theme.success, 2.6);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.success, theme.success, "x", "#fff");
+        } else if (currentStage === 3) {
+          for (const src of [POS.xVec, POS.w1, POS.b1]) {
+            M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stageT, theme.primary, 2.0);
+            const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stageT);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
+          }
+        } else if (currentStage === 4) {
+          const cur = M.evalArc(ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stageT);
+          M.drawBezierArc3D(ctx, project, ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stageT, gateOpen ? theme.success : theme.error, 2.6);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, gateOpen ? theme.success : theme.error, gateOpen ? theme.success : theme.error, gateOpen ? "通" : "0");
+        } else if (currentStage === 5) {
+          for (const src of [POS.hVec, POS.w2, POS.b2]) {
+            M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stageT, theme.primary, 2.0);
+            const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stageT);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
+          }
+        } else if (currentStage === 6) {
+          const targetZ = POS.sm.z + (s.targetId - 4.5) * 0.62;
+          const fromSm = { x: POS.sm.x, y: Math.max(0.5, visualProbs[s.targetId] * 4.5), z: targetZ };
+          const toLoss = { x: POS.loss.x, y: Math.max(0.5, visualSampleLoss * 1.45), z: POS.loss.z };
+          M.drawBezierArc3D(ctx, project, fromSm, toLoss, 1.8, stageT, theme.warning, 2.8);
+          const cur = M.evalArc(fromSm, toLoss, 1.8, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
+        } else if (currentStage === 7) {
+          const revIdx = 11 * (1 - stageT);
+          M.pushOrb(dl, ctx, project, -9.1 + revIdx * 1.65, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
+          const waypoints = [POS.loss, POS.sm, POS.hVec, POS.relu, POS.z1, POS.xVec, POS.emb];
+          const segFloat = stageT * (waypoints.length - 1);
+          const segIdx = Math.min(waypoints.length - 2, Math.floor(segFloat));
+          const segU = segFloat - segIdx;
+          const a = ptOf(waypoints[segIdx], 1.5), b = ptOf(waypoints[segIdx + 1], 1.5);
+          const hitWall = !gateOpen && segIdx >= 3;
+          const cur = M.evalArc(a, b, 1.4, segU);
+          M.drawBezierArc3D(ctx, project, a, b, 1.4, segU, hitWall ? theme.error : theme.warning, 2.8, true);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, hitWall ? theme.error : theme.warning, hitWall ? theme.error : theme.warning, hitWall ? "0" : "∂", "#000");
         }
-      } else if (currentStage === 2) {
-        const cur = M.evalArc(ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stageT);
-        M.drawBezierArc3D(ctx, project, ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stageT, theme.success, 2.6);
-        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.success, theme.success, "x", "#fff");
-      } else if (currentStage === 3) {
-        for (const src of [POS.xVec, POS.w1, POS.b1]) {
-          M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stageT, theme.primary, 2.0);
-          const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stageT);
-          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
+      } else if (inferAnim) {
+        // 4-Phase Pure-Forward Inference Animation on the SAME 3D MLP!
+        if (inferU < 0.28) {
+          const p1 = inferU / 0.28;
+          for (let slot = 0; slot < CTX_LEN; slot++) {
+            const from = { x: POS.input.x, y: 1.0, z: POS.input.z + (slot - 1) * 1.35 };
+            const to = ptOf(POS.xVec, 1.25);
+            M.drawBezierArc3D(ctx, project, from, to, 1.8, p1, theme.primary, 2.3);
+            const pt = M.evalArc(from, to, 1.8, p1);
+            M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.25, theme.primary, theme.primary, VOCAB[inferAnim.prevWinIds[slot]], "#fff");
+          }
+        } else if (inferU < 0.56) {
+          const p2 = (inferU - 0.28) / 0.28;
+          const wps = [POS.xVec, POS.z1, POS.relu, POS.hVec, POS.sm];
+          const segF = p2 * (wps.length - 1);
+          const segI = Math.min(wps.length - 2, Math.floor(segF));
+          const segU = segF - segI;
+          const a = ptOf(wps[segI], 1.35), b = ptOf(wps[segI + 1], 1.35);
+          M.drawBezierArc3D(ctx, project, a, b, 1.5, segU, theme.success, 2.8);
+          const pt = M.evalArc(a, b, 1.5, segU);
+          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.28, theme.success, theme.success, "→", "#000");
+        } else if (inferU < 0.78) {
+          const p3 = (inferU - 0.56) / 0.22;
+          const targetZ = POS.sm.z + (inferAnim.nextId - 4.5) * 0.62;
+          const targetY = Math.max(0.5, visualProbs[inferAnim.nextId] * 4.5) + 0.55;
+          const sweepZ = POS.sm.z - 2.8 + (targetZ - (POS.sm.z - 2.8)) * p3;
+          const dropY = 3.9 - (3.9 - targetY) * p3;
+          M.pushOrb(dl, ctx, project, POS.sm.x, dropY, sweepZ, 0.34, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
+          M.pushLabel3D(dl, ctx, project, POS.sm.x, dropY + 0.65, sweepZ, `🎲 抽中「${VOCAB[inferAnim.nextId]}」`, theme.success, "bold 12px sans-serif", -0.5);
+        } else {
+          // Phase 4: Autoregressive feedback arc from picked tower BACK to bottom slot of 3-char input!
+          const p4 = (inferU - 0.78) / 0.22;
+          const from = { x: POS.sm.x, y: Math.max(0.6, visualProbs[inferAnim.nextId] * 4.5) + 0.4, z: POS.sm.z + (inferAnim.nextId - 4.5) * 0.62 };
+          const to = { x: POS.input.x, y: 1.1, z: POS.input.z + 1.35 };
+          M.drawBezierArc3D(ctx, project, from, to, 4.4, p4, theme.warning, 3.0, true);
+          const pt = M.evalArc(from, to, 4.4, p4);
+          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.36, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
         }
-      } else if (currentStage === 4) {
-        const cur = M.evalArc(ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stageT);
-        M.drawBezierArc3D(ctx, project, ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stageT, selOpen ? theme.success : theme.error, 2.6);
-        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, selOpen ? theme.success : theme.error, selOpen ? theme.success : theme.error, selOpen ? "通" : "0");
-      } else if (currentStage === 5) {
-        for (const src of [POS.hVec, POS.w2, POS.b2]) {
-          M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stageT, theme.primary, 2.0);
-          const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stageT);
-          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
-        }
-      } else if (currentStage === 6) {
-        const targetZ = POS.sm.z + (s.targetId - 4.5) * 0.62;
-        const fromSm = { x: POS.sm.x, y: Math.max(0.5, visualProbs[s.targetId] * 4.5), z: targetZ };
-        const toLoss = { x: POS.loss.x, y: Math.max(0.5, visualSampleLoss * 1.45), z: POS.loss.z };
-        M.drawBezierArc3D(ctx, project, fromSm, toLoss, 1.8, stageT, theme.warning, 2.8);
-        const cur = M.evalArc(fromSm, toLoss, 1.8, stageT);
-        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
-      } else if (currentStage === 7) {
-        const revIdx = 11 * (1 - stageT);
-        M.pushOrb(dl, ctx, project, -9.1 + revIdx * 1.65, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
-        const waypoints = [POS.loss, POS.sm, POS.hVec, POS.relu, POS.z1, POS.xVec, POS.emb];
-        const segFloat = stageT * (waypoints.length - 1);
-        const segIdx = Math.min(waypoints.length - 2, Math.floor(segFloat));
-        const segU = segFloat - segIdx;
-        const a = ptOf(waypoints[segIdx], 1.5), b = ptOf(waypoints[segIdx + 1], 1.5);
-        const hitWall = !selOpen && segIdx >= 3;
-        const cur = M.evalArc(a, b, 1.4, segU);
-        M.drawBezierArc3D(ctx, project, a, b, 1.4, segU, hitWall ? theme.error : theme.warning, 2.8, true);
-        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, hitWall ? theme.error : theme.warning, hitWall ? theme.error : theme.warning, hitWall ? "0" : "∂", "#000");
       }
 
       M.flushDrawList(dl);
       ctx.restore();
-      renderInfer3D(nowMs);
       requestAnimationFrame(renderFrame);
-    }
-
-    // =========================================================================
-    // 6B. Dedicated 3D Inference Animation Stage (Card 2 — Pure Forward + Dice + Slide!)
-    // =========================================================================
-    const inferCanvas = document.getElementById("infer3d");
-    const inferCtx = inferCanvas.getContext("2d");
-    const inferCam = M.createCamera(inferCanvas, {
-      yaw: -0.34, pitch: 0.44, dist: 21.5, tx: 0.0, ty: 0.7, tz: 0.0, minDist: 12, maxDist: 34
-    });
-
-    const inferVisProbs = new Float32Array(V);
-    const inferVisH = new Float32Array(HIDDEN);
-    let inferAnim = null; // { startMs, prevWinIds, prevWinText, nextId, prob, dice, probs, h, committed }
-    const INFER_ANIM_MS = 1650;
-
-    function flushPendingInfer() {
-      if (inferAnim && !inferAnim.committed) {
-        inferAnim.committed = true;
-        genIds.push(inferAnim.nextId);
-        if (genIds.length > 24) genIds.shift();
-        const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
-        lastGenDraw = {
-          prevWinText: inferAnim.prevWinText,
-          nextId: inferAnim.nextId,
-          prob: inferAnim.prob,
-          dice: inferAnim.dice,
-          newWinText,
-        };
-        renderInferenceCard();
-        document.getElementById("genReadout").textContent =
-          `输入「${inferAnim.prevWinText}」(T=${temperature.toFixed(1)}) 骰子 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」(p=${(inferAnim.prob * 100).toFixed(1)}%) → 新窗口「${newWinText}」`;
-      }
-    }
-
-    function renderInfer3D(nowMs) {
-      inferCam.step();
-      const theme = M.getThemeColors();
-      const { W, H } = M.beginFrame(inferCanvas, inferCtx, theme);
-      if (!W || !H) { inferCtx.restore(); return; }
-      const { project, eye } = M.makeProjector(W, H, inferCam, 1.15, 0.46);
-
-      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
-      const rgbPrimary = M.parseRgb(theme.primary), rgbSuccess = M.parseRgb(theme.success);
-      const rgbWarning = M.parseRgb(theme.warning);
-
-      // Determine active inference window & animation phase u ∈ [0, 1]
-      const dur = INFER_ANIM_MS / animSpeed;
-      let u = 0;
-      const progWrap = document.getElementById("inferProgWrap");
-      const progBar = document.getElementById("inferProgBar");
-
-      if (inferAnim) {
-        u = Math.min(1, (nowMs - inferAnim.startMs) / dur);
-        progWrap.classList.remove("hidden");
-        progBar.style.width = `${(u * 100).toFixed(1)}%`;
-
-        if (u < 0.28) {
-          document.getElementById("inferAnimTitle").textContent = `① 取末尾 3 字「${inferAnim.prevWinText}」送入 MLP 前向（无 Tape）`;
-          document.getElementById("inferAnimDesc").textContent = "3 个字查 embedding 拼成 12 维向量，穿入隐藏层。";
-        } else if (u < 0.56) {
-          document.getElementById("inferAnimTitle").textContent = `② 经 ReLU 隐藏层输出 10 字温度概率 Softmax(logits / T=${temperature.toFixed(1)})`;
-          document.getElementById("inferAnimDesc").textContent = "只做纯前向计算，不建计算图、不算 Loss、绝不改权重。";
-        } else if (u < 0.78) {
-          document.getElementById("inferAnimTitle").textContent = `③ 3D 轮盘掷骰 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」（概率 ${(inferAnim.prob * 100).toFixed(1)}%）！`;
-          document.getElementById("inferAnimDesc").textContent = "金色骰子光球精准落到被抽中的候选字概率塔顶。";
-        } else {
-          document.getElementById("inferAnimTitle").textContent = `④ 自回归回流：「${VOCAB[inferAnim.nextId]}」飞回输入槽，窗口右滑！`;
-          document.getElementById("inferAnimDesc").textContent = "最老的字滑出窗口，新 3 字窗口立刻准备好预测下一个字。";
-        }
-
-        if (u >= 0.98 && !inferAnim.committed) {
-          flushPendingInfer();
-          const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
-          document.getElementById("inferAnimTitle").textContent = `✓ 已抽出「${VOCAB[inferAnim.nextId]}」，窗口已滑至「${newWinText}」！`;
-          document.getElementById("inferAnimDesc").textContent = "再点一次「🎲 推理下一个字」继续接龙，或拖动温度 T 观察右侧 10 座 3D 塔实时变化。";
-        }
-        if (u >= 1) {
-          inferAnim = null;
-          progWrap.classList.add("hidden");
-        }
-      } else {
-        progWrap.classList.add("hidden");
-      }
-
-      const dispWinIds = (inferAnim && !inferAnim.committed) ? inferAnim.prevWinIds : genIds.slice(-CTX_LEN);
-      const dispWinText = dispWinIds.map(id => VOCAB[id]).join("");
-      document.getElementById("inferHudWin").textContent = `「${dispWinText}」`;
-      document.getElementById("inferHudTemp").textContent = temperature.toFixed(1);
-
-      const fwd = inferForwardForWindow(dispWinIds);
-      const liveProbs = (inferAnim && !inferAnim.committed) ? inferAnim.probs : softmaxRow(fwd.logits, temperature);
-      const liveH = (inferAnim && !inferAnim.committed) ? inferAnim.h : fwd.h;
-
-      const lerpRate = Math.min(0.45, 0.18 * Math.sqrt(animSpeed));
-      for (let j = 0; j < V; j++) inferVisProbs[j] += (liveProbs[j] - inferVisProbs[j]) * lerpRate;
-      for (let k = 0; k < HIDDEN; k++) inferVisH[k] += (liveH[k] - inferVisH[k]) * lerpRate;
-
-      // Floor grid
-      inferCtx.strokeStyle = M.shade(rgbBorder, 1, 0.25); inferCtx.lineWidth = 1;
-      for (let gx = -9; gx <= 9; gx += 1.8) {
-        const a = project(gx, 0, -3.6), b = project(gx, 0, 3.6);
-        if (a && b) { inferCtx.beginPath(); inferCtx.moveTo(a.x, a.y); inferCtx.lineTo(b.x, b.y); inferCtx.stroke(); }
-      }
-      for (let gz = -3.6; gz <= 3.6; gz += 1.8) {
-        const a = project(-9, 0, gz), b = project(9, 0, gz);
-        if (a && b) { inferCtx.beginPath(); inferCtx.moveTo(a.x, a.y); inferCtx.lineTo(b.x, b.y); inferCtx.stroke(); }
-      }
-
-      const IPOS = {
-        input: { x: -7.2, z: 0 },
-        mlp:   { x: -1.4, z: 0 },
-        sm:    { x:  5.4, z: 0 },
-      };
-
-      M.drawPipe3D(inferCtx, project, { x: IPOS.input.x, y: 0.45, z: 0 }, { x: IPOS.mlp.x, y: 0.45, z: 0 }, M.shade(rgbBorder, 1.1, 0.7), 2);
-      M.drawPipe3D(inferCtx, project, { x: IPOS.mlp.x, y: 0.45, z: 0 }, { x: IPOS.sm.x, y: 0.45, z: 0 }, M.shade(rgbBorder, 1.1, 0.7), 2);
-
-      const dl = [];
-
-      // 1. Left: 3-Char Sliding Input Window Cubes
-      for (let slot = 0; slot < CTX_LEN; slot++) {
-        const cz = (slot - 1) * 1.45;
-        M.pushBox(dl, inferCtx, project, eye, IPOS.input.x - 0.55, 0, cz - 0.52, IPOS.input.x + 0.55, 1.1, cz + 0.52, rgbPrimary, 0.94, theme.fg);
-        M.pushLabel3D(dl, inferCtx, project, IPOS.input.x, 1.55, cz, `${VOCAB[dispWinIds[slot]]}`, theme.fg, "bold 12px sans-serif");
-      }
-      M.pushLabel3D(dl, inferCtx, project, IPOS.input.x, 0.12, 2.75, "末尾 3 字输入", theme.primary, "bold 11px sans-serif");
-
-      // 2. Center: Pure Forward MLP (8 ReLU hidden bars)
-      M.pushBox(dl, inferCtx, project, eye, IPOS.mlp.x - 1.35, 0, -2.55, IPOS.mlp.x + 1.35, 0.2, 2.55, rgbCard, 0.85, theme.border);
-      for (let k = 0; k < HIDDEN; k++) {
-        const hz = (k - 3.5) * 0.58;
-        const v = inferVisH[k];
-        const bh = Math.max(0.12, Math.min(2.4, v * 0.85 + 0.12));
-        const col = v > 0.005 ? rgbSuccess : rgbBorder;
-        M.pushBox(dl, inferCtx, project, eye, IPOS.mlp.x - 0.42, 0.2, hz - 0.21, IPOS.mlp.x + 0.42, 0.2 + bh, hz + 0.21, col, 0.92, theme.border);
-      }
-      M.pushLabel3D(dl, inferCtx, project, IPOS.mlp.x, 2.95, 0, "MLP 前向 (Embed→ReLU→Logits)", theme.success, "bold 11px sans-serif");
-
-      // 3. Right: 10 Live Temperature Softmax 3D Towers
-      let topJ = 0;
-      for (let j = 1; j < V; j++) if (inferVisProbs[j] > inferVisProbs[topJ]) topJ = j;
-      const pickedNow = inferAnim && u >= 0.56 ? inferAnim.nextId : -1;
-
-      for (let j = 0; j < V; j++) {
-        const sz = (j - 4.5) * 0.66;
-        const p = inferVisProbs[j];
-        const bh = Math.max(0.08, p * 4.4);
-        const isPicked = j === pickedNow;
-        const col = isPicked ? rgbSuccess : (j === topJ ? M.lerpRgb(rgbPrimary, rgbSuccess, 0.35) : rgbPrimary);
-        M.pushBox(dl, inferCtx, project, eye, IPOS.sm.x - 0.3, 0, sz - 0.24, IPOS.sm.x + 0.3, bh, sz + 0.24, col, 0.94, isPicked ? theme.fg : theme.border);
-        M.pushLabel3D(dl, inferCtx, project, IPOS.sm.x + 1.0, 0.18, sz, `${VOCAB[j]} ${(p * 100).toFixed(0)}%`, isPicked ? theme.success : theme.muted, isPicked ? "bold 11px monospace" : "10px monospace");
-      }
-      M.pushLabel3D(dl, inferCtx, project, IPOS.sm.x, 4.85, 0, `温度概率塔 Softmax(z / T=${temperature.toFixed(1)})`, theme.primary, "bold 11px monospace");
-
-      // 4. Active 4-Phase 3D Inference Motion!
-      if (inferAnim) {
-        if (u < 0.28) {
-          const p1 = u / 0.28;
-          for (let slot = 0; slot < CTX_LEN; slot++) {
-            const from = { x: IPOS.input.x, y: 1.0, z: (slot - 1) * 1.45 };
-            const to = { x: IPOS.mlp.x, y: 1.2, z: (slot - 1) * 0.9 };
-            M.drawBezierArc3D(inferCtx, project, from, to, 1.6, p1, theme.primary, 2.3);
-            const pt = M.evalArc(from, to, 1.6, p1);
-            M.pushOrb(dl, inferCtx, project, pt.x, pt.y, pt.z, 0.24, theme.primary, theme.primary, VOCAB[inferAnim.prevWinIds[slot]], "#fff");
-          }
-        } else if (u < 0.56) {
-          const p2 = (u - 0.28) / 0.28;
-          for (let k = 0; k < 4; k++) {
-            const from = { x: IPOS.mlp.x, y: 1.3, z: (k - 1.5) * 1.1 };
-            const to = { x: IPOS.sm.x, y: 1.6, z: (k - 1.5) * 1.6 };
-            M.drawBezierArc3D(inferCtx, project, from, to, 1.6, p2, theme.success, 2.0);
-            const pt = M.evalArc(from, to, 1.6, p2);
-            M.pushOrb(dl, inferCtx, project, pt.x, pt.y, pt.z, 0.2, theme.success, theme.success);
-          }
-        } else if (u < 0.78) {
-          const p3 = (u - 0.56) / 0.22;
-          const targetZ = (inferAnim.nextId - 4.5) * 0.66;
-          const targetY = Math.max(0.5, inferVisProbs[inferAnim.nextId] * 4.4) + 0.55;
-          const sweepZ = -3.0 + (targetZ + 3.0) * p3;
-          const dropY = 3.6 - (3.6 - targetY) * p3;
-          M.pushOrb(dl, inferCtx, project, IPOS.sm.x, dropY, sweepZ, 0.32, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
-          M.pushLabel3D(dl, inferCtx, project, IPOS.sm.x, dropY + 0.65, sweepZ, `🎲 抽中「${VOCAB[inferAnim.nextId]}」`, theme.success, "bold 12px sans-serif", -0.5);
-        } else {
-          // Phase 4: Autoregressive feedback arc from picked tower BACK to bottom slot of 3-char input!
-          const p4 = (u - 0.78) / 0.22;
-          const from = { x: IPOS.sm.x, y: Math.max(0.6, inferVisProbs[inferAnim.nextId] * 4.4) + 0.4, z: (inferAnim.nextId - 4.5) * 0.66 };
-          const to = { x: IPOS.input.x, y: 1.1, z: 1.45 };
-          M.drawBezierArc3D(inferCtx, project, from, to, 3.6, p4, theme.warning, 2.8, true);
-          const pt = M.evalArc(from, to, 3.6, p4);
-          M.pushOrb(dl, inferCtx, project, pt.x, pt.y, pt.z, 0.34, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
-        }
-      }
-
-      M.flushDrawList(dl);
-      inferCtx.restore();
     }
 
     // =========================================================================
@@ -2029,6 +2060,7 @@
     function initAll(deadRelu = false) {
       model = createModel(42, deadRelu);
       trainStepCount = 0;
+      viewMode = "train";
       mode = "idle";
       currentStage = 0;
       stage8Applied = false;
@@ -2044,11 +2076,21 @@
       genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
       lastGenDraw = null;
       inferAnim = null;
-      document.getElementById("inferAnimTitle").textContent = "推理待命：点击「🎲 推理下一个字」观看 3D 前向采样与窗口滑动动画";
-      document.getElementById("inferAnimDesc").textContent = "拖动上方「温度 T」滑块，右侧 10 座 3D 概率塔会立刻实时变形；点「🎲 推理下一个字」看小球穿过 MLP 抽字并飞回输入槽！";
-      document.getElementById("genReadout").textContent = "点击「🎲 推理下一个字」体验单步 3D 采样与窗口右滑";
+      setTrainNarrator(
+        "准备就绪：已选中「床前明 → 月」，点一次「⏭ 下一步」开始训练拆解！",
+        "当前为 🔵 训练模式（含 Tape、Loss 与反传）。想用同一套 3D 权重接龙？直接点下方「🎲 推理下一个字」，舞台会自动切入 🟢 推理模式！"
+      );
+      setInferNarrator(
+        "🟢 推理模式：纯前向接龙（已隐藏 Tape / Loss / Target，绝不修改权重）",
+        "拖动「温度 T」实时看右侧 10 座 3D 概率塔变形；点「🎲 推理下一个字」看 3 字穿过同一套 MLP 抽字并飞回输入槽！"
+      );
+      document.getElementById("genReadout").textContent = "点「🎲 推理下一个字」在同一 3D 模型上看纯前向采样与滑窗回流！";
       renderAllUi();
     }
+
+    // Explicit Mode Toggle Buttons
+    document.getElementById("btnModeTrain").onclick = () => setViewMode("train");
+    document.getElementById("btnModeInfer").onclick = () => setViewMode("infer");
 
     const genStartSelect = document.getElementById("genStartSelect");
     SAMPLES.forEach((s, idx) => {
@@ -2063,36 +2105,42 @@
       genStartSampleIdx = parseInt(genStartSelect.value, 10);
       genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
       lastGenDraw = null;
-      renderInferenceCard();
-      document.getElementById("genReadout").textContent =
-        `接龙起点已切换为「${SAMPLES[genStartSampleIdx].ctxText}」（上方训练区与已训练权重完全不受影响）`;
+      setViewMode("infer");
+      renderInferenceStrip();
+      const txt = `接龙起点已切为「${SAMPLES[genStartSampleIdx].ctxText}」（共享权重 Step ${trainStepCount} 未变）`;
+      document.getElementById("genReadout").textContent = txt;
+      setInferNarrator(`🟢 ${txt}`, "点击「🎲 推理下一个字」开始从这个 3 字窗口接龙！");
     };
 
     document.getElementById("btnNextStep").onclick = () => {
+      setViewMode("train");
       flushPendingStage8();
       mode = "step";
       enterStage(currentStage >= 8 ? 1 : currentStage + 1, performance.now());
     };
 
     document.getElementById("btnAutoPlay").onclick = () => {
+      setViewMode("train");
       flushPendingStage8();
       if (mode === "autoplay") { mode = "step"; updateTrainingHud(); }
       else { mode = "autoplay"; enterStage(currentStage >= 8 || currentStage === 0 ? 1 : currentStage, performance.now()); }
     };
 
     document.getElementById("btnTrain1").onclick = () => {
+      setViewMode("train");
       flushPendingStage8();
       mode = "idle"; currentStage = 0;
       performOneAdamWStep(false);
       renderAllUi();
       const r = lastUpdateReport;
-      setNarrator(
+      setTrainNarrator(
         `+1 训练 step 完成（Step ${r.step}）！Batch Loss: ${r.beforeBatch.toFixed(4)} → ${r.afterBatch.toFixed(4)}`,
-        `当前样本「${SAMPLES[selectedSampleIdx].ctxText}→${SAMPLES[selectedSampleIdx].targetChar}」Loss: ${r.beforeSample.toFixed(4)} → ${r.afterSample.toFixed(4)}（已用新权重重算，下方推理区已同步最新权重）。`
+        `当前样本「${SAMPLES[selectedSampleIdx].ctxText}→${SAMPLES[selectedSampleIdx].targetChar}」Loss: ${r.beforeSample.toFixed(4)} → ${r.afterSample.toFixed(4)}（已用新权重重算）。`
       );
     };
 
     document.getElementById("btnTrain40").onclick = () => {
+      setViewMode("train");
       flushPendingStage8();
       mode = "train40"; currentStage = 8; stage8Applied = true;
       train40Remaining = 40; lastTrainTick = performance.now();
@@ -2101,7 +2149,7 @@
 
     document.getElementById("btnDeadRelu").onclick = () => {
       initAll(true);
-      setNarrator(
+      setTrainNarrator(
         "💀 已构造 Dead ReLU 条件（b1 = -3.2，使 z1 = x·w1 + b1 全部 ≤ 0）",
         "一路点「⏭ 下一步」：到第 ④ 步看 ReLU 门按真实 z1 自动关闭，到第 ⑦ 步看反向梯度撞墙归零！"
       );
@@ -2109,15 +2157,15 @@
 
     document.getElementById("btnReset").onclick = () => {
       initAll(false);
-      setNarrator(
+      setTrainNarrator(
         "已重置全部 234 个权重（Step 归 0，Loss 与概率塔归零，等待首次前向）",
         "点击「⏭ 下一步」从 ① 开始走完 8 步，或点「⚡ 快速训练 40 step」看它学会整首短诗！"
       );
     };
 
-    // Pure Inference Button — launches dedicated 4-phase 3D Inference Animation inside Card 2!
+    // Pure Inference Button — switches unified 3D stage cleanly to Infer Mode & plays 4-phase animation!
     document.getElementById("btnGenNext").onclick = () => {
-      flushPendingStage8();
+      setViewMode("infer");
       flushPendingInfer();
       const curWin = genIds.slice(-CTX_LEN);
       const prevWinText = curWin.map(id => VOCAB[id]).join("");
@@ -2136,6 +2184,8 @@
         prob: probs[nextId],
         dice: r,
         probs,
+        x: fwd.x,
+        z1: fwd.z1,
         h: fwd.h,
         committed: false,
       };
@@ -2147,11 +2197,11 @@
       inferAnim = null;
       genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
       lastGenDraw = null;
-      renderInferenceCard();
-      document.getElementById("inferAnimTitle").textContent = `已重置接龙起点为「${SAMPLES[genStartSampleIdx].ctxText}」（权重 Step ${trainStepCount} 完整保留）`;
-      document.getElementById("inferAnimDesc").textContent = "点击「🎲 推理下一个字」重新观看 3D 前向抽字与窗口右滑动画。";
-      document.getElementById("genReadout").textContent =
-        `已重置接龙序列为「${SAMPLES[genStartSampleIdx].ctxText}」（已训练权重 Step ${trainStepCount} 完整保留）`;
+      setViewMode("infer");
+      renderInferenceStrip();
+      const txt = `已重置接龙起点为「${SAMPLES[genStartSampleIdx].ctxText}」（已训练权重 Step ${trainStepCount} 完整保留）`;
+      document.getElementById("genReadout").textContent = txt;
+      setInferNarrator(`🟢 ${txt}`, "点击「🎲 推理下一个字」重新观看 3D 纯前向抽字与窗口右滑动画！");
     };
 
     document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
@@ -2168,7 +2218,8 @@
     document.getElementById("tempSlider").oninput = e => {
       temperature = parseFloat(e.target.value);
       document.getElementById("tempVal").textContent = temperature.toFixed(1);
-      renderInferenceCard();
+      setViewMode("infer");
+      renderInferenceStrip();
     };
 
     const scalarDlg = document.getElementById("scalarModal");
