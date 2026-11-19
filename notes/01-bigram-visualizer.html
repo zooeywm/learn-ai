@@ -3,32 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Step 01：Bigram 语言模型建模与训练动画</title>
+  <title>Step 01：Bigram 3D 建模与单步动画</title>
   <style>
     :root {
-      --bg: #0f1117;
-      --card: #171a22;
-      --content: #1e222d;
-      --border: #2c3242;
-      --fg: #e8ecf4;
-      --muted: #93a0b8;
+      --background: #0d1017;
+      --card: #151924;
+      --content: #1a1f2e;
+      --border: #2a3245;
+      --foreground: #e8edf7;
+      --muted-foreground: #94a3b8;
       --primary: #4f8cff;
-      --primary-fg: #ffffff;
+      --primary-foreground: #ffffff;
+      --secondary: #22293a;
+      --secondary-foreground: #cbd5e1;
       --success: #22c55e;
       --warning: #f59e0b;
       --error: #ef4444;
-      --c1: #4f8cff; --c2: #22c55e; --c3: #f59e0b; --c4: #a855f7; --c5: #ec4899; --c6: #06b6d4;
     }
     @media (prefers-color-scheme: light) {
       :root {
-        --bg: #f5f7fb;
+        --background: #f4f6fb;
         --card: #ffffff;
-        --content: #f0f3f8;
-        --border: #dce2ee;
-        --fg: #182030;
-        --muted: #5a667d;
+        --content: #edf1f8;
+        --border: #d4dce9;
+        --foreground: #141c2c;
+        --muted-foreground: #5c6b82;
         --primary: #2563eb;
-        --primary-fg: #ffffff;
+        --primary-foreground: #ffffff;
+        --secondary: #e5ebf6;
+        --secondary-foreground: #1e293b;
         --success: #16a34a;
         --warning: #d97706;
         --error: #dc2626;
@@ -37,270 +40,191 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 20px;
-      background: var(--bg);
-      color: var(--fg);
+      padding: 16px;
+      background: var(--background);
+      color: var(--foreground);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
-      font-size: 14px;
-      line-height: 1.5;
+      font-size: 13px;
+      line-height: 1.45;
     }
-    .container { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    .wrap { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 16px;
+      padding: 14px;
     }
-    .row-between { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-    .flex-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+    .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .muted { color: var(--muted); }
+    .muted { color: var(--muted-foreground); }
     .xs { font-size: 12px; }
-    h1 { margin: 0; font-size: 18px; }
-    h2 { margin: 0; font-size: 14px; }
-    .tag {
+    h1 { margin: 0; font-size: 17px; }
+    .badge {
       padding: 2px 8px;
       border-radius: 6px;
-      background: var(--content);
-      border: 1px solid var(--border);
+      background: var(--secondary);
+      color: var(--secondary-foreground);
       font-size: 12px;
     }
     button {
       font-family: inherit;
       font-size: 12px;
-      padding: 6px 12px;
+      padding: 6px 11px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--content);
-      color: var(--fg);
+      color: var(--foreground);
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.18s ease;
     }
     button:hover { border-color: var(--primary); }
     button.primary {
       background: var(--primary);
-      color: var(--primary-fg);
+      color: var(--primary-foreground);
       border-color: var(--primary);
       font-weight: 600;
     }
-    button.primary:hover { opacity: 0.9; }
-    .pill { border-radius: 999px; padding: 4px 10px; }
-    .pill.active {
+    button.primary:hover { opacity: 0.92; }
+    .stage-pill { border-radius: 999px; padding: 4px 10px; }
+    .stage-pill.active {
       background: var(--primary);
-      color: var(--primary-fg);
+      color: var(--primary-foreground);
       border-color: var(--primary);
-      transform: translateY(-1px);
     }
-    .divider { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
-    .narrator {
-      background: var(--content);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      margin-top: 10px;
-    }
-    .grid-main { display: grid; grid-template-columns: 7fr 5fr; gap: 16px; }
-    @media (max-width: 920px) { .grid-main { grid-template-columns: 1fr; } }
-    .matrix-wrap { overflow-x: auto; margin-top: 10px; }
-    .matrix-grid { display: inline-grid; gap: 4px; font-size: 12px; user-select: none; }
-    .matrix-cell {
-      padding: 5px 2px;
-      border-radius: 6px;
-      text-align: center;
-      border: 1px solid var(--border);
-      cursor: pointer;
-      transition: background-color 0.3s ease, border-color 0.2s ease;
-    }
-    @keyframes pulseRing {
-      0% { box-shadow: 0 0 0 0 rgba(79, 140, 255, 0.65); }
-      70% { box-shadow: 0 0 0 6px rgba(79, 140, 255, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(79, 140, 255, 0); }
-    }
-    .cell-pulse { animation: pulseRing 0.9s ease-out infinite; }
-    .inspector-head, .inspector-row {
-      display: grid;
-      grid-template-columns: 2fr 2.4fr 4.4fr 2.6fr;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-    }
-    .inspector-head { padding-bottom: 6px; border-bottom: 1px solid var(--border); color: var(--muted); }
-    .inspector-row { padding: 3px 4px; border-radius: 6px; }
-    .bar-track {
-      flex: 1;
-      height: 11px;
-      border-radius: 999px;
-      background: var(--content);
-      border: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.35s ease; }
-    canvas { width: 100%; height: 150px; display: block; border-radius: 8px; margin-top: 8px; }
-    .tape {
-      background: var(--content);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-      min-height: 48px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
-      margin-top: 10px;
-    }
-    .roulette {
+    .viewport {
       position: relative;
-      width: 100%;
-      height: 28px;
-      border-radius: 8px;
+      border-radius: 12px;
       overflow: hidden;
       border: 1px solid var(--border);
-      display: flex;
-      margin-top: 6px;
-    }
-    select {
       background: var(--content);
-      color: var(--fg);
+      margin-top: 10px;
+    }
+    canvas { width: 100%; height: 510px; display: block; cursor: grab; touch-action: none; }
+    canvas:active { cursor: grabbing; }
+    .hud {
+      position: absolute;
+      pointer-events: none;
+      border-radius: 8px;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 4px 8px;
+      background: color-mix(in srgb, var(--card) 90%, transparent);
+      backdrop-filter: blur(6px);
+      padding: 8px 12px;
       font-size: 12px;
     }
-    input[type="range"] { accent-color: var(--primary); }
+    .hud-tl { top: 12px; left: 12px; }
+    .hud-tr { top: 12px; right: 12px; display: flex; gap: 12px; align-items: center; }
+    .hud-bottom { bottom: 12px; left: 12px; right: 12px; }
+    .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+    .prog-track {
+      width: 112px; height: 6px; border-radius: 999px;
+      overflow: hidden; background: var(--content); border: 1px solid var(--border);
+    }
+    .prog-fill { height: 100%; background: var(--primary); width: 0%; }
+    .hidden { display: none; }
+    .divider { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+    input[type="range"] { accent-color: var(--primary); width: 84px; }
+    .chip {
+      padding: 2px 7px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--content); font-size: 12px;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="card row-between">
+  <div class="wrap">
+    <div class="card row">
       <div>
-        <div class="flex-wrap">
-          <span class="tag mono">Step 01</span>
-          <h1>Bigram 语言模型：建模与训练全过程动画</h1>
+        <div class="flex">
+          <span class="badge mono">Step 01 · 3D 建模</span>
+          <h1>Bigram 语言模型：全流程 3D 动态建模演示（离线版）</h1>
         </div>
-        <div class="xs muted" style="margin-top: 4px;">
-          演示语料：<strong class="mono" style="color:var(--fg)">「床前明月光，举头望明月。」</strong>
-          （12 字，词表 <span class="mono">V = 10</span>；注意 <span class="mono" style="color:var(--fg)">月</span> 后同时出现过 <span class="mono">光</span> 和 <span class="mono">。</span>）
-        </div>
-      </div>
-      <div class="flex-wrap">
-        <button id="btnStepAnim" class="primary">▶ 单步拆解动画</button>
-        <button id="btnTrain1">训练 1 轮</button>
-        <button id="btnTrain50">⚡ 连续训练 50 轮</button>
-        <button id="btnReset">↺ 重置权重</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="row-between">
-        <div class="flex-wrap" id="stagePills">
-          <button data-stage="1" class="pill">① Tokenizer 查字典</button>
-          <span class="muted">→</span>
-          <button data-stage="2" class="pill">② 查表得 Logits</button>
-          <span class="muted">→</span>
-          <button data-stage="3" class="pill">③ Softmax 变概率</button>
-          <span class="muted">→</span>
-          <button data-stage="4" class="pill">④ 算交叉熵 Loss</button>
-          <span class="muted">→</span>
-          <button data-stage="5" class="pill">⑤ 反向梯度 &amp; SGD 更新</button>
-        </div>
-        <div class="flex-wrap xs mono">
-          <span class="muted">Epoch: <strong id="statEpoch" style="color:var(--fg)">0</strong></span>
-          <span class="muted">全量 Loss: <strong id="statLoss" style="color:var(--fg)">2.3026</strong></span>
+        <div class="xs muted" style="margin-top:3px;">
+          语料：<strong class="mono" style="color:var(--foreground)">「床前明月光，举头望明月。」</strong>
+          （词表 <span class="mono">V = 10</span> · 鼠标左键拖拽旋转 3D 视角 · 滚轮缩放）
         </div>
       </div>
-
-      <div class="divider row-between xs">
-        <div class="flex-wrap">
-          <span class="muted">观察训练样本对 (x → y)：</span>
-          <div id="pairButtons" class="flex-wrap"></div>
-        </div>
-        <label class="flex-wrap muted">
-          学习率 lr:
-          <input id="lrSlider" type="range" min="0.5" max="15" step="0.5" value="4.0" />
-          <span id="lrValue" class="mono" style="color:var(--fg); min-width:28px;">4.0</span>
-        </label>
-      </div>
-
-      <div class="narrator xs">
-        <div id="narratorTitle" style="font-weight:600; margin-bottom:4px;">准备就绪</div>
-        <div id="narratorDesc" class="muted"></div>
-      </div>
-    </div>
-
-    <div class="grid-main">
-      <div class="card">
-        <div class="row-between">
-          <div>
-            <h2>模型大脑：V × V 权重矩阵（table[x * V + j]）</h2>
-            <div class="xs muted">行 = 当前字 x，列 = 预测的下一个字 j。点击任意行可切换观察。</div>
-          </div>
-          <div class="flex-wrap xs muted">
-            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(239,68,68,0.45);margin-right:4px;"></span>负分</span>
-            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.55);margin-right:4px;"></span>正分</span>
-          </div>
-        </div>
-        <div class="matrix-wrap">
-          <div id="matrixGrid" class="matrix-grid mono"></div>
-        </div>
-        <div class="divider">
-          <div class="xs muted" style="margin-bottom:6px;">Tokenizer 词表映射（BTreeSet 排序编号）：</div>
-          <div id="vocabStrip" class="flex-wrap xs mono"></div>
-        </div>
-      </div>
-
-      <div style="display:flex; flex-direction:column; gap:16px;">
-        <div class="card">
-          <h2 style="margin-bottom:8px;">当前行解剖：<span id="inspectTitle" class="mono" style="color:var(--primary)"></span></h2>
-          <div class="inspector-head mono">
-            <div>候选字</div>
-            <div style="text-align:right">Logit z</div>
-            <div>Softmax 概率 p</div>
-            <div style="text-align:right">梯度 ∂L/∂z</div>
-          </div>
-          <div id="barRows" style="margin-top:6px; display:flex; flex-direction:column; gap:4px;" class="mono"></div>
-          <div class="divider row-between xs mono muted">
-            <span>当前样本 Loss = -ln(p_y)</span>
-            <strong id="sampleLossVal" style="color:var(--fg)">2.3026</strong>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="row-between">
-            <h2>训练 Loss 收敛曲线</h2>
-            <span class="xs mono muted">Bigram 理论下界 ≈ 0.1260</span>
-          </div>
-          <canvas id="lossCanvas"></canvas>
-          <div class="xs muted" style="margin-top:6px;">
-            橙色虚线是 Bigram 的数学极限：因为「月」后同时出现过「光」和「。」，只看前 1 个字永远无法把 Loss 降到 0。
-          </div>
-        </div>
+      <div class="flex">
+        <button id="btnNextStep" class="primary">⏭ 下一步：① 词典编码 (1/5)</button>
+        <button id="btnAutoPlay">▶ 自动连播</button>
+        <button id="btnTrain50">⚡ 50 轮矩阵生长</button>
+        <button id="btnHopOne">🎲 跳下一个字</button>
+        <button id="btnReset">↺ 重置</button>
       </div>
     </div>
 
     <div class="card">
-      <div class="row-between">
-        <div>
-          <h2>互动实验：自回归逐字接龙 &amp; Temperature（温度）轮盘采样</h2>
-          <div class="xs muted">建议先点上方「⚡ 连续训练 50 轮」，再调节 Temperature 观察轮盘区间变化与采样结果。</div>
+      <div class="row xs">
+        <div class="flex" id="stagePills">
+          <button data-stage="1" class="stage-pill">① 词典编码</button>
+          <span class="muted">→</span>
+          <button data-stage="2" class="stage-pill">② 扫描矩阵行</button>
+          <span class="muted">→</span>
+          <button data-stage="3" class="stage-pill">③ Softmax 概率塔</button>
+          <span class="muted">→</span>
+          <button data-stage="4" class="stage-pill">④ Loss 能量柱</button>
+          <span class="muted">→</span>
+          <button data-stage="5" class="stage-pill">⑤ 梯度回流推拉</button>
         </div>
-        <div class="flex-wrap xs">
-          <label class="muted">起始字: <select id="genStartSelect" class="mono"></select></label>
-          <label class="flex-wrap muted">
-            Temperature:
-            <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.8" />
-            <span id="tempValue" class="mono" style="color:var(--fg); min-width:24px;">0.8</span>
+        <div class="flex">
+          <button id="camIso">立体视角</button>
+          <button id="camTop">俯视矩阵</button>
+          <button id="camSide">平视柱高</button>
+          <button id="camOrbit">自动环绕</button>
+        </div>
+      </div>
+
+      <div class="viewport">
+        <canvas id="scene3d"></canvas>
+
+        <div class="hud hud-tl mono">
+          <div>Epoch: <strong id="hudEpoch">0</strong> &nbsp;|&nbsp; 全量 Loss: <strong id="hudLoss">2.3026</strong></div>
+          <div class="muted">当前样本: <strong id="hudPair" style="color:var(--foreground)">床 → 前</strong> &nbsp;|&nbsp; 下界 ≈ 0.126</div>
+        </div>
+
+        <div class="hud hud-tr">
+          <span><span class="dot" style="background:var(--success)"></span>正权重(拉高)</span>
+          <span><span class="dot" style="background:var(--error)"></span>负权重(压低)</span>
+          <span><span class="dot" style="background:var(--primary)"></span>概率塔</span>
+          <span><span class="dot" style="background:var(--warning)"></span>Loss 柱</span>
+        </div>
+
+        <div class="hud hud-bottom">
+          <div class="row">
+            <strong id="narratorTitle">准备就绪：点一次「⏭ 下一步」走一步 3D 动画（每步播完自动暂停等你思考）</strong>
+            <div id="stageProgressWrap" class="prog-track hidden"><div id="stageProgressBar" class="prog-fill"></div></div>
+          </div>
+          <div id="narratorDesc" class="muted" style="margin-top:3px;">
+            中央是 10×10 的 3D 权重矩阵地形，右侧是 Softmax 3D 概率塔和 Loss 能量柱。你可以按住鼠标左键拖动旋转视角！
+          </div>
+        </div>
+      </div>
+
+      <div class="row divider xs">
+        <div class="flex">
+          <span class="muted">选择训练样本对 (x→y)：</span>
+          <div id="pairButtons" class="flex"></div>
+        </div>
+        <div class="flex" style="gap:14px;">
+          <label class="flex muted">
+            学习率 lr:
+            <input id="lrSlider" type="range" min="1" max="15" step="0.5" value="6.0" />
+            <span id="lrVal" class="mono" style="color:var(--foreground); min-width:26px;">6.0</span>
           </label>
-          <button id="btnGenStep" class="primary">🎲 采样下一个字</button>
-          <button id="btnGenAuto">▶ 自动接龙 12 字</button>
-          <button id="btnGenClear">清空</button>
+          <label class="flex muted">
+            温度 T:
+            <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.7" />
+            <span id="tempVal" class="mono" style="color:var(--foreground); min-width:24px;">0.7</span>
+          </label>
         </div>
       </div>
-      <div id="genTape" class="tape"></div>
-      <div class="row-between xs" style="margin-top:10px;">
-        <span id="rouletteLabel" class="muted"></span>
-        <span id="diceReadout" class="mono">等待掷骰子...</span>
+
+      <div class="row divider xs">
+        <div class="flex">
+          <span class="muted">3D 自回归接龙输出：</span>
+          <div id="genTape" class="flex mono"></div>
+        </div>
+        <span id="hopReadout" class="mono muted">提示：先点「⚡ 50 轮矩阵生长」，再一次次点「🎲 跳下一个字」看小球跳跃写诗</span>
       </div>
-      <div id="rouletteBar" class="roulette"></div>
     </div>
   </div>
 
@@ -312,61 +236,256 @@
     const DATA = CORPUS.split("").map(ch => STOI[ch]);
     const PAIRS = [];
     for (let i = 0; i < DATA.length - 1; i++) PAIRS.push([DATA[i], DATA[i + 1]]);
-    const LOSS_FLOOR = (2 / PAIRS.length) * Math.log(2);
 
-    let table = new Float32Array(V * V);
+    const table = new Float32Array(V * V);
+    const visualHeights = new Float32Array(V * V);
+    const visualProbs = new Float32Array(V);
+    let visualLoss = Math.log(V);
+
     let epoch = 0;
-    let lossHistory = [];
     let selectedPairIdx = 0;
-    let activeStage = 0;
-    let animTimer = null;
-    let genTimer = null;
-    let genIds = [STOI["床"]];
-    let lastDice = null;
+    let lr = 6.0;
+    let temperature = 0.7;
 
     function softmax(logits) {
-      let maxVal = -Infinity;
-      for (let i = 0; i < logits.length; i++) if (logits[i] > maxVal) maxVal = logits[i];
+      let m = -Infinity;
+      for (let i = 0; i < logits.length; i++) if (logits[i] > m) m = logits[i];
       const exps = new Float64Array(logits.length);
       let sum = 0;
-      for (let i = 0; i < logits.length; i++) {
-        exps[i] = Math.exp(logits[i] - maxVal);
-        sum += exps[i];
-      }
+      for (let i = 0; i < logits.length; i++) { exps[i] = Math.exp(logits[i] - m); sum += exps[i]; }
       const probs = new Float64Array(logits.length);
       for (let i = 0; i < logits.length; i++) probs[i] = exps[i] / sum;
-      return { probs, maxVal };
+      return { probs, maxVal: m };
     }
 
     function getRow(x) { return table.slice(x * V, (x + 1) * V); }
 
-    function computeFullLossAndGrads() {
+    function fullLossAndGrads() {
       const n = PAIRS.length;
       const grads = new Float32Array(V * V);
       let totalLoss = 0;
       for (const [x, y] of PAIRS) {
         const { probs } = softmax(getRow(x));
         totalLoss += -Math.log(probs[y] + 1e-12);
-        for (let j = 0; j < V; j++) {
-          grads[x * V + j] += (probs[j] - (j === y ? 1.0 : 0.0)) / n;
-        }
+        for (let j = 0; j < V; j++) grads[x * V + j] += (probs[j] - (j === y ? 1.0 : 0.0)) / n;
       }
       return { loss: totalLoss / n, grads };
     }
 
-    function trainEpochs(count) {
-      const lr = parseFloat(document.getElementById("lrSlider").value);
-      for (let step = 0; step < count; step++) {
-        const { grads } = computeFullLossAndGrads();
-        for (let i = 0; i < table.length; i++) table[i] -= lr * grads[i];
-        epoch += 1;
-        lossHistory.push({ epoch, loss: computeFullLossAndGrads().loss });
-      }
+    function trainOneEpoch() {
+      const { grads } = fullLossAndGrads();
+      for (let i = 0; i < table.length; i++) table[i] -= lr * grads[i];
+      epoch += 1;
     }
 
-    function stopAllAnims() {
-      if (animTimer) { clearTimeout(animTimer); animTimer = null; }
-      if (genTimer) { clearInterval(genTimer); genTimer = null; }
+    // State Machine: True Click-Once = Advance-One-Step!
+    let mode = "idle"; // "idle" | "step" | "autoplay" | "grow50" | "hop"
+    let currentStage = 0;
+    let stageStartMs = 0;
+    const STEP_ANIM_MS = 1350;
+    const AUTO_HOLD_MS = 850;
+    let stage5Applied = false;
+
+    const STAGE_NAMES = ["① 词典编码", "② 扫描矩阵行", "③ Softmax 概率塔", "④ Loss 能量柱", "⑤ 反向梯度推拉"];
+
+    let growRemaining = 0;
+    let lastGrowTick = 0;
+
+    let genIds = [STOI["床"]];
+    let hopFrom = null;
+    let hopTo = null;
+    let hopStartMs = 0;
+    const HOP_DURATION = 750;
+    let hopLanded = true;
+    let hopTrail = [];
+
+    const canvas = document.getElementById("scene3d");
+    const ctx = canvas.getContext("2d");
+
+    const cam = {
+      yaw: -0.62, pitch: 0.56, dist: 24.5,
+      targetYaw: -0.62, targetPitch: 0.56, targetDist: 24.5,
+      tx: 1.5, ty: 0.6, tz: 0.0, autoOrbit: false,
+    };
+
+    let dragging = false, lastMouseX = 0, lastMouseY = 0;
+    canvas.addEventListener("pointerdown", e => {
+      dragging = true; cam.autoOrbit = false;
+      lastMouseX = e.clientX; lastMouseY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove", e => {
+      if (!dragging) return;
+      cam.targetYaw -= (e.clientX - lastMouseX) * 0.008;
+      cam.targetPitch = Math.max(0.18, Math.min(1.42, cam.targetPitch + (e.clientY - lastMouseY) * 0.007));
+      lastMouseX = e.clientX; lastMouseY = e.clientY;
+    });
+    canvas.addEventListener("pointerup", () => { dragging = false; });
+    canvas.addEventListener("wheel", e => {
+      e.preventDefault();
+      cam.targetDist = Math.max(14, Math.min(38, cam.targetDist + e.deltaY * 0.015));
+    }, { passive: false });
+
+    const CELL = 1.05;
+    const MAT_ORIGIN_X = -1.5 - (V - 1) * CELL * 0.5;
+    const MAT_ORIGIN_Z = -(V - 1) * CELL * 0.5;
+    const TOK_POS = { x: MAT_ORIGIN_X - 3.6, y: 0.9, z: 0 };
+    const SOFTMAX_X = MAT_ORIGIN_X + (V - 1) * CELL + 3.4;
+    const LOSS_POS = { x: SOFTMAX_X + 3.2, y: 0, z: 0 };
+
+    function cellWorld(row, col) { return { x: MAT_ORIGIN_X + col * CELL, z: MAT_ORIGIN_Z + row * CELL }; }
+
+    function getThemeColors() {
+      const s = getComputedStyle(document.documentElement);
+      const get = (k, fb) => s.getPropertyValue(k).trim() || fb;
+      return {
+        bg: get("--content", "#1a1f2e"),
+        fg: get("--foreground", "#e8edf7"),
+        muted: get("--muted-foreground", "#94a3b8"),
+        border: get("--border", "#2a3245"),
+        primary: get("--primary", "#4f8cff"),
+        success: get("--success", "#22c55e"),
+        error: get("--error", "#ef4444"),
+        warning: get("--warning", "#f59e0b"),
+        card: get("--card", "#151924"),
+      };
+    }
+
+    const colorCache = new Map();
+    function parseRgb(cssColor) {
+      if (colorCache.has(cssColor)) return colorCache.get(cssColor);
+      const tmp = document.createElement("canvas").getContext("2d");
+      tmp.fillStyle = cssColor; tmp.fillRect(0, 0, 1, 1);
+      const d = tmp.getImageData(0, 0, 1, 1).data;
+      const res = [d[0], d[1], d[2]];
+      colorCache.set(cssColor, res);
+      return res;
+    }
+    function shade(rgb, factor, alpha = 1) {
+      return `rgba(${Math.min(255, Math.max(0, Math.round(rgb[0] * factor)))},${Math.min(255, Math.max(0, Math.round(rgb[1] * factor)))},${Math.min(255, Math.max(0, Math.round(rgb[2] * factor)))},${alpha})`;
+    }
+    function lerpRgb(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+
+    function makeProjector(W, H) {
+      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      const focal = Math.min(W, H) * 1.18;
+      const eye = { x: cam.tx + cam.dist * cp * sy, y: cam.ty + cam.dist * sp, z: cam.tz + cam.dist * cp * cy };
+      function project(wx, wy, wz) {
+        const dx = wx - cam.tx, dy = wy - cam.ty, dz = wz - cam.tz;
+        const x1 = dx * cy - dz * sy, z1 = dx * sy + dz * cy;
+        const y2 = dy * cp - z1 * sp, z2 = dy * sp + z1 * cp;
+        const depth = cam.dist - z2;
+        if (depth < 0.5) return null;
+        const sc = focal / depth;
+        return { x: W * 0.5 + x1 * sc, y: H * 0.53 - y2 * sc, depth, sc };
+      }
+      return { project, eye };
+    }
+
+    function pushBox(drawList, proj, eye, x0, y0, z0, x1, y1, z1, baseRgb, alpha = 1, strokeCss = null) {
+      const corners = [
+        proj(x0, y0, z0), proj(x1, y0, z0), proj(x1, y0, z1), proj(x0, y0, z1),
+        proj(x0, y1, z0), proj(x1, y1, z0), proj(x1, y1, z1), proj(x0, y1, z1),
+      ];
+      if (corners.some(c => !c)) return;
+      const centerP = proj((x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5);
+      if (!centerP) return;
+      const faces = [];
+      if (eye.y > y1) faces.push({ idx: [4, 5, 6, 7], light: 1.12 });
+      if (eye.y < y0) faces.push({ idx: [0, 3, 2, 1], light: 0.55 });
+      if (eye.x > x1) faces.push({ idx: [1, 2, 6, 5], light: 0.88 });
+      if (eye.x < x0) faces.push({ idx: [0, 4, 7, 3], light: 0.72 });
+      if (eye.z > z1) faces.push({ idx: [3, 7, 6, 2], light: 0.96 });
+      if (eye.z < z0) faces.push({ idx: [0, 1, 5, 4], light: 0.66 });
+      drawList.push({
+        depth: centerP.depth,
+        draw: () => {
+          for (const f of faces) {
+            ctx.beginPath();
+            ctx.moveTo(corners[f.idx[0]].x, corners[f.idx[0]].y);
+            ctx.lineTo(corners[f.idx[1]].x, corners[f.idx[1]].y);
+            ctx.lineTo(corners[f.idx[2]].x, corners[f.idx[2]].y);
+            ctx.lineTo(corners[f.idx[3]].x, corners[f.idx[3]].y);
+            ctx.closePath();
+            ctx.fillStyle = shade(baseRgb, f.light, alpha);
+            ctx.fill();
+            if (strokeCss) { ctx.strokeStyle = strokeCss; ctx.lineWidth = 0.8; ctx.stroke(); }
+          }
+        },
+      });
+    }
+
+    function pushOrb(drawList, proj, wx, wy, wz, radiusWorld, colorCss, glowCss = null, label = null, fgCss = "#fff") {
+      const p = proj(wx, wy, wz);
+      if (!p) return;
+      const r = Math.max(3, radiusWorld * p.sc);
+      drawList.push({
+        depth: p.depth - 0.15,
+        draw: () => {
+          ctx.save();
+          if (glowCss) { ctx.shadowColor = glowCss; ctx.shadowBlur = 16; }
+          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = colorCss; ctx.fill();
+          ctx.restore();
+          if (label) {
+            ctx.fillStyle = fgCss;
+            ctx.font = `bold ${Math.max(10, Math.round(r * 0.95))}px sans-serif`;
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(label, p.x, p.y + 0.5);
+          }
+        },
+      });
+    }
+
+    function pushArrow3D(drawList, proj, wx, yStart, yEnd, wz, colorCss) {
+      const p0 = proj(wx, yStart, wz), p1 = proj(wx, yEnd, wz);
+      if (!p0 || !p1) return;
+      drawList.push({
+        depth: (p0.depth + p1.depth) * 0.5 - 0.25,
+        draw: () => {
+          ctx.save();
+          ctx.strokeStyle = colorCss; ctx.fillStyle = colorCss;
+          ctx.lineWidth = 3; ctx.shadowColor = colorCss; ctx.shadowBlur = 8;
+          ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+          const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x), head = 8;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p1.x - head * Math.cos(angle - 0.5), p1.y - head * Math.sin(angle - 0.5));
+          ctx.lineTo(p1.x - head * Math.cos(angle + 0.5), p1.y - head * Math.sin(angle + 0.5));
+          ctx.closePath(); ctx.fill(); ctx.restore();
+        },
+      });
+    }
+
+    function pushLabel3D(drawList, proj, wx, wy, wz, text, colorCss, font = "12px monospace", bias = -0.1) {
+      const p = proj(wx, wy, wz);
+      if (!p) return;
+      drawList.push({
+        depth: p.depth + bias,
+        draw: () => {
+          ctx.fillStyle = colorCss; ctx.font = font;
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(text, p.x, p.y);
+        },
+      });
+    }
+
+    function drawBezierArc3D(proj, a, b, arcH, tProg, colorCss, width = 2, dashed = false) {
+      ctx.save(); ctx.strokeStyle = colorCss; ctx.lineWidth = width;
+      if (dashed) ctx.setLineDash([4, 4]);
+      ctx.beginPath(); let started = false;
+      for (let i = 0; i <= 20; i++) {
+        const u = (i / 20) * tProg;
+        const p = proj(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + Math.sin(u * Math.PI) * arcH, a.z + (b.z - a.z) * u);
+        if (!p) continue;
+        if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke(); ctx.restore();
+    }
+
+    function evalBezier3D(a, b, arcH, u) {
+      return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u + Math.sin(u * Math.PI) * arcH, z: a.z + (b.z - a.z) * u };
     }
 
     function setNarrator(title, desc) {
@@ -374,396 +493,376 @@
       document.getElementById("narratorDesc").textContent = desc;
     }
 
-    function resetModel() {
-      stopAllAnims();
-      table.fill(0);
-      epoch = 0;
-      const initLoss = computeFullLossAndGrads().loss;
-      lossHistory = [{ epoch: 0, loss: initLoss }];
-      activeStage = 0;
-      genIds = [parseInt(document.getElementById("genStartSelect").value, 10) || STOI["床"]];
-      lastDice = null;
-      setNarrator(
-        "权重已全部重置为 0.0",
-        `初始时 10 个字打分全为 0，Softmax 后每个字概率都是 10.0%，初始 Loss = ln(${V}) = ${initLoss.toFixed(4)}。点击「▶ 单步拆解动画」逐步看训练过程！`
-      );
-      renderAll();
+    function updateHud() {
+      const [curX, curY] = PAIRS[selectedPairIdx];
+      document.getElementById("hudEpoch").textContent = epoch;
+      document.getElementById("hudLoss").textContent = fullLossAndGrads().loss.toFixed(4);
+      document.getElementById("hudPair").textContent = `${VOCAB[curX]}(${curX}) → ${VOCAB[curY]}(${curY})`;
+      document.querySelectorAll("#stagePills .stage-pill").forEach(b => {
+        b.classList.toggle("active", parseInt(b.dataset.stage, 10) === currentStage);
+      });
+      const nextStage = currentStage >= 5 ? 1 : currentStage + 1;
+      const prefix = currentStage >= 5 ? "⏭ 下一轮：" : "⏭ 下一步：";
+      document.getElementById("btnNextStep").textContent = `${prefix}${STAGE_NAMES[nextStage - 1]} (${nextStage}/5)`;
+      document.getElementById("btnAutoPlay").textContent = mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
     }
 
-    function getVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-
-    function renderVocabAndPairs() {
-      const [curX, curY] = PAIRS[selectedPairIdx];
-      const vocabEl = document.getElementById("vocabStrip");
-      vocabEl.innerHTML = "";
-      VOCAB.forEach((ch, id) => {
-        const s = document.createElement("span");
-        s.className = "tag";
-        if (id === curX) { s.style.background = "var(--primary)"; s.style.color = "var(--primary-fg)"; s.style.borderColor = "var(--primary)"; }
-        else if (id === curY) { s.style.borderColor = "var(--success)"; s.style.color = "var(--success)"; }
-        s.textContent = `${ch}:${id}`;
-        vocabEl.appendChild(s);
-      });
-
-      const pairEl = document.getElementById("pairButtons");
-      pairEl.innerHTML = "";
+    function renderPairButtons() {
+      const wrap = document.getElementById("pairButtons");
+      wrap.innerHTML = "";
       PAIRS.forEach(([x, y], idx) => {
         const b = document.createElement("button");
-        b.className = "mono";
-        b.style.padding = "2px 8px";
+        b.className = "mono"; b.style.padding = "2px 7px";
         if (idx === selectedPairIdx) b.classList.add("primary");
         b.textContent = `${VOCAB[x]}→${VOCAB[y]}`;
-        b.onclick = () => { stopAllAnims(); selectedPairIdx = idx; renderAll(); };
-        pairEl.appendChild(b);
+        b.onclick = () => { selectedPairIdx = idx; renderPairButtons(); updateHud(); };
+        wrap.appendChild(b);
       });
     }
 
-    function renderMatrix() {
-      const grid = document.getElementById("matrixGrid");
-      grid.style.gridTemplateColumns = `34px repeat(${V}, minmax(42px, 1fr))`;
-      grid.innerHTML = "";
-      const [curX, curY] = PAIRS[selectedPairIdx];
-
-      const corner = document.createElement("div");
-      corner.className = "muted";
-      corner.style.textAlign = "center";
-      corner.textContent = "x\\j";
-      grid.appendChild(corner);
-
-      VOCAB.forEach((ch, j) => {
-        const h = document.createElement("div");
-        h.style.textAlign = "center";
-        h.style.fontWeight = "600";
-        h.style.color = j === curY ? "var(--success)" : "var(--muted)";
-        h.textContent = ch;
-        grid.appendChild(h);
-      });
-
-      for (let x = 0; x < V; x++) {
-        const rh = document.createElement("button");
-        rh.style.padding = "4px 0";
-        rh.style.fontWeight = "600";
-        if (x === curX) rh.classList.add("primary");
-        rh.textContent = VOCAB[x];
-        rh.onclick = () => {
-          const found = PAIRS.findIndex(([px]) => px === x);
-          if (found !== -1) { stopAllAnims(); selectedPairIdx = found; renderAll(); }
-        };
-        grid.appendChild(rh);
-
-        for (let j = 0; j < V; j++) {
-          const val = table[x * V + j];
-          const cell = document.createElement("div");
-          cell.className = "matrix-cell";
-          const alpha = Math.min(Math.abs(val) / 3.5, 1.0) * 0.55;
-          if (val > 0.01) cell.style.background = `rgba(34, 197, 94, ${alpha.toFixed(2)})`;
-          else if (val < -0.01) cell.style.background = `rgba(239, 68, 68, ${alpha.toFixed(2)})`;
-          else cell.style.background = "var(--content)";
-
-          if (x === curX && j === curY) {
-            cell.style.borderColor = "var(--primary)";
-            cell.style.borderWidth = "2px";
-            if (activeStage === 4 || activeStage === 5) cell.classList.add("cell-pulse");
-          } else if (x === curX) {
-            cell.style.borderColor = "var(--primary)";
-          }
-          cell.textContent = val.toFixed(1);
-          cell.title = `table[${VOCAB[x]}][${VOCAB[j]}] = ${val.toFixed(4)}`;
-          cell.onclick = () => {
-            const exact = PAIRS.findIndex(([px, py]) => px === x && py === j);
-            const fb = PAIRS.findIndex(([px]) => px === x);
-            const idx = exact !== -1 ? exact : fb;
-            if (idx !== -1) { stopAllAnims(); selectedPairIdx = idx; renderAll(); }
-          };
-          grid.appendChild(cell);
-        }
-      }
-    }
-
-    function renderRowInspector() {
-      const [x, y] = PAIRS[selectedPairIdx];
-      const logits = getRow(x);
-      const { probs } = softmax(logits);
-      const sampleLoss = -Math.log(probs[y] + 1e-12);
-      document.getElementById("inspectTitle").textContent = `x =「${VOCAB[x]}」(${x}) → y =「${VOCAB[y]}」(${y})`;
-      document.getElementById("sampleLossVal").textContent = sampleLoss.toFixed(4);
-
-      const container = document.getElementById("barRows");
-      container.innerHTML = "";
-      for (let j = 0; j < V; j++) {
-        const isTarget = j === y;
-        const p = probs[j];
-        const grad = p - (isTarget ? 1.0 : 0.0);
-
-        const row = document.createElement("div");
-        row.className = "inspector-row";
-        if (isTarget) row.style.background = "rgba(34, 197, 94, 0.14)";
-
-        const c1 = document.createElement("div");
-        c1.innerHTML = `${VOCAB[j]}${isTarget ? ' <span style="color:var(--success);font-weight:700">✓</span>' : ''}`;
-
-        const c2 = document.createElement("div");
-        c2.style.textAlign = "right";
-        c2.style.color = activeStage === 2 ? "var(--primary)" : "var(--fg)";
-        c2.textContent = (logits[j] >= 0 ? "+" : "") + logits[j].toFixed(2);
-
-        const c3 = document.createElement("div");
-        c3.style.display = "flex";
-        c3.style.alignItems = "center";
-        c3.style.gap = "6px";
-        const track = document.createElement("div");
-        track.className = "bar-track";
-        const fill = document.createElement("div");
-        fill.className = "bar-fill";
-        fill.style.width = `${Math.max(p * 100, 1.5).toFixed(1)}%`;
-        fill.style.background = isTarget ? "var(--success)" : "var(--primary)";
-        track.appendChild(fill);
-        const pct = document.createElement("span");
-        pct.style.minWidth = "34px";
-        pct.style.textAlign = "right";
-        pct.textContent = `${(p * 100).toFixed(0)}%`;
-        c3.append(track, pct);
-
-        const c4 = document.createElement("div");
-        c4.style.textAlign = "right";
-        if (grad < 0) { c4.style.color = "var(--success)"; c4.textContent = `${grad.toFixed(2)} ↑`; }
-        else { c4.style.color = "var(--error)"; c4.textContent = `+${grad.toFixed(2)} ↓`; }
-
-        row.append(c1, c2, c3, c4);
-        container.appendChild(row);
-      }
-    }
-
-    function drawLossChart() {
-      const canvas = document.getElementById("lossCanvas");
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
-      const ctx = canvas.getContext("2d");
-      ctx.scale(dpr, dpr);
-      const W = rect.width, H = rect.height;
-
-      ctx.fillStyle = getVar("--content");
-      ctx.fillRect(0, 0, W, H);
-      const pad = { l: 38, r: 12, t: 12, b: 22 };
-      const plotW = W - pad.l - pad.r, plotH = H - pad.t - pad.b;
-      const maxLoss = Math.max(Math.log(V) * 1.05, ...lossHistory.map(d => d.loss));
-      const maxEp = Math.max(10, lossHistory[lossHistory.length - 1].epoch);
-      const xOf = ep => pad.l + (ep / maxEp) * plotW;
-      const yOf = val => pad.t + (1 - val / maxLoss) * plotH;
-
-      ctx.strokeStyle = getVar("--border");
-      ctx.lineWidth = 1;
-      for (const tick of [0, 1.0, 2.0]) {
-        const y = yOf(tick);
-        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
-        ctx.fillStyle = getVar("--muted");
-        ctx.font = "11px monospace";
-        ctx.textAlign = "right";
-        ctx.fillText(tick.toFixed(1), pad.l - 5, y + 4);
-      }
-
-      ctx.save();
-      ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = getVar("--warning");
-      ctx.beginPath(); ctx.moveTo(pad.l, yOf(LOSS_FLOOR)); ctx.lineTo(W - pad.r, yOf(LOSS_FLOOR)); ctx.stroke();
-      ctx.restore();
-
-      ctx.strokeStyle = getVar("--primary");
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      lossHistory.forEach((pt, idx) => {
-        if (idx === 0) ctx.moveTo(xOf(pt.epoch), yOf(pt.loss));
-        else ctx.lineTo(xOf(pt.epoch), yOf(pt.loss));
-      });
-      ctx.stroke();
-
-      const last = lossHistory[lossHistory.length - 1];
-      ctx.fillStyle = getVar("--primary");
-      ctx.beginPath(); ctx.arc(xOf(last.epoch), yOf(last.loss), 3.5, 0, Math.PI * 2); ctx.fill();
-
-      ctx.fillStyle = getVar("--muted");
-      ctx.font = "11px monospace";
-      ctx.textAlign = "right";
-      ctx.fillText(`Epoch ${last.epoch}`, W - pad.r, H - 5);
-      ctx.textAlign = "left";
-      ctx.fillText("0", pad.l, H - 5);
-    }
-
-    function renderGenerationLab() {
+    function renderGenTape() {
       const tape = document.getElementById("genTape");
       tape.innerHTML = "";
       genIds.forEach((id, i) => {
         const chip = document.createElement("span");
-        chip.className = "tag mono";
-        chip.style.fontSize = "14px";
+        chip.className = "chip";
         if (i === genIds.length - 1) {
-          chip.style.background = "var(--primary)";
-          chip.style.color = "var(--primary-fg)";
-          chip.style.borderColor = "var(--primary)";
+          chip.style.background = "var(--primary)"; chip.style.color = "var(--primary-foreground)"; chip.style.borderColor = "var(--primary)";
         }
         chip.textContent = VOCAB[id];
         tape.appendChild(chip);
       });
-
-      const currId = genIds[genIds.length - 1];
-      const temp = parseFloat(document.getElementById("tempSlider").value);
-      const { probs } = softmax(Array.from(getRow(currId), z => z / temp));
-      document.getElementById("rouletteLabel").textContent =
-        `当前末尾字「${VOCAB[currId]}」经 Softmax(logits / ${temp.toFixed(1)}) 的轮盘概率区间：`;
-
-      const bar = document.getElementById("rouletteBar");
-      bar.innerHTML = "";
-      const colors = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)"];
-      probs.forEach((p, j) => {
-        const seg = document.createElement("div");
-        seg.style.width = `${p * 100}%`;
-        seg.style.background = colors[j % colors.length];
-        seg.style.color = "#fff";
-        seg.style.display = "flex";
-        seg.style.alignItems = "center";
-        seg.style.justifyContent = "center";
-        seg.style.fontSize = "11px";
-        seg.style.overflow = "hidden";
-        seg.className = "mono";
-        seg.title = `「${VOCAB[j]}」: ${(p * 100).toFixed(1)}%`;
-        if (p >= 0.07) seg.textContent = `${VOCAB[j]} ${(p * 100).toFixed(0)}%`;
-        bar.appendChild(seg);
-      });
-      if (lastDice !== null) {
-        const mk = document.createElement("div");
-        mk.style.position = "absolute";
-        mk.style.top = "0"; mk.style.bottom = "0"; mk.style.width = "2px";
-        mk.style.left = `${lastDice * 100}%`;
-        mk.style.background = "var(--fg)";
-        bar.appendChild(mk);
-      }
     }
 
-    function sampleOneToken() {
-      const currId = genIds[genIds.length - 1];
-      const temp = parseFloat(document.getElementById("tempSlider").value);
-      const { probs } = softmax(Array.from(getRow(currId), z => z / temp));
+    function enterStage(stageNum, nowMs) {
+      currentStage = stageNum;
+      stageStartMs = nowMs;
+      stage5Applied = false;
+      const [x, y] = PAIRS[selectedPairIdx];
+      const { probs } = softmax(getRow(x));
+      const sampleLoss = -Math.log(probs[y] + 1e-12);
+
+      if (stageNum === 1) {
+        setNarrator(`① Tokenizer 3D 编码：汉字「${VOCAB[x]}」飞入扫描环 → 编码为整数 ID ${x}`,
+          `绿色通道正在锁定 10×10 权重矩阵的第 ${x} 行（行号 = ${VOCAB[x]}）。播完暂停，准备好再点「⏭ 下一步」。`);
+      } else if (stageNum === 2) {
+        setNarrator(`② 扫描矩阵第 ${x} 行：提取 10 个原始打分 Logits 飞向右侧 Softmax 站`,
+          `发光能量球从 table[${x}][0..9] 沿 3D 弧线飞往右侧概率塔。`);
+      } else if (stageNum === 3) {
+        setNarrator(`③ Softmax 3D 概率塔：把 10 个打分归一成总和 100% 的液柱高度`,
+          `模型当前给正确答案「${VOCAB[y]}」分配的概率高度为 ${(probs[y] * 100).toFixed(1)}%（绿色高亮塔）。`);
+      } else if (stageNum === 4) {
+        setNarrator(`④ 交叉熵 Loss 能量柱：核对目标「${VOCAB[y]}」，L = -ln(${probs[y].toFixed(3)}) = ${sampleLoss.toFixed(3)}`,
+          `橙色能量柱越矮代表猜得越准！最右端把概率误差量化为 Loss。`);
+      } else if (stageNum === 5) {
+        setNarrator(`⑤ 反向传播 3D 梯度力场：红/绿能量飞回第 ${x} 行，直接推拉 3D 柱高！`,
+          `绿色 ↑ 箭头把目标柱「${VOCAB[x]}→${VOCAB[y]}」拔高，红色 ↓ 箭头把其余 9 个错误候选压低！`);
+      }
+      updateHud();
+    }
+
+    function sampleNextFrom(currId) {
+      const scaled = Array.from(getRow(currId), z => z / Math.max(temperature, 0.05));
+      const { probs } = softmax(scaled);
       const r = Math.random();
       let cdf = 0, nextId = V - 1;
       for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
-      lastDice = r;
-      document.getElementById("diceReadout").textContent =
-        `骰子 r = ${r.toFixed(3)} → 抽中「${VOCAB[nextId]}」(p = ${(probs[nextId] * 100).toFixed(1)}%)`;
-      genIds.push(nextId);
-      if (genIds.length > 26) genIds.shift();
-      renderGenerationLab();
+      return { nextId, prob: probs[nextId], dice: r };
     }
 
-    function renderAll() {
-      document.getElementById("statEpoch").textContent = epoch;
-      document.getElementById("statLoss").textContent = computeFullLossAndGrads().loss.toFixed(4);
-      document.querySelectorAll("#stagePills .pill").forEach(b => {
-        b.classList.toggle("active", parseInt(b.dataset.stage, 10) === activeStage);
-      });
-      renderVocabAndPairs();
-      renderMatrix();
-      renderRowInspector();
-      drawLossChart();
-      renderGenerationLab();
-    }
+    function renderFrame(nowMs) {
+      if (cam.autoOrbit) cam.targetYaw += 0.005;
+      cam.yaw += (cam.targetYaw - cam.yaw) * 0.12;
+      cam.pitch += (cam.targetPitch - cam.pitch) * 0.12;
+      cam.dist += (cam.targetDist - cam.dist) * 0.12;
 
-    function showStage(stageNum, doUpdate = false) {
-      activeStage = stageNum;
-      const [x, y] = PAIRS[selectedPairIdx];
-      const logits = getRow(x);
-      const { probs, maxVal } = softmax(logits);
-      const loss = -Math.log(probs[y] + 1e-12);
-      const lr = parseFloat(document.getElementById("lrSlider").value);
+      const [curX, curY] = PAIRS[selectedPairIdx];
+      const { probs } = softmax(getRow(curX));
+      const currentFullLoss = fullLossAndGrads().loss;
 
-      if (stageNum === 1) {
-        setNarrator(`① Tokenizer 查字典：「${VOCAB[x]}」→ ID ${x}，「${VOCAB[y]}」→ ID ${y}`,
-          `计算机不认识汉字，先通过 stoi 映射把训练样本对「${VOCAB[x]} → ${VOCAB[y]}」转成整数对 (${x}, ${y})。`);
-      } else if (stageNum === 2) {
-        setNarrator(`② Forward 查表：取出 V×V 矩阵的第 ${x} 行`,
-          `这 ${V} 个浮点数叫 logits，代表模型当前认为「${VOCAB[x]}」后接每个字的原始打分。目标字「${VOCAB[y]}」当前打分为 ${logits[y].toFixed(2)}。`);
-      } else if (stageNum === 3) {
-        setNarrator(`③ Softmax（减最大值 m = ${maxVal.toFixed(2)} 防溢出）：把打分转成概率分布`,
-          `经 exp(z - m) / sum 后，模型目前给正确答案「${VOCAB[y]}」分配的概率为 ${(probs[y] * 100).toFixed(1)}%。`);
-      } else if (stageNum === 4) {
-        setNarrator(`④ 交叉熵损失：L = -ln(${probs[y].toFixed(4)}) = ${loss.toFixed(4)}`,
-          `给正确答案的概率越接近 1，Loss 越接近 0；如果概率很小，-ln(p) 会给出严厉惩罚。`);
-      } else if (stageNum === 5) {
-        if (doUpdate) trainEpochs(1);
-        setNarrator(`⑤ 反向传播梯度 + SGD 更新（lr = ${lr.toFixed(1)}）`,
-          `正确答案「${VOCAB[y]}」梯度为 p_y - 1 = ${(probs[y] - 1).toFixed(3)}（负梯度 → 权重拉高 ↑）；其余 9 个字为正梯度（权重压低 ↓）。观察左侧矩阵第 ${x} 行颜色变化！`);
+      let stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / STEP_ANIM_MS) : 0;
+      const progWrap = document.getElementById("stageProgressWrap");
+      const progBar = document.getElementById("stageProgressBar");
+
+      if (mode === "step") {
+        progWrap.classList.remove("hidden");
+        progBar.style.width = `${(currentStage / 5) * 100}%`;
+        if (currentStage === 5 && stageT >= 0.45 && !stage5Applied) {
+          trainOneEpoch(); stage5Applied = true; updateHud();
+        }
+      } else if (mode === "autoplay") {
+        progWrap.classList.remove("hidden");
+        const elapsed = nowMs - stageStartMs;
+        stageT = Math.min(1, elapsed / STEP_ANIM_MS);
+        progBar.style.width = `${((currentStage - 1 + stageT) / 5) * 100}%`;
+        if (currentStage === 5 && stageT >= 0.45 && !stage5Applied) {
+          trainOneEpoch(); stage5Applied = true; updateHud();
+        }
+        if (elapsed >= STEP_ANIM_MS + AUTO_HOLD_MS) {
+          if (currentStage < 5) enterStage(currentStage + 1, nowMs);
+          else {
+            mode = "step"; updateHud();
+            setNarrator(`✓ 本轮 5 步演示完毕！（Epoch = ${epoch}，Loss = ${fullLossAndGrads().loss.toFixed(4)}）`,
+              `可以继续点「⏭ 下一轮」单步走，或点「⚡ 50 轮矩阵生长」看整座古诗 3D 城市拔地而起！`);
+          }
+        }
+      } else if (mode === "grow50") {
+        progWrap.classList.remove("hidden");
+        if (nowMs - lastGrowTick >= 55 && growRemaining > 0) {
+          trainOneEpoch(); growRemaining -= 1; lastGrowTick = nowMs;
+          progBar.style.width = `${((50 - growRemaining) / 50) * 100}%`;
+          updateHud();
+          setNarrator(`⚡ 3D 矩阵生长中... Epoch ${epoch}（全量 Loss = ${fullLossAndGrads().loss.toFixed(4)}）`,
+            `拖拽视角看看！11 对真实古诗相邻字正在长成绿色摩天楼，「月」一行分裂出「光」和「。」两座双子塔！`);
+        }
+        if (growRemaining <= 0) {
+          mode = "idle"; progWrap.classList.add("hidden");
+          setNarrator(`🎉 50 轮训练完成！Epoch ${epoch}（Loss = ${fullLossAndGrads().loss.toFixed(4)}，逼近下界 0.126）`,
+            `现在点「🎲 跳下一个字」，点一次就看发光小球按概率在 3D 高塔间跳一步！`);
+        }
+      } else if (mode === "hop") {
+        progWrap.classList.add("hidden");
+        const u = Math.min(1, (nowMs - hopStartMs) / HOP_DURATION);
+        if (u >= 1 && !hopLanded && hopTo) {
+          hopLanded = true;
+          genIds.push(hopTo[1]);
+          if (genIds.length > 20) genIds.shift();
+          renderGenTape();
+          const c = cellWorld(hopTo[0], hopTo[1]);
+          hopTrail.push({ x: c.x, y: Math.max(0.2, visualHeights[hopTo[0] * V + hopTo[1]] * 0.88 + 0.14) + 0.35, z: c.z });
+          if (hopTrail.length > 12) hopTrail.shift();
+        }
+      } else {
+        progWrap.classList.add("hidden");
       }
-      renderAll();
+
+      for (let i = 0; i < V * V; i++) visualHeights[i] += (table[i] - visualHeights[i]) * 0.14;
+      for (let j = 0; j < V; j++) visualProbs[j] += (probs[j] - visualProbs[j]) * 0.16;
+      visualLoss += (currentFullLoss - visualLoss) * 0.14;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const tw = Math.round(rect.width * dpr), th = Math.round(rect.height * dpr);
+        if (canvas.width !== tw || canvas.height !== th) { canvas.width = tw; canvas.height = th; }
+      }
+      const W = rect.width, H = rect.height;
+      ctx.save(); ctx.scale(dpr, dpr);
+
+      const theme = getThemeColors();
+      const rgbNeutral = parseRgb(theme.card), rgbBorder = parseRgb(theme.border);
+      const rgbPrimary = parseRgb(theme.primary), rgbSuccess = parseRgb(theme.success);
+      const rgbError = parseRgb(theme.error), rgbWarning = parseRgb(theme.warning);
+
+      const bgGrad = ctx.createRadialGradient(W * 0.5, H * 0.42, 40, W * 0.5, H * 0.5, Math.max(W, H) * 0.72);
+      bgGrad.addColorStop(0, theme.card); bgGrad.addColorStop(1, theme.bg);
+      ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
+
+      const { project, eye } = makeProjector(W, H);
+
+      ctx.strokeStyle = shade(rgbBorder, 1.0, 0.35); ctx.lineWidth = 1;
+      const gx0 = MAT_ORIGIN_X - 0.6, gx1 = MAT_ORIGIN_X + (V - 1) * CELL + 0.6;
+      const gz0 = MAT_ORIGIN_Z - 0.6, gz1 = MAT_ORIGIN_Z + (V - 1) * CELL + 0.6;
+      for (let i = 0; i <= V; i++) {
+        const z = MAT_ORIGIN_Z - CELL * 0.5 + i * CELL;
+        const a = project(gx0, 0, z), b = project(gx1, 0, z);
+        if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+        const x = MAT_ORIGIN_X - CELL * 0.5 + i * CELL;
+        const c = project(x, 0, gz0), d = project(x, 0, gz1);
+        if (c && d) { ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke(); }
+      }
+
+      const activeZ = MAT_ORIGIN_Z + curX * CELL;
+      const rA = project(gx0, 0.02, activeZ - CELL * 0.48), rB = project(gx1, 0.02, activeZ - CELL * 0.48);
+      const rC = project(gx1, 0.02, activeZ + CELL * 0.48), rD = project(gx0, 0.02, activeZ + CELL * 0.48);
+      if (rA && rB && rC && rD) {
+        ctx.beginPath(); ctx.moveTo(rA.x, rA.y); ctx.lineTo(rB.x, rB.y); ctx.lineTo(rC.x, rC.y); ctx.lineTo(rD.x, rD.y); ctx.closePath();
+        ctx.fillStyle = shade(rgbPrimary, 1.0, 0.16); ctx.fill();
+        ctx.strokeStyle = shade(rgbPrimary, 1.0, 0.65); ctx.lineWidth = 1.5; ctx.stroke();
+      }
+
+      const floorLabels = [
+        [-1.5, gz1 + 1.4, "② V×V 权重矩阵地形 (table[x][j])"],
+        [TOK_POS.x, 1.8, "① Tokenizer"],
+        [SOFTMAX_X, gz1 + 1.4, "③ Softmax 概率塔"],
+        [LOSS_POS.x, 1.8, "④ Loss 能量柱"],
+      ];
+      ctx.fillStyle = theme.muted; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
+      for (const [lx, lz, txt] of floorLabels) {
+        const p = project(lx, 0.05, lz); if (p) ctx.fillText(txt, p.x, p.y);
+      }
+
+      const drawList = [];
+
+      pushBox(drawList, project, eye, TOK_POS.x - 0.8, 0, -0.8, TOK_POS.x + 0.8, 0.28, 0.8, rgbBorder, 0.9, theme.border);
+      const bobY = Math.sin(nowMs * 0.004) * 0.16;
+      let tokCubePos = { x: TOK_POS.x, y: 1.25 + bobY, z: 0 };
+      if (currentStage === 1) {
+        const targetRowStart = { x: MAT_ORIGIN_X - 0.7, y: 0.75, z: activeZ };
+        const u = Math.min(1, stageT * 1.15);
+        tokCubePos = evalBezier3D({ x: TOK_POS.x, y: 1.25, z: 0 }, targetRowStart, 2.4, u);
+        if (u >= 1) tokCubePos.y += bobY * 0.6;
+        drawBezierArc3D(project, { x: TOK_POS.x, y: 1.25, z: 0 }, targetRowStart, 2.4, u, theme.primary, 2.5, true);
+      }
+      pushBox(drawList, project, eye, tokCubePos.x - 0.52, tokCubePos.y - 0.52, tokCubePos.z - 0.52, tokCubePos.x + 0.52, tokCubePos.y + 0.52, tokCubePos.z + 0.52, rgbPrimary, 0.95, theme.fg);
+      pushLabel3D(drawList, project, tokCubePos.x, tokCubePos.y + 0.85, tokCubePos.z, `「${VOCAB[curX]}」→ ID:${curX}`, theme.fg, "bold 12px monospace", -0.4);
+
+      const half = CELL * 0.38;
+      for (let r = 0; r < V; r++) {
+        const rl = cellWorld(r, -1);
+        pushLabel3D(drawList, project, rl.x + 0.15, 0.12, rl.z, VOCAB[r], r === curX ? theme.primary : theme.muted, r === curX ? "bold 13px sans-serif" : "11px sans-serif");
+        const cl = cellWorld(V, r);
+        pushLabel3D(drawList, project, cl.x, 0.12, cl.z - 0.1, VOCAB[r], r === curY ? theme.success : theme.muted, r === curY ? "bold 13px sans-serif" : "11px sans-serif");
+
+        for (let c = 0; c < V; c++) {
+          const w = visualHeights[r * V + c];
+          const pos = cellWorld(r, c);
+          const isActiveRow = r === curX, isTargetCell = r === curX && c === curY;
+          const h = w >= 0 ? Math.max(0.14, w * 0.88 + 0.14) : 0.14;
+          const y0 = w < -0.05 ? Math.max(-1.0, w * 0.35) : 0;
+          const y1 = w >= -0.05 ? h : 0.06;
+          const mag = Math.min(1, Math.abs(w) / 3.2);
+          let colRgb = rgbNeutral;
+          if (w > 0.03) colRgb = lerpRgb(rgbNeutral, rgbSuccess, 0.25 + mag * 0.75);
+          else if (w < -0.03) colRgb = lerpRgb(rgbNeutral, rgbError, 0.25 + mag * 0.75);
+          if (isActiveRow && currentStage >= 1 && Math.abs(w) < 0.05) colRgb = lerpRgb(rgbNeutral, rgbPrimary, 0.35);
+
+          const stroke = isTargetCell ? theme.fg : (isActiveRow ? theme.primary : shade(rgbBorder, 1, 0.55));
+          pushBox(drawList, project, eye, pos.x - half, y0, pos.z - half, pos.x + half, y1, pos.z + half, colRgb, isActiveRow || Math.abs(w) > 0.12 ? 0.96 : 0.78, stroke);
+
+          if (currentStage === 5 && isActiveRow) {
+            const pulse = Math.sin(nowMs * 0.012) * 0.22;
+            if (isTargetCell) {
+              pushArrow3D(drawList, project, pos.x, y1 + 0.25 + pulse, y1 + 1.45 + pulse, pos.z, theme.success);
+              pushLabel3D(drawList, project, pos.x, y1 + 1.85 + pulse, pos.z, "↑ 拉高", theme.success, "bold 11px sans-serif", -0.5);
+            } else {
+              pushArrow3D(drawList, project, pos.x, y1 + 1.05 - pulse * 0.5, y1 + 0.2 - pulse * 0.5, pos.z, theme.error);
+            }
+          }
+        }
+      }
+
+      for (let j = 0; j < V; j++) {
+        const z = MAT_ORIGIN_Z + j * CELL, p = visualProbs[j], isY = j === curY;
+        const fillH = Math.max(0.08, p * 4.6);
+        pushBox(drawList, project, eye, SOFTMAX_X - 0.36, 0, z - 0.36, SOFTMAX_X + 0.36, fillH, z + 0.36, isY ? rgbSuccess : rgbPrimary, 0.92, isY ? theme.fg : theme.border);
+        pushLabel3D(drawList, project, SOFTMAX_X + 0.95, 0.15, z, `${VOCAB[j]} ${(p * 100).toFixed(0)}%`, isY ? theme.success : theme.muted, isY ? "bold 11px monospace" : "10px monospace");
+      }
+
+      const lossH = Math.max(0.18, visualLoss * 1.85);
+      pushBox(drawList, project, eye, LOSS_POS.x - 0.65, 0, -0.65, LOSS_POS.x + 0.65, lossH, 0.65, rgbWarning, 0.92, theme.fg);
+      pushLabel3D(drawList, project, LOSS_POS.x, lossH + 0.55, 0, `Loss ${visualLoss.toFixed(2)}`, theme.warning, "bold 12px monospace", -0.4);
+
+      if (currentStage === 2) {
+        for (let j = 0; j < V; j++) {
+          const fromC = cellWorld(curX, j);
+          const fromP = { x: fromC.x, y: Math.max(0.25, visualHeights[curX * V + j] * 0.88 + 0.3), z: fromC.z };
+          const toP = { x: SOFTMAX_X, y: Math.max(0.3, visualProbs[j] * 4.6), z: MAT_ORIGIN_Z + j * CELL };
+          const u = Math.max(0, Math.min(1, (stageT - j * 0.04) / 0.6));
+          drawBezierArc3D(project, fromP, toP, 1.8 + (j % 3) * 0.3, u, j === curY ? theme.success : shade(rgbPrimary, 1.1, 0.7), j === curY ? 2.6 : 1.4);
+          if (u > 0.01) {
+            const pt = evalBezier3D(fromP, toP, 1.8 + (j % 3) * 0.3, u);
+            pushOrb(drawList, project, pt.x, pt.y, pt.z, u < 0.99 ? 0.21 : 0.14, j === curY ? theme.success : theme.primary, j === curY ? theme.success : theme.primary);
+          }
+        }
+      }
+      if (currentStage === 3) {
+        const scanZ = MAT_ORIGIN_Z + stageT * (V - 1) * CELL;
+        pushOrb(drawList, project, SOFTMAX_X, 2.4, scanZ, 0.24 + Math.sin(nowMs * 0.01) * 0.04, theme.primary, theme.primary, "σ", "#fff");
+      }
+      if (currentStage === 4) {
+        const fromSm = { x: SOFTMAX_X, y: Math.max(0.4, visualProbs[curY] * 4.6), z: MAT_ORIGIN_Z + curY * CELL };
+        const toLoss = { x: LOSS_POS.x, y: lossH, z: 0 };
+        drawBezierArc3D(project, fromSm, toLoss, 1.8, stageT, theme.warning, 3.0);
+        const pt = evalBezier3D(fromSm, toLoss, 1.8, stageT);
+        pushOrb(drawList, project, pt.x, pt.y, pt.z, 0.27, theme.warning, theme.warning, "L", "#000");
+      }
+      if (currentStage === 5) {
+        const u = Math.min(1, stageT * 1.4);
+        for (let j = 0; j < V; j++) {
+          const fromSm = { x: SOFTMAX_X, y: Math.max(0.4, visualProbs[j] * 4.6), z: MAT_ORIGIN_Z + j * CELL };
+          const toCell = cellWorld(curX, j);
+          const toP = { x: toCell.x, y: Math.max(0.3, visualHeights[curX * V + j] * 0.88 + 0.4), z: toCell.z };
+          const col = j === curY ? theme.success : theme.error;
+          drawBezierArc3D(project, fromSm, toP, 2.5, u, shade(j === curY ? rgbSuccess : rgbError, 1, 0.78), j === curY ? 2.8 : 1.3, true);
+          if (u < 0.98) {
+            const pt = evalBezier3D(fromSm, toP, 2.5, u);
+            pushOrb(drawList, project, pt.x, pt.y, pt.z, j === curY ? 0.24 : 0.15, col, col);
+          }
+        }
+      }
+
+      if (hopTrail.length > 1) {
+        ctx.save(); ctx.strokeStyle = theme.primary; ctx.lineWidth = 2.5; ctx.beginPath();
+        let started = false;
+        for (const pt of hopTrail) {
+          const p = project(pt.x, pt.y, pt.z); if (!p) continue;
+          if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke(); ctx.restore();
+      }
+      if (hopFrom && hopTo) {
+        const u = Math.min(1, (nowMs - hopStartMs) / HOP_DURATION);
+        const aC = cellWorld(hopFrom[0], hopFrom[1]), bC = cellWorld(hopTo[0], hopTo[1]);
+        const a = { x: aC.x, y: Math.max(0.3, visualHeights[hopFrom[0] * V + hopFrom[1]] * 0.88 + 0.4), z: aC.z };
+        const b = { x: bC.x, y: Math.max(0.3, visualHeights[hopTo[0] * V + hopTo[1]] * 0.88 + 0.4), z: bC.z };
+        drawBezierArc3D(project, a, b, 2.3, u, theme.warning, 2.6);
+        const pt = evalBezier3D(a, b, 2.3, u);
+        pushOrb(drawList, project, pt.x, pt.y, pt.z, 0.34, theme.warning, theme.warning, VOCAB[hopTo[1]], "#000");
+      }
+
+      drawList.sort((a, b) => b.depth - a.depth);
+      for (const item of drawList) item.draw();
+
+      ctx.restore();
+      requestAnimationFrame(renderFrame);
     }
 
-    const startSelect = document.getElementById("genStartSelect");
-    VOCAB.forEach((ch, id) => {
-      const opt = document.createElement("option");
-      opt.value = id; opt.textContent = `${ch} (ID ${id})`;
-      if (ch === "床") opt.selected = true;
-      startSelect.appendChild(opt);
-    });
-    startSelect.onchange = () => {
-      stopAllAnims();
-      genIds = [parseInt(startSelect.value, 10)];
-      lastDice = null;
-      document.getElementById("diceReadout").textContent = "等待掷骰子...";
-      renderGenerationLab();
+    document.getElementById("btnNextStep").onclick = () => {
+      mode = "step";
+      const nextStage = currentStage >= 5 ? 1 : currentStage + 1;
+      enterStage(nextStage, performance.now());
     };
-    document.getElementById("lrSlider").oninput = e => {
-      document.getElementById("lrValue").textContent = parseFloat(e.target.value).toFixed(1);
+    document.getElementById("btnAutoPlay").onclick = () => {
+      if (mode === "autoplay") { mode = "step"; updateHud(); }
+      else { mode = "autoplay"; enterStage(currentStage >= 5 || currentStage === 0 ? 1 : currentStage, performance.now()); }
     };
-    document.getElementById("tempSlider").oninput = e => {
-      document.getElementById("tempValue").textContent = parseFloat(e.target.value).toFixed(1);
-      renderGenerationLab();
-    };
-    document.querySelectorAll("#stagePills .pill").forEach(b => {
-      b.onclick = () => { stopAllAnims(); showStage(parseInt(b.dataset.stage, 10), false); };
-    });
-    document.getElementById("btnStepAnim").onclick = () => {
-      stopAllAnims();
-      let st = 1;
-      function next() {
-        showStage(st, st === 5);
-        if (st < 5) { st += 1; animTimer = setTimeout(next, 1450); } else animTimer = null;
-      }
-      next();
-    };
-    document.getElementById("btnTrain1").onclick = () => { stopAllAnims(); showStage(5, true); };
     document.getElementById("btnTrain50").onclick = () => {
-      stopAllAnims();
-      let left = 50; activeStage = 5;
-      function tick() {
-        const batch = Math.min(2, left);
-        trainEpochs(batch); left -= batch;
-        setNarrator(`正在快速训练中... Epoch ${epoch}（全量 Loss = ${computeFullLossAndGrads().loss.toFixed(4)}）`,
-          `观察 V×V 矩阵：真正的古诗相邻字（床→前、前→明、明→月、月→光/。、举→头、头→望、望→明）正在逐格亮起绿色！`);
-        renderAll();
-        if (left > 0) animTimer = setTimeout(tick, 45); else animTimer = null;
+      mode = "grow50"; currentStage = 5; growRemaining = 50; lastGrowTick = performance.now(); updateHud();
+    };
+    document.getElementById("btnHopOne").onclick = () => {
+      if (mode === "hop" && !hopLanded && hopTo) {
+        genIds.push(hopTo[1]); if (genIds.length > 20) genIds.shift(); renderGenTape();
       }
-      tick();
+      mode = "hop"; currentStage = 0;
+      const curr = genIds[genIds.length - 1];
+      const { nextId, prob, dice } = sampleNextFrom(curr);
+      hopFrom = hopTo || [curr, curr]; hopTo = [curr, nextId];
+      hopStartMs = performance.now(); hopLanded = false;
+      document.getElementById("hopReadout").textContent =
+        `从「${VOCAB[curr]}」掷骰 r=${dice.toFixed(2)} → 跳向「${VOCAB[nextId]}」(p=${(prob * 100).toFixed(0)}%)`;
+      setNarrator(`🎲 单步 3D 接龙：当前字「${VOCAB[curr]}」→ 骰子抽中「${VOCAB[nextId]}」（概率 ${(prob * 100).toFixed(1)}%）`,
+        `每点一次「🎲 跳下一个字」就预测 1 个新字并飞向对应 3D 柱子！`);
+      updateHud();
     };
-    document.getElementById("btnReset").onclick = resetModel;
-    document.getElementById("btnGenStep").onclick = () => { if (genTimer) { clearInterval(genTimer); genTimer = null; } sampleOneToken(); };
-    document.getElementById("btnGenAuto").onclick = () => {
-      if (genTimer) { clearInterval(genTimer); genTimer = null; }
-      let left = 12; sampleOneToken(); left -= 1;
-      genTimer = setInterval(() => {
-        if (left <= 0) { clearInterval(genTimer); genTimer = null; return; }
-        sampleOneToken(); left -= 1;
-      }, 420);
+    document.getElementById("btnReset").onclick = () => {
+      mode = "idle"; currentStage = 0; table.fill(0); epoch = 0;
+      genIds = [STOI["床"]]; hopFrom = null; hopTo = null; hopLanded = true; hopTrail = [];
+      renderGenTape(); updateHud();
+      setNarrator("已重置所有 100 个权重为 0.0", "现在 10×10 地形完全平整，Loss 回到 ln(10) = 2.3026。点击「⏭ 下一步」单步体验！");
     };
-    document.getElementById("btnGenClear").onclick = () => {
-      if (genTimer) { clearInterval(genTimer); genTimer = null; }
-      genIds = [parseInt(startSelect.value, 10)];
-      lastDice = null;
-      document.getElementById("diceReadout").textContent = "等待掷骰子...";
-      renderGenerationLab();
-    };
-    window.addEventListener("resize", drawLossChart);
-    resetModel();
+    document.querySelectorAll("#stagePills .stage-pill").forEach(btn => {
+      btn.onclick = () => { mode = "step"; enterStage(parseInt(btn.dataset.stage, 10), performance.now()); };
+    });
+    document.getElementById("camIso").onclick = () => { cam.autoOrbit = false; cam.targetYaw = -0.62; cam.targetPitch = 0.56; cam.targetDist = 24.5; };
+    document.getElementById("camTop").onclick = () => { cam.autoOrbit = false; cam.targetYaw = 0.0; cam.targetPitch = 1.38; cam.targetDist = 24.0; };
+    document.getElementById("camSide").onclick = () => { cam.autoOrbit = false; cam.targetYaw = -0.25; cam.targetPitch = 0.24; cam.targetDist = 24.0; };
+    document.getElementById("camOrbit").onclick = () => { cam.autoOrbit = !cam.autoOrbit; };
+    document.getElementById("lrSlider").oninput = e => { lr = parseFloat(e.target.value); document.getElementById("lrVal").textContent = lr.toFixed(1); };
+    document.getElementById("tempSlider").oninput = e => { temperature = parseFloat(e.target.value); document.getElementById("tempVal").textContent = temperature.toFixed(1); };
+
+    renderPairButtons(); renderGenTape(); updateHud();
+    requestAnimationFrame(renderFrame);
   </script>
 </body>
 </html>
