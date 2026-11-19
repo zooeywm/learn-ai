@@ -1,0 +1,1837 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Step 03：因果多头自注意力（Causal Self-Attention）3D 建模动画（离线版）</title>
+  <link rel="stylesheet" href="./assets/visualizer.css" />
+  <style>
+    .mode-switch {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      gap: 2px;
+    }
+    .mode-btn {
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .mode-btn.active-train {
+      background: color-mix(in srgb, var(--primary) 22%, var(--card));
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .mode-btn.active-infer {
+      background: color-mix(in srgb, var(--success) 20%, var(--card));
+      border-color: var(--success);
+      color: var(--success);
+    }
+    .infer-pill {
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      color: var(--muted-foreground);
+      font-size: 11px;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .infer-pill.active {
+      border-color: var(--success);
+      background: color-mix(in srgb, var(--success) 18%, var(--content));
+      color: var(--success);
+      font-weight: 700;
+    }
+    .infer-pill.done {
+      border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+      color: var(--foreground);
+    }
+    .corpus-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .corpus-char {
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      font-size: 13px;
+      transition: all 0.2s ease;
+    }
+    .corpus-char.hist {
+      background: color-mix(in srgb, var(--primary) 16%, var(--content));
+      border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+      color: var(--foreground);
+    }
+    .corpus-char.query {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: var(--primary-foreground);
+      font-weight: 700;
+    }
+    .corpus-char.tgt {
+      background: color-mix(in srgb, var(--success) 24%, var(--content));
+      border-color: var(--success);
+      color: var(--success);
+      font-weight: 700;
+    }
+    .corpus-char.future {
+      opacity: 0.42;
+      border-style: dashed;
+      border-color: var(--error);
+    }
+    .infer-strip {
+      border-left: 3px solid var(--success);
+      padding-left: 10px;
+    }
+    .chip.win {
+      background: color-mix(in srgb, var(--primary) 20%, var(--card));
+      border-color: var(--primary);
+    }
+    .chip.latest {
+      background: var(--success);
+      color: #062814;
+      border-color: var(--success);
+      font-weight: 700;
+    }
+    .roulette-bar {
+      position: relative;
+      height: 16px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      display: flex;
+      margin-top: 6px;
+      background: var(--card);
+    }
+    .roulette-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--foreground);
+      pointer-events: none;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 7fr 5fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    @media (max-width: 960px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .subpanel {
+      background: var(--content);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      min-width: 0;
+    }
+    .attn-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 11px;
+      table-layout: fixed;
+    }
+    .attn-table th, .attn-table td {
+      border: 1px solid var(--border);
+      text-align: center;
+      padding: 3px 1px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .attn-table tr.q-row { cursor: pointer; }
+    .attn-table tr.q-row:hover td { outline: 1px solid var(--primary); }
+    .attn-table tr.q-row.active-row th {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .attn-table td.masked {
+      color: color-mix(in srgb, var(--error) 65%, var(--muted-foreground));
+      background: color-mix(in srgb, var(--error) 6%, var(--card));
+      font-size: 10px;
+    }
+    .score-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+      max-height: 230px;
+      overflow-y: auto;
+    }
+    .score-row {
+      display: grid;
+      grid-template-columns: 54px 66px 1fr 44px;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .score-bar-track {
+      height: 10px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      background: var(--primary);
+      transition: width 0.2s ease;
+    }
+    .hud-tl { max-width: 56%; }
+    .hud-tr { max-width: 40%; justify-content: flex-end; }
+    input[type="range"] { width: 88px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- =================================================================== -->
+    <!-- HEADER BAR: Title + Causal Prefix Highlight + Training Actions      -->
+    <!-- =================================================================== -->
+    <div class="card row">
+      <div>
+        <div class="flex">
+          <span class="badge mono">Step 03 · 3D 建模</span>
+          <h1>因果多头自注意力（Causal Multi-Head Self-Attention）</h1>
+        </div>
+        <div class="corpus-strip">
+          <span class="xs muted">短语料原文：</span>
+          <div id="corpusChars" class="flex" style="gap:4px;"></div>
+          <span class="xs muted" style="margin-left:6px;">
+            （<span style="color:var(--primary);font-weight:600;">深蓝 = 当前 Query</span> ·
+            <span style="color:var(--foreground);">浅蓝 = 可见历史 Key</span> ·
+            <span style="color:var(--success);font-weight:600;">绿 = target</span> ·
+            <span style="color:var(--error);">虚框 = 未来被遮罩</span>）
+          </span>
+        </div>
+      </div>
+      <div class="flex">
+        <button id="btnNextStep" class="primary">⏭ 下一步：① 词+位置编码 (1/8)</button>
+        <button id="btnAutoPlay">▶ 自动连播</button>
+        <button id="btnTrain1">+1 训练 step</button>
+        <button id="btnTrain60">⚡ 快速训练 60 step</button>
+        <button id="btnReset">↺ 重置权重</button>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- MAIN UNIFIED 3D STAGE CARD (Single Canvas · Train / Infer Switch)   -->
+    <!-- =================================================================== -->
+    <div class="card">
+      <div class="row xs">
+        <div class="flex" style="gap:8px;">
+          <div class="mode-switch" role="tablist" aria-label="3D 舞台模式切换">
+            <button id="btnModeTrain" class="mode-btn active-train" role="tab" aria-selected="true">🔵 训练模式</button>
+            <button id="btnModeInfer" class="mode-btn" role="tab" aria-selected="false">🟢 推理模式</button>
+          </div>
+
+          <div class="flex" id="stagePills" title="训练流水线严格单向推进：请使用「⏭ 下一步」逐步执行">
+            <span data-stage="1" class="stage-pill">① 词+位置编码</span>
+            <span class="muted">→</span>
+            <span data-stage="2" class="stage-pill">② 投影 Q/K/V</span>
+            <span class="muted">→</span>
+            <span data-stage="3" class="stage-pill">③ Q·Kᵀ/√d打分</span>
+            <span class="muted">→</span>
+            <span data-stage="4" class="stage-pill">④ 因果掩码</span>
+            <span class="muted">→</span>
+            <span data-stage="5" class="stage-pill">⑤ Softmax权重</span>
+            <span class="muted">→</span>
+            <span data-stage="6" class="stage-pill">⑥ 汇聚V+残差</span>
+            <span class="muted">→</span>
+            <span data-stage="7" class="stage-pill">⑦ 概率与Loss</span>
+            <span class="muted">→</span>
+            <span data-stage="8" class="stage-pill">⑧ 反传与AdamW</span>
+          </div>
+
+          <div class="flex hidden" id="inferPills">
+            <span data-phase="1" class="infer-pill">① 全部历史+位置</span>
+            <span class="muted">→</span>
+            <span data-phase="2" class="infer-pill">② 末字Q扫描历史K</span>
+            <span class="muted">→</span>
+            <span data-phase="3" class="infer-pill">③ 温度掷骰抽字</span>
+            <span class="muted">→</span>
+            <span data-phase="4" class="infer-pill">④ 新字追加进序列</span>
+            <span class="muted mono" style="margin-left:4px;">（1字就能起步！无Loss · 不改权重）</span>
+          </div>
+        </div>
+
+        <div class="flex">
+          <label class="flex muted">
+            注意力头:
+            <select id="headSelect" class="mono">
+              <option value="-1" selected>2头平均</option>
+              <option value="0">Head 0</option>
+              <option value="1">Head 1</option>
+            </select>
+          </label>
+          <label class="flex muted">
+            速度:
+            <select id="speedSelect" class="mono">
+              <option value="0.5">0.5x 慢放</option>
+              <option value="1" selected>1.0x 正常</option>
+              <option value="2">2.0x 快速</option>
+              <option value="3">3.0x 极速</option>
+            </select>
+          </label>
+          <button id="camIso">立体视角</button>
+          <button id="camTop">俯视注意力阵</button>
+          <button id="camFront">正视结构</button>
+          <button id="camOrbit">自动环绕</button>
+        </div>
+      </div>
+
+      <!-- Unified 3D Canvas -->
+      <div class="viewport">
+        <canvas id="scene3d"></canvas>
+
+        <!-- Top-Left HUD: Train Mode -->
+        <div class="hud hud-tl mono" id="hudTrainBox">
+          <div>
+            <strong style="color:var(--primary)">🔵 训练模式</strong>
+            &nbsp;|&nbsp; Step: <strong id="hudStep">0</strong>
+            &nbsp;|&nbsp; 全序列平均Loss(11位并行): <strong id="hudSeqLoss">未计算 (0)</strong>
+          </div>
+          <div class="muted">
+            当前 Query 位置: <strong id="hudSample" style="color:var(--foreground)">pos[3] 「床前明月」→ 光</strong>
+            &nbsp;|&nbsp; 位置Loss(橙柱): <strong id="hudPosLoss" style="color:var(--warning)">未计算 (0)</strong>
+          </div>
+          <div class="muted">
+            更新前后对照: <span id="hudBeforeAfter" style="color:var(--foreground)">尚无更新记录</span>
+          </div>
+        </div>
+
+        <!-- Top-Left HUD: Infer Mode -->
+        <div class="hud hud-tl mono hidden" id="hudInferBox">
+          <div>
+            <strong style="color:var(--success)">🟢 推理模式（纯前向 · 无Loss · 无反传 · 不改权重）</strong>
+            &nbsp;|&nbsp; 共享权重: <strong id="hudInferStep">Step 0</strong>
+          </div>
+          <div class="muted">
+            已生成序列(长度 <span id="hudInferLen">1</span>/12): <strong id="hudInferSeq" style="color:var(--foreground)">「床」</strong>
+            &nbsp;|&nbsp; 温度 T = <strong id="hudInferTemp" style="color:var(--primary)">0.7</strong>
+          </div>
+          <div class="muted">
+            只需 1 个字就能起步！末字用 Query 扫描全部历史 Key，点「⏭ 下一步」可无缝切回训练
+          </div>
+        </div>
+
+        <!-- Top-Right Legend -->
+        <div class="hud hud-tr" id="legendTrain">
+          <span><span class="dot" style="background:var(--primary)"></span>注意力山峰</span>
+          <span><span class="dot" style="background:var(--success)"></span>Value/目标</span>
+          <span><span class="dot" style="background:var(--error)"></span>掩码(-∞)</span>
+          <span><span class="dot" style="background:var(--warning)"></span>Loss/梯度</span>
+        </div>
+        <div class="hud hud-tr hidden" id="legendInfer">
+          <span><span class="dot" style="background:var(--primary)"></span>历史/概率塔</span>
+          <span><span class="dot" style="background:var(--success)"></span>末字Q/抽中</span>
+          <span><span class="dot" style="background:var(--warning)"></span>光束/骰子</span>
+        </div>
+
+        <!-- Bottom Narrator -->
+        <div class="hud hud-bottom">
+          <div class="row">
+            <strong id="narratorTitle">准备就绪：已选中 pos[3]「床前明月 → 光」，点一次「⏭ 下一步」看自注意力如何扫描历史！</strong>
+            <div id="stageProgressWrap" class="prog-track hidden"><div id="stageProgressBar" class="prog-fill"></div></div>
+          </div>
+          <div id="narratorDesc" class="muted" style="margin-top:3px;">
+            Step 03 不再锁死 3 字窗口！一次前向并行计算全部 11 个位置，因果下三角掩码确保每个字只能回头看历史，绝不偷看未来。
+          </div>
+        </div>
+      </div>
+
+      <!-- Strip 1: Select Observed Query Position i (0..10) -->
+      <div class="row divider xs">
+        <div class="flex">
+          <span class="muted">🔵 观察 Query 位置（切换位置不改权重，黄框为两个「月」对照）：</span>
+          <div id="posButtons" class="flex"></div>
+        </div>
+        <div class="flex">
+          <label class="flex muted">
+            学习率 lr:
+            <input id="lrSlider" type="range" min="0.005" max="0.08" step="0.005" value="0.03" />
+            <span id="lrVal" class="mono" style="color:var(--foreground); min-width:36px;">0.030</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Strip 2: 3D Autoregressive Inference (Can start from 1 single char!) -->
+      <div class="divider xs infer-strip">
+        <div class="row">
+          <div class="flex" style="gap:10px;">
+            <strong style="color:var(--success)">🟢 3D 自注意力接龙推理</strong>
+            <span id="inferWeightTag" class="badge mono">共享权重 Step 0</span>
+            <label class="flex muted">
+              起始前缀:
+              <select id="genStartSelect" class="mono">
+                <option value="床" selected>「床」(仅1字起步!)</option>
+                <option value="床前明月">「床前明月」(第1个「月」)</option>
+                <option value="床前明月光，举头望明月">「床前明月光，举头望明月」(第2个「月」)</option>
+                <option value="举头望">「举头望」</option>
+              </select>
+            </label>
+            <label class="flex muted">
+              温度 T:
+              <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.7" />
+              <span id="tempVal" class="mono" style="color:var(--foreground); min-width:24px;">0.7</span>
+            </label>
+          </div>
+          <div class="flex">
+            <button id="btnGenNext" class="primary">🎲 推理下一个字</button>
+            <button id="btnGenReset">↺ 重置接龙</button>
+          </div>
+        </div>
+        <div class="tape-box row">
+          <div class="flex">
+            <span class="muted">不断生长的上下文序列（全部历史都可被最后1字回望）：</span>
+            <div id="genTape" class="flex mono"></div>
+          </div>
+          <span id="genReadout" class="mono muted">不用凑满 3 字！直接从 1 个「床」字点「🎲 推理下一个字」试试！</span>
+        </div>
+        <div id="inferRoulette" class="roulette-bar" title="末字经自注意力汇总全部历史后的温度 Softmax 轮盘赌"></div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- DEEP-DIVE INSPECTOR: 11x11 Causal Attention Heatmap + Q·K Math      -->
+    <!-- =================================================================== -->
+    <div class="card xs">
+      <div class="muted">
+        <strong>网页教学配置</strong>：整句短诗 <span class="mono" style="color:var(--foreground)">床前明月光，举头望明月。</span>（长度 12 → 11 个并行因果预测位），模型维度 <span class="mono">V=10, T_max=12, D=8, N_HEAD=2 (d_head=4)</span>，共 <strong>522</strong> 个真实可训练参数（含精确解析反传 + AdamW）。Rust 命令行版 <span class="mono">crates/step03-attention/src/main.rs</span> 在 30 首唐诗上运行 <span class="mono">T=16, D=32, 4头</span>（28,853 参数）。
+      </div>
+
+      <div class="grid-2">
+        <!-- Left: 11x11 Causal Attention Matrix Table -->
+        <div class="subpanel">
+          <div class="row">
+            <strong>因果注意力权重矩阵 A = Softmax(Mask(Q·Kᵀ / √d))（点击任意行切换 Query）</strong>
+            <span id="heatmapHeadBadge" class="mono badge">2头平均</span>
+          </div>
+          <table class="attn-table mono" id="attnTable"></table>
+        </div>
+
+        <!-- Right: Active Query Breakdown + Two-"月" Long-Range Contrast -->
+        <div class="subpanel" style="display:flex; flex-direction:column; justify-content:space-between; gap:10px;">
+          <div>
+            <div class="row">
+              <strong>当前 Query 探照灯解剖：<span id="qDetailTitle" style="color:var(--primary)">pos[3]「月」</span></strong>
+              <span class="mono muted">scale = 1/√4 = 0.5</span>
+            </div>
+            <div class="muted" style="margin-top:4px;">
+              每个历史位置 j ≤ i 的真实打分 <span class="mono">Q[i]·K[j]/√d</span> 与 Softmax 注意力权重 <span class="mono">α(i,j)</span>：
+            </div>
+            <div id="scoreList" class="score-list mono"></div>
+          </div>
+
+          <div class="divider">
+            <strong>长程视野对照：pos[3]「…明月 → 光」 vs pos[10]「…望明月 → 。」</strong>
+            <div class="muted mono" style="margin-top:4px; line-height:1.65;">
+              <div>· 两个位置当前字都是「月」，但各自能回望的<strong>完整前文历史</strong>不同：</div>
+              <div id="contrastPos3">pos[3]「床前明月 → 光」：待第 ⑦ 步或训练后查看</div>
+              <div id="contrastPos10">pos[10]「…举头望明月 → 。」：待第 ⑦ 步或训练后查看</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="./assets/engine3d.js"></script>
+  <script>
+    const M = window.Mini3D;
+
+    // =========================================================================
+    // 1. Corpus & Sequence Setup (Same 12-char Poem as Step 01 & Step 02)
+    // =========================================================================
+    const CORPUS = "床前明月光，举头望明月。";
+    const CHARS = CORPUS.split("");
+    const VOCAB = Array.from(new Set(CHARS)).sort();
+    const V = VOCAB.length; // 10
+    const STOI = Object.fromEntries(VOCAB.map((ch, i) => [ch, i]));
+    const DATA = CHARS.map(ch => STOI[ch]);
+
+    const T_MAX = 12;
+    const SEQ_LEN = DATA.length - 1; // 11 input positions (0..10) predicting targets (1..11)
+    const TRAIN_INPUT = DATA.slice(0, SEQ_LEN);
+    const TRAIN_TARGET = DATA.slice(1, SEQ_LEN + 1);
+
+    const D_MODEL = 8;
+    const N_HEAD = 2;
+    const D_HEAD = D_MODEL / N_HEAD; // 4
+    const SCALE = 1.0 / Math.sqrt(D_HEAD); // 0.5
+
+    class Rng {
+      constructor(seed) {
+        let z = (BigInt(seed) + 0x9E3779B97F4A7C15n) & 0xFFFFFFFFFFFFFFFFn;
+        z = ((z ^ (z >> 30n)) * 0xBF58476D1CE4E5B9n) & 0xFFFFFFFFFFFFFFFFn;
+        z = ((z ^ (z >> 27n)) * 0x94D049BB133111EBn) & 0xFFFFFFFFFFFFFFFFn;
+        z = z ^ (z >> 31n);
+        this.state = z === 0n ? 1n : z;
+      }
+      nextU64() {
+        let x = this.state;
+        x = (x ^ ((x << 13n) & 0xFFFFFFFFFFFFFFFFn)) & 0xFFFFFFFFFFFFFFFFn;
+        x = (x ^ (x >> 7n)) & 0xFFFFFFFFFFFFFFFFn;
+        x = (x ^ ((x << 17n) & 0xFFFFFFFFFFFFFFFFn)) & 0xFFFFFFFFFFFFFFFFn;
+        this.state = x;
+        return x;
+      }
+      nextF32() { return Number(this.nextU64() >> 40n) / 16777216; }
+      normal(std) {
+        const u1 = Math.max(this.nextF32(), 1e-7);
+        const u2 = this.nextF32();
+        return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2) * std;
+      }
+    }
+
+    function softmaxRow(logits, temp = 1.0) {
+      const invT = 1.0 / Math.max(temp, 1e-4);
+      let m = -Infinity;
+      for (let i = 0; i < logits.length; i++) {
+        const v = logits[i] * invT;
+        if (v > m) m = v;
+      }
+      const exps = new Float32Array(logits.length);
+      let sum = 0;
+      for (let i = 0; i < logits.length; i++) {
+        exps[i] = Math.exp(logits[i] * invT - m);
+        sum += exps[i];
+      }
+      const probs = new Float32Array(logits.length);
+      for (let i = 0; i < logits.length; i++) probs[i] = exps[i] / sum;
+      return probs;
+    }
+
+    // =========================================================================
+    // 2. Real Causal Multi-Head Self-Attention Model + Exact Autograd + AdamW
+    //    (1-to-1 Mathematical Mirror of crates/step03-attention/src/main.rs)
+    // =========================================================================
+    class Param {
+      constructor(name, rows, cols, data, decay) {
+        this.name = name; this.rows = rows; this.cols = cols;
+        this.data = new Float32Array(data);
+        this.m = new Float32Array(rows * cols);
+        this.v = new Float32Array(rows * cols);
+        this.lastDelta = new Float32Array(rows * cols);
+        this.decay = decay;
+      }
+      static randn(name, rows, cols, std, rng, decay) {
+        const arr = new Float32Array(rows * cols);
+        for (let i = 0; i < arr.length; i++) arr[i] = rng.normal(std);
+        return new Param(name, rows, cols, arr, decay);
+      }
+      static zeros(name, rows, cols) {
+        return new Param(name, rows, cols, new Float32Array(rows * cols), false);
+      }
+      adamwStep(grad, lr, wd, step) {
+        const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+        const bc1 = 1 - Math.pow(b1, step), bc2 = 1 - Math.pow(b2, step);
+        for (let i = 0; i < this.data.length; i++) {
+          const oldW = this.data[i], g = grad[i];
+          if (this.decay) this.data[i] -= lr * wd * this.data[i];
+          this.m[i] = b1 * this.m[i] + (1 - b1) * g;
+          this.v[i] = b2 * this.v[i] + (1 - b2) * g * g;
+          this.data[i] -= lr * (this.m[i] / bc1) / (Math.sqrt(this.v[i] / bc2) + eps);
+          this.lastDelta[i] = this.data[i] - oldW;
+        }
+      }
+    }
+
+    function matmulFwd(a, m, k, b, n) {
+      const out = new Float32Array(m * n);
+      for (let i = 0; i < m; i++) {
+        for (let p = 0; p < k; p++) {
+          const aip = a[i * k + p];
+          for (let j = 0; j < n; j++) out[i * n + j] += aip * b[p * n + j];
+        }
+      }
+      return out;
+    }
+
+    function createModel(seed = 42) {
+      const rng = new Rng(seed);
+      const std = Math.sqrt(1.0 / D_MODEL);
+      return {
+        tokEmb: Param.randn("tok_emb", V, D_MODEL, 0.32, rng, true),
+        posEmb: Param.randn("pos_emb", T_MAX, D_MODEL, 0.20, rng, true),
+        wq:     Param.randn("wq", D_MODEL, D_MODEL, std, rng, true),
+        wk:     Param.randn("wk", D_MODEL, D_MODEL, std, rng, true),
+        wv:     Param.randn("wv", D_MODEL, D_MODEL, std, rng, true),
+        wo:     Param.randn("wo", D_MODEL, D_MODEL, std * 0.6, rng, true),
+        wLm:    Param.randn("w_lm", D_MODEL, V, std, rng, true),
+        bLm:    Param.zeros("b_lm", 1, V),
+      };
+    }
+
+    // Forward pass on ANY sequence seqIds (length 1..T_MAX)
+    // Pure forward when targets === null (Inference Mode!); computes Loss when targets provided.
+    function forwardSequence(m, seqIds, targets = null) {
+      const T = seqIds.length;
+      const h0 = new Float32Array(T * D_MODEL);
+      for (let t = 0; t < T; t++) {
+        const tok = seqIds[t];
+        for (let c = 0; c < D_MODEL; c++) {
+          h0[t * D_MODEL + c] = m.tokEmb.data[tok * D_MODEL + c] + m.posEmb.data[t * D_MODEL + c];
+        }
+      }
+
+      const q = matmulFwd(h0, T, D_MODEL, m.wq.data, D_MODEL);
+      const k = matmulFwd(h0, T, D_MODEL, m.wk.data, D_MODEL);
+      const v = matmulFwd(h0, T, D_MODEL, m.wv.data, D_MODEL);
+
+      const rawScores = new Float32Array(N_HEAD * T * T); // Full T×T pre-mask scores for visual comparison
+      const attnWeights = new Float32Array(N_HEAD * T * T); // Causal lower-triangle weights (upper = 0)
+      const ctx = new Float32Array(T * D_MODEL);
+
+      for (let h = 0; h < N_HEAD; h++) {
+        const hCol = h * D_HEAD;
+        const wBase = h * T * T;
+        for (let i = 0; i < T; i++) {
+          const qiOff = i * D_MODEL + hCol;
+          let maxS = -Infinity;
+          for (let j = 0; j < T; j++) {
+            const kjOff = j * D_MODEL + hCol;
+            let dot = 0;
+            for (let d = 0; d < D_HEAD; d++) dot += q[qiOff + d] * k[kjOff + d];
+            const sc = dot * SCALE;
+            rawScores[wBase + i * T + j] = sc;
+            if (j <= i && sc > maxS) maxS = sc;
+          }
+          let sumExp = 0;
+          for (let j = 0; j <= i; j++) {
+            const e = Math.exp(rawScores[wBase + i * T + j] - maxS);
+            attnWeights[wBase + i * T + j] = e;
+            sumExp += e;
+          }
+          const invSum = 1.0 / sumExp;
+          for (let j = 0; j <= i; j++) attnWeights[wBase + i * T + j] *= invSum;
+
+          const outOff = i * D_MODEL + hCol;
+          for (let j = 0; j <= i; j++) {
+            const w = attnWeights[wBase + i * T + j];
+            const vjOff = j * D_MODEL + hCol;
+            for (let d = 0; d < D_HEAD; d++) ctx[outOff + d] += w * v[vjOff + d];
+          }
+        }
+      }
+
+      const attnOut = matmulFwd(ctx, T, D_MODEL, m.wo.data, D_MODEL);
+      const h1 = new Float32Array(T * D_MODEL);
+      for (let i = 0; i < h1.length; i++) h1[i] = h0[i] + attnOut[i];
+
+      const logits = matmulFwd(h1, T, D_MODEL, m.wLm.data, V);
+      for (let t = 0; t < T; t++) {
+        for (let j = 0; j < V; j++) logits[t * V + j] += m.bLm.data[j];
+      }
+
+      let posLosses = null, meanLoss = 0;
+      if (targets) {
+        posLosses = new Float32Array(T);
+        for (let t = 0; t < T; t++) {
+          const probs = softmaxRow(logits.subarray(t * V, (t + 1) * V), 1.0);
+          const l = -Math.log(Math.max(probs[targets[t]], 1e-12));
+          posLosses[t] = l;
+          meanLoss += l;
+        }
+        meanLoss /= T;
+      }
+
+      return { T, seqIds: [...seqIds], h0, q, k, v, rawScores, attnWeights, ctx, attnOut, h1, logits, posLosses, meanLoss };
+    }
+
+    // Exact Analytical Backward Pass (Matches Rust step03-attention 100%)
+    function backwardSequence(m, cache, targets) {
+      const T = cache.T;
+      const gTokEmb = new Float32Array(m.tokEmb.data.length);
+      const gPosEmb = new Float32Array(m.posEmb.data.length);
+      const gWq = new Float32Array(m.wq.data.length);
+      const gWk = new Float32Array(m.wk.data.length);
+      const gWv = new Float32Array(m.wv.data.length);
+      const gWo = new Float32Array(m.wo.data.length);
+      const gWLm = new Float32Array(m.wLm.data.length);
+      const gBLm = new Float32Array(m.bLm.data.length);
+
+      // 1. CrossEntropy backward -> dLogits(T, V)
+      const dLogits = new Float32Array(T * V);
+      const invT = 1.0 / T;
+      for (let t = 0; t < T; t++) {
+        const probs = softmaxRow(cache.logits.subarray(t * V, (t + 1) * V), 1.0);
+        const y = targets[t];
+        for (let j = 0; j < V; j++) {
+          const g = (probs[j] - (j === y ? 1.0 : 0.0)) * invT;
+          dLogits[t * V + j] = g;
+          gBLm[j] += g;
+        }
+      }
+
+      // 2. LM Head matmul backward: logits = h1 @ wLm + bLm
+      const dH1 = new Float32Array(T * D_MODEL);
+      for (let t = 0; t < T; t++) {
+        for (let c = 0; c < D_MODEL; c++) {
+          let acc = 0;
+          const h1tc = cache.h1[t * D_MODEL + c];
+          for (let j = 0; j < V; j++) {
+            const g = dLogits[t * V + j];
+            acc += g * m.wLm.data[c * V + j];
+            gWLm[c * V + j] += h1tc * g;
+          }
+          dH1[t * D_MODEL + c] = acc;
+        }
+      }
+
+      // 3. Residual backward: h1 = h0 + attnOut -> dH0 += dH1, dAttnOut = dH1
+      const dH0 = new Float32Array(dH1);
+      const dCtx = new Float32Array(T * D_MODEL);
+      for (let t = 0; t < T; t++) {
+        for (let c = 0; c < D_MODEL; c++) {
+          let acc = 0;
+          const ctxTc = cache.ctx[t * D_MODEL + c];
+          for (let j = 0; j < D_MODEL; j++) {
+            const g = dH1[t * D_MODEL + j];
+            acc += g * m.wo.data[c * D_MODEL + j];
+            gWo[c * D_MODEL + j] += ctxTc * g;
+          }
+          dCtx[t * D_MODEL + c] = acc;
+        }
+      }
+
+      // 4. Causal Multi-Head Attention backward -> dQ, dK, dV
+      const dQ = new Float32Array(T * D_MODEL);
+      const dK = new Float32Array(T * D_MODEL);
+      const dV = new Float32Array(T * D_MODEL);
+      const dWRow = new Float32Array(T);
+
+      for (let h = 0; h < N_HEAD; h++) {
+        const hCol = h * D_HEAD;
+        const wBase = h * T * T;
+        for (let i = 0; i < T; i++) {
+          const dCtxOff = i * D_MODEL + hCol;
+          let wDotDw = 0;
+          for (let j = 0; j <= i; j++) {
+            const wIj = cache.attnWeights[wBase + i * T + j];
+            const vjOff = j * D_MODEL + hCol;
+            let dwIj = 0;
+            for (let d = 0; d < D_HEAD; d++) {
+              const g = dCtx[dCtxOff + d];
+              dV[vjOff + d] += wIj * g;
+              dwIj += g * cache.v[vjOff + d];
+            }
+            dWRow[j] = dwIj;
+            wDotDw += wIj * dwIj;
+          }
+          for (let j = 0; j <= i; j++) {
+            const wIj = cache.attnWeights[wBase + i * T + j];
+            const dSIj = wIj * (dWRow[j] - wDotDw) * SCALE;
+            const kjOff = j * D_MODEL + hCol;
+            for (let d = 0; d < D_HEAD; d++) {
+              dQ[dCtxOff + d] += dSIj * cache.k[kjOff + d];
+              dK[kjOff + d] += dSIj * cache.q[dCtxOff + d];
+            }
+          }
+        }
+      }
+
+      // 5. Q, K, V projections backward -> gWq, gWk, gWv, dH0
+      for (let t = 0; t < T; t++) {
+        for (let c = 0; c < D_MODEL; c++) {
+          const h0tc = cache.h0[t * D_MODEL + c];
+          let acc = 0;
+          for (let j = 0; j < D_MODEL; j++) {
+            const gq = dQ[t * D_MODEL + j], gk = dK[t * D_MODEL + j], gv = dV[t * D_MODEL + j];
+            gWq[c * D_MODEL + j] += h0tc * gq;
+            gWk[c * D_MODEL + j] += h0tc * gk;
+            gWv[c * D_MODEL + j] += h0tc * gv;
+            acc += gq * m.wq.data[c * D_MODEL + j]
+                 + gk * m.wk.data[c * D_MODEL + j]
+                 + gv * m.wv.data[c * D_MODEL + j];
+          }
+          dH0[t * D_MODEL + c] += acc;
+        }
+      }
+
+      // 6. Token + Position Embedding backward
+      for (let t = 0; t < T; t++) {
+        const tok = cache.seqIds[t];
+        for (let c = 0; c < D_MODEL; c++) {
+          const g = dH0[t * D_MODEL + c];
+          gTokEmb[tok * D_MODEL + c] += g;
+          gPosEmb[t * D_MODEL + c] += g;
+        }
+      }
+
+      return { tokEmb: gTokEmb, posEmb: gPosEmb, wq: gWq, wk: gWk, wv: gWv, wo: gWo, wLm: gWLm, bLm: gBLm };
+    }
+
+    // Helper: extract T×T matrix for selected head (-1 = average across all heads)
+    function getHeadMatrix(buf, T, headIdx) {
+      const mat = new Float32Array(T * T);
+      if (headIdx >= 0 && headIdx < N_HEAD) {
+        mat.set(buf.subarray(headIdx * T * T, (headIdx + 1) * T * T));
+      } else {
+        for (let h = 0; h < N_HEAD; h++) {
+          const off = h * T * T;
+          for (let idx = 0; idx < T * T; idx++) mat[idx] += buf[off + idx] / N_HEAD;
+        }
+      }
+      return mat;
+    }
+
+    // =========================================================================
+    // 3. Shared Model + Strictly Isolated Train & Infer State
+    // =========================================================================
+    let model = null;
+    let trainStepCount = 0;
+    let lr = 0.03;
+    let viewMode = "train"; // "train" | "infer"
+    let selectedHead = -1;  // -1 = mean of 2 heads, 0 or 1
+
+    // Training state
+    let selectedPos = 3; // Default: pos[3] 「床前明月 → 光」
+    let trainCache = null;
+    let hasComputedStage = 0; // 0..7
+    let lastUpdateReport = null;
+    let trainNarrator = { title: "", desc: "" };
+
+    // Inference state (can start from 1 single char!)
+    let temperature = 0.7;
+    let genStartStr = "床";
+    let genIds = [STOI["床"]];
+    let lastGenDraw = null;
+    let inferAnim = null;
+    const INFER_ANIM_MS = 1650;
+    let inferNarrator = {
+      title: "🟢 推理模式：自注意力只需 1 个字就能起步（已隐藏 Loss 与反传，绝不改权重）",
+      desc: "拖动「温度 T」实时看右侧 10 座 3D 概率塔变形；点「🎲 推理下一个字」看最后 1 字发射注意力光束扫描全部历史！",
+    };
+
+    function performOneAdamWStep() {
+      const oldCache = forwardSequence(model, TRAIN_INPUT, TRAIN_TARGET);
+      const grads = backwardSequence(model, oldCache, TRAIN_TARGET);
+      const beforeSeq = oldCache.meanLoss;
+      const beforePos = oldCache.posLosses[selectedPos];
+
+      trainStepCount += 1;
+      const wd = 0.01;
+      model.tokEmb.adamwStep(grads.tokEmb, lr, wd, trainStepCount);
+      model.posEmb.adamwStep(grads.posEmb, lr, wd, trainStepCount);
+      model.wq.adamwStep(grads.wq, lr, wd, trainStepCount);
+      model.wk.adamwStep(grads.wk, lr, wd, trainStepCount);
+      model.wv.adamwStep(grads.wv, lr, wd, trainStepCount);
+      model.wo.adamwStep(grads.wo, lr, wd, trainStepCount);
+      model.wLm.adamwStep(grads.wLm, lr, wd, trainStepCount);
+      model.bLm.adamwStep(grads.bLm, lr, wd, trainStepCount);
+
+      trainCache = forwardSequence(model, TRAIN_INPUT, TRAIN_TARGET);
+      hasComputedStage = 7;
+      lastUpdateReport = {
+        step: trainStepCount,
+        beforeSeq,
+        afterSeq: trainCache.meanLoss,
+        beforePos,
+        afterPos: trainCache.posLosses[selectedPos],
+        pos: selectedPos,
+      };
+    }
+
+    // =========================================================================
+    // 4. Training 8-Stage State Machine + Clean Mode Switch
+    // =========================================================================
+    let mode = "idle"; // "idle" | "step" | "autoplay" | "train60"
+    let currentStage = 0; // 0 or 1..8
+    let stageStartMs = 0;
+    let stage8Applied = false;
+    let animSpeed = 1.0;
+
+    const BASE_STEP_MS = 1250, BASE_HOLD_MS = 850;
+    const stepAnimMs = () => BASE_STEP_MS / animSpeed;
+    const autoHoldMs = () => BASE_HOLD_MS / animSpeed;
+    const trainTickMs = () => 45 / animSpeed;
+    let train60Remaining = 0, lastTrainTick = 0;
+
+    const STAGE_NAMES = [
+      "① 词+位置编码",
+      "② 投影 Q/K/V",
+      "③ Q·Kᵀ/√d打分",
+      "④ 因果掩码 Mask",
+      "⑤ Softmax 注意力",
+      "⑥ 汇聚 Value+残差",
+      "⑦ 概率与 Loss",
+      "⑧ 反传与 AdamW",
+    ];
+
+    const visualProbs = new Float32Array(V);
+    const visualH1 = new Float32Array(D_MODEL);
+    const visualAttnGrid = new Float32Array(T_MAX * T_MAX);
+    let visualPosLoss = 0.0;
+
+    function flushPendingStage8() {
+      if (currentStage === 8 && !stage8Applied) {
+        performOneAdamWStep();
+        stage8Applied = true;
+      }
+    }
+
+    function flushPendingInfer() {
+      if (inferAnim && !inferAnim.committed) {
+        inferAnim.committed = true;
+        if (genIds.length >= T_MAX) genIds.shift();
+        genIds.push(inferAnim.nextId);
+        const seqStr = genIds.map(id => VOCAB[id]).join("");
+        lastGenDraw = {
+          prevSeqStr: inferAnim.prevSeqStr,
+          nextId: inferAnim.nextId,
+          prob: inferAnim.prob,
+          dice: inferAnim.dice,
+          seqStr,
+        };
+        renderInferenceStrip();
+        document.getElementById("genReadout").textContent =
+          `序列「${inferAnim.prevSeqStr}」(T=${temperature.toFixed(1)}) 骰子 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」(p=${(inferAnim.prob * 100).toFixed(1)}%) → 新序列「${seqStr}」`;
+      }
+    }
+
+    function applyNarratorDom(title, desc) {
+      document.getElementById("narratorTitle").textContent = title;
+      document.getElementById("narratorDesc").textContent = desc;
+    }
+    function setTrainNarrator(title, desc) {
+      trainNarrator = { title, desc };
+      if (viewMode === "train") applyNarratorDom(title, desc);
+    }
+    function setInferNarrator(title, desc) {
+      inferNarrator = { title, desc };
+      if (viewMode === "infer") applyNarratorDom(title, desc);
+    }
+
+    function setViewMode(nextView) {
+      if (viewMode === nextView) return;
+      if (nextView === "infer") {
+        flushPendingStage8();
+        if (mode === "autoplay" || mode === "train60") mode = currentStage > 0 ? "step" : "idle";
+      } else {
+        flushPendingInfer();
+        inferAnim = null;
+      }
+      viewMode = nextView;
+      updateModeChrome();
+      const curN = viewMode === "train" ? trainNarrator : inferNarrator;
+      applyNarratorDom(curN.title, curN.desc);
+    }
+
+    function updateModeChrome() {
+      const isTrain = viewMode === "train";
+      document.getElementById("btnModeTrain").className = `mode-btn${isTrain ? " active-train" : ""}`;
+      document.getElementById("btnModeInfer").className = `mode-btn${!isTrain ? " active-infer" : ""}`;
+      document.getElementById("btnModeTrain").setAttribute("aria-selected", String(isTrain));
+      document.getElementById("btnModeInfer").setAttribute("aria-selected", String(!isTrain));
+      document.getElementById("stagePills").classList.toggle("hidden", !isTrain);
+      document.getElementById("inferPills").classList.toggle("hidden", isTrain);
+      document.getElementById("hudTrainBox").classList.toggle("hidden", !isTrain);
+      document.getElementById("hudInferBox").classList.toggle("hidden", isTrain);
+      document.getElementById("legendTrain").classList.toggle("hidden", !isTrain);
+      document.getElementById("legendInfer").classList.toggle("hidden", isTrain);
+      document.getElementById("stageProgressBar").style.background = isTrain ? "var(--primary)" : "var(--success)";
+    }
+
+    function prefixStr(pos) {
+      return CHARS.slice(0, pos + 1).join("");
+    }
+
+    function enterStage(stageNum, nowMs) {
+      setViewMode("train");
+      flushPendingStage8();
+      currentStage = stageNum;
+      stageStartMs = nowMs;
+      stage8Applied = false;
+
+      if (!trainCache || stageNum === 1) {
+        trainCache = forwardSequence(model, TRAIN_INPUT, TRAIN_TARGET);
+      }
+      hasComputedStage = Math.max(hasComputedStage, Math.min(stageNum, 7));
+
+      const i = selectedPos;
+      const qCh = CHARS[i], tgtCh = CHARS[i + 1];
+      const matW = getHeadMatrix(trainCache.attnWeights, SEQ_LEN, selectedHead);
+
+      if (stageNum === 1) {
+        setTrainNarrator(
+          `① 词向量 + 位置编码：h0[t] = tok_emb[字] + pos_emb[位置t]（11 个位置并行送入）`,
+          `当前观察 pos[${i}]「${qCh}」：加上位置编码后，pos[3]「月」和 pos[10]「月」从入口就带上了不同的位置身份！`
+        );
+      } else if (stageNum === 2) {
+        setTrainNarrator(
+          `② 线性投影出 Q / K / V：每个字都同时扮演「提问者 Q」「目录标签 K」「内容干货 V」`,
+          `pos[${i}]「${qCh}」举起 Query 探照灯，准备去和历史位置 0..${i} 的所有 Key 计算相关性！`
+        );
+      } else if (stageNum === 3) {
+        setTrainNarrator(
+          `③ 缩放点积打分 S = (Q · Kᵀ) / √d_head（d_head=4，缩放 ×0.5 防梯度饱和）`,
+          `此时 11×11 矩阵里还包含右上角的未来位置——如果不遮挡，pos[${i}]「${qCh}」就会偷看到后面的答案「${tgtCh}」！`
+        );
+      } else if (stageNum === 4) {
+        setTrainNarrator(
+          `④ 因果下三角掩码（Causal Mask）：强行把所有未来位置 (j > i) 设为 -∞！`,
+          `看 3D 舞台右上角的红色禁区：pos[${i}]「${qCh}」只能看见左侧 0..${i}（「${prefixStr(i)}」），未来彻底断绝信息泄露！`
+        );
+      } else if (stageNum === 5) {
+        let bestJ = 0;
+        for (let j = 1; j <= i; j++) if (matW[i * SEQ_LEN + j] > matW[i * SEQ_LEN + bestJ]) bestJ = j;
+        setTrainNarrator(
+          `⑤ 逐行 Softmax 生成注意力山峰：未来位置权重严格变 0%，可见历史权重总和为 100%！`,
+          `当前 pos[${i}]「${qCh}」最关注的历史字是 pos[${bestJ}]「${CHARS[bestJ]}」（权重 ${(matW[i * SEQ_LEN + bestJ] * 100).toFixed(1)}%）。`
+        );
+      } else if (stageNum === 6) {
+        setTrainNarrator(
+          `⑥ 加权汇聚 Value + 残差连接：Context = Σ α(i,j)·V[j]，h1 = h0 + Context·Wo`,
+          `金色光束把历史干货按注意力权重吸进 Context，再叠加残差保留「${qCh}」自身特征！`
+        );
+      } else if (stageNum === 7) {
+        const probs = softmaxRow(trainCache.logits.subarray(i * V, (i + 1) * V), 1.0);
+        const pLoss = trainCache.posLosses[i];
+        setTrainNarrator(
+          `⑦ 输出概率与交叉熵：预测「${tgtCh}」概率 ${(probs[TRAIN_TARGET[i]] * 100).toFixed(1)}%（位置Loss ${pLoss.toFixed(3)}，全序列平均 ${trainCache.meanLoss.toFixed(3)}）`,
+          `一次前向同时监督全部 11 个位置！橙色柱画当前 pos[${i}] 的 Loss，下一步反传更新 Q/K/V 与 Embedding！`
+        );
+      } else if (stageNum === 8) {
+        setTrainNarrator(
+          `⑧ 反向传播穿过 Softmax 与 Q/K/V + AdamW 更新（lr = ${lr.toFixed(3)}）`,
+          `精确反传梯度更新 tok_emb / pos_emb / Wq / Wk / Wv / Wo / W_lm，并用新权重重算真实 Loss 对照！`
+        );
+      }
+      renderAllUi();
+    }
+
+    // =========================================================================
+    // 5. UI Renderers
+    // =========================================================================
+    function renderCorpusStrip() {
+      const wrap = document.getElementById("corpusChars");
+      wrap.innerHTML = "";
+      CHARS.forEach((ch, idx) => {
+        const span = document.createElement("span");
+        span.className = "corpus-char mono";
+        if (idx < selectedPos) span.classList.add("hist");
+        else if (idx === selectedPos) span.classList.add("query");
+        else if (idx === selectedPos + 1) span.classList.add("tgt");
+        else span.classList.add("future");
+        span.textContent = ch;
+        span.title = idx <= selectedPos ? `可见历史 pos[${idx}]「${ch}」` : (idx === selectedPos + 1 ? `预测目标 pos[${idx}]「${ch}」` : `未来被掩码 pos[${idx}]「${ch}」`);
+        wrap.appendChild(span);
+      });
+    }
+
+    function renderPosButtons() {
+      const wrap = document.getElementById("posButtons");
+      wrap.innerHTML = "";
+      for (let i = 0; i < SEQ_LEN; i++) {
+        const b = document.createElement("button");
+        b.className = "mono";
+        b.style.padding = "2px 6px";
+        if (i === selectedPos) b.classList.add("primary");
+        else if (i === 3 || i === 10) b.style.borderColor = "var(--warning)";
+        b.textContent = `[${i}]${CHARS[i]}→${CHARS[i + 1]}`;
+        b.title = i === 3 || i === 10 ? "重点对照：两个「月」看到的完整历史前文不同！" : `Query 位置 ${i}：前文「${prefixStr(i)}」→ 预测「${CHARS[i + 1]}」`;
+        b.onclick = () => {
+          setViewMode("train");
+          flushPendingStage8();
+          selectedPos = i;
+          renderAllUi();
+          if (trainCache && hasComputedStage >= 7) {
+            const probs = softmaxRow(trainCache.logits.subarray(i * V, (i + 1) * V), 1.0);
+            setTrainNarrator(
+              `已切换观察 Query 为 pos[${i}]「${prefixStr(i)}」→ 预测「${CHARS[i + 1]}」（权重未变）`,
+              `当前权重下预测「${CHARS[i + 1]}」概率 = ${(probs[TRAIN_TARGET[i]] * 100).toFixed(1)}%，位置 Loss = ${trainCache.posLosses[i].toFixed(4)}。`
+            );
+          } else {
+            setTrainNarrator(
+              `已切换观察 Query 为 pos[${i}]「${CHARS[i]}」（可见前文共 ${i + 1} 字：「${prefixStr(i)}」）`,
+              `点「⏭ 下一步」观察 pos[${i}] 如何向 0..${i} 发射注意力光束！`
+            );
+          }
+        };
+        wrap.appendChild(b);
+      }
+    }
+
+    function renderHeatmapAndBreakdown() {
+      const tbl = document.getElementById("attnTable");
+      const headName = selectedHead === -1 ? "2头平均" : `Head ${selectedHead}`;
+      document.getElementById("heatmapHeadBadge").textContent = headName;
+      document.getElementById("qDetailTitle").textContent = `pos[${selectedPos}]「${CHARS[selectedPos]}」（前文 ${selectedPos + 1} 字）`;
+
+      const hasAttn = trainCache && hasComputedStage >= 5;
+      const matW = hasAttn ? getHeadMatrix(trainCache.attnWeights, SEQ_LEN, selectedHead) : null;
+      const matS = trainCache && hasComputedStage >= 3 ? getHeadMatrix(trainCache.rawScores, SEQ_LEN, selectedHead) : null;
+
+      let html = `<thead><tr><th>Q\\K</th>`;
+      for (let j = 0; j < SEQ_LEN; j++) html += `<th>${j}:${CHARS[j]}</th>`;
+      html += `</tr></thead><tbody>`;
+
+      for (let i = 0; i < SEQ_LEN; i++) {
+        const cls = i === selectedPos ? "q-row active-row" : "q-row";
+        html += `<tr class="${cls}" data-pos="${i}"><th>${i}:${CHARS[i]}</th>`;
+        for (let j = 0; j < SEQ_LEN; j++) {
+          if (j > i) {
+            html += `<td class="masked" title="未来位置被因果掩码设为 -∞">×</td>`;
+          } else if (hasAttn) {
+            const w = matW[i * SEQ_LEN + j];
+            const alpha = Math.min(0.85, 0.08 + w * 0.9);
+            const txtCol = w > 0.42 ? "#fff" : "var(--foreground)";
+            html += `<td style="background:rgba(79,140,255,${alpha.toFixed(2)});color:${txtCol};" title="Query[${i}]「${CHARS[i]}」看 Key[${j}]「${CHARS[j]}」= ${(w * 100).toFixed(1)}%">${(w * 100).toFixed(0)}%</td>`;
+          } else {
+            html += `<td class="muted">--</td>`;
+          }
+        }
+        html += `</tr>`;
+      }
+      html += `</tbody>`;
+      tbl.innerHTML = html;
+
+      tbl.querySelectorAll("tr.q-row").forEach(tr => {
+        tr.onclick = () => {
+          setViewMode("train");
+          selectedPos = parseInt(tr.dataset.pos, 10);
+          renderAllUi();
+        };
+      });
+
+      // Right breakdown list for selectedPos
+      const list = document.getElementById("scoreList");
+      list.innerHTML = "";
+      if (!matS) {
+        list.innerHTML = `<div class="muted">等待第 ③～⑤ 步（或点「+1 训练 step」）后展示每个历史字的真实点积与权重。</div>`;
+      } else {
+        for (let j = 0; j <= selectedPos; j++) {
+          const sc = matS[selectedPos * SEQ_LEN + j];
+          const w = hasAttn ? matW[selectedPos * SEQ_LEN + j] : 0;
+          const row = document.createElement("div");
+          row.className = "score-row";
+          row.innerHTML = `
+            <span>[${j}]「${CHARS[j]}」</span>
+            <span class="muted">s=${sc >= 0 ? "+" : ""}${sc.toFixed(2)}</span>
+            <div class="score-bar-track"><div class="score-bar-fill" style="width:${(w * 100).toFixed(1)}%"></div></div>
+            <strong style="text-align:right; color:${w > 0.25 ? "var(--primary)" : "var(--foreground)"}">${hasAttn ? (w * 100).toFixed(0) + "%" : "--"}</strong>
+          `;
+          list.appendChild(row);
+        }
+      }
+
+      // Contrast pos[3] vs pos[10]
+      const c3 = document.getElementById("contrastPos3");
+      const c10 = document.getElementById("contrastPos10");
+      if (!trainCache || hasComputedStage < 7) {
+        c3.textContent = "pos[3]「床前明月 → 光」：待第 ⑦ 步或训练后显示真实概率与关注点";
+        c10.textContent = "pos[10]「…举头望明月 → 。」：待第 ⑦ 步或训练后显示真实概率与关注点";
+      } else {
+        const fmtPos = pos => {
+          const probs = softmaxRow(trainCache.logits.subarray(pos * V, (pos + 1) * V), 1.0);
+          let bestJ = 0;
+          for (let j = 1; j <= pos; j++) if (matW[pos * SEQ_LEN + j] > matW[pos * SEQ_LEN + bestJ]) bestJ = j;
+          return `pos[${pos}] (目标「${CHARS[pos + 1]}」) → P(光)=${(probs[STOI["光"]] * 100).toFixed(1)}% | P(。)=${(probs[STOI["。"]] * 100).toFixed(1)}% | 最关注[${bestJ}]「${CHARS[bestJ]}」(${(matW[pos * SEQ_LEN + bestJ] * 100).toFixed(0)}%)`;
+        };
+        c3.textContent = fmtPos(3);
+        c10.textContent = fmtPos(10);
+      }
+    }
+
+    function renderInferenceStrip() {
+      document.getElementById("inferWeightTag").textContent = `共享权重 Step ${trainStepCount}`;
+      document.getElementById("hudInferStep").textContent = `Step ${trainStepCount}`;
+      document.getElementById("hudInferLen").textContent = genIds.length;
+      document.getElementById("hudInferSeq").textContent = `「${genIds.map(id => VOCAB[id]).join("")}」`;
+      document.getElementById("hudInferTemp").textContent = temperature.toFixed(1);
+
+      const tape = document.getElementById("genTape");
+      tape.innerHTML = "";
+      genIds.forEach((id, i) => {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        if (i === genIds.length - 1) chip.classList.add("latest");
+        else chip.classList.add("win");
+        chip.textContent = VOCAB[id];
+        tape.appendChild(chip);
+      });
+
+      const fwd = forwardSequence(model, genIds, null);
+      const lastOff = (genIds.length - 1) * V;
+      const probs = softmaxRow(fwd.logits.subarray(lastOff, lastOff + V), temperature);
+
+      const rBar = document.getElementById("inferRoulette");
+      rBar.innerHTML = "";
+      const palette = ["#4f8cff", "#22c55e", "#f59e0b", "#a855f7", "#ec4899", "#06b6d4"];
+      for (let j = 0; j < V; j++) {
+        const seg = document.createElement("div");
+        seg.style.width = `${probs[j] * 100}%`;
+        seg.style.background = palette[j % palette.length];
+        seg.style.color = "#fff";
+        seg.style.fontSize = "10px";
+        seg.style.display = "flex";
+        seg.style.alignItems = "center";
+        seg.style.justifyContent = "center";
+        seg.style.overflow = "hidden";
+        seg.className = "mono";
+        seg.title = `「${VOCAB[j]}」 ${(probs[j] * 100).toFixed(1)}%`;
+        if (probs[j] >= 0.08) seg.textContent = `${VOCAB[j]} ${(probs[j] * 100).toFixed(0)}%`;
+        rBar.appendChild(seg);
+      }
+      if (lastGenDraw) {
+        const mk = document.createElement("div");
+        mk.className = "roulette-marker";
+        mk.style.left = `${lastGenDraw.dice * 100}%`;
+        rBar.appendChild(mk);
+      }
+    }
+
+    function updateTrainingHud() {
+      document.getElementById("hudStep").textContent = trainStepCount;
+      document.getElementById("hudSample").textContent = `pos[${selectedPos}] 「${prefixStr(selectedPos)}」→ ${CHARS[selectedPos + 1]}`;
+
+      if (trainCache && hasComputedStage >= 7) {
+        document.getElementById("hudSeqLoss").textContent = trainCache.meanLoss.toFixed(4);
+        document.getElementById("hudPosLoss").textContent = trainCache.posLosses[selectedPos].toFixed(4);
+      } else {
+        document.getElementById("hudSeqLoss").textContent = "未计算 (0)";
+        document.getElementById("hudPosLoss").textContent = "未计算 (0)";
+      }
+
+      const baEl = document.getElementById("hudBeforeAfter");
+      if (lastUpdateReport) {
+        const r = lastUpdateReport;
+        baEl.textContent = `Step ${r.step} 全序列 ${r.beforeSeq.toFixed(3)} → ${r.afterSeq.toFixed(3)}（pos[${r.pos}] ${r.beforePos.toFixed(3)} → ${r.afterPos.toFixed(3)}）`;
+      } else {
+        baEl.textContent = "尚无更新记录（完成第 ⑧ 步或 +1 step 后显示新旧对照）";
+      }
+
+      document.querySelectorAll("#stagePills .stage-pill").forEach(el => {
+        const st = parseInt(el.dataset.stage, 10);
+        el.classList.toggle("active", st === currentStage);
+        el.classList.toggle("done", currentStage > 0 && st < currentStage);
+      });
+
+      const nextSt = currentStage >= 8 ? 1 : currentStage + 1;
+      document.getElementById("btnNextStep").textContent =
+        `${currentStage >= 8 ? "⏭ 下一轮：" : "⏭ 下一步："}${STAGE_NAMES[nextSt - 1]} (${nextSt}/8)`;
+      document.getElementById("btnAutoPlay").textContent =
+        mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
+    }
+
+    function updateInferPills(activePhase) {
+      document.querySelectorAll("#inferPills .infer-pill").forEach(el => {
+        const ph = parseInt(el.dataset.phase, 10);
+        el.classList.toggle("active", ph === activePhase);
+        el.classList.toggle("done", activePhase > 0 && ph < activePhase);
+      });
+    }
+
+    function renderAllUi() {
+      updateModeChrome();
+      renderCorpusStrip();
+      renderPosButtons();
+      renderHeatmapAndBreakdown();
+      updateTrainingHud();
+      renderInferenceStrip();
+    }
+
+    // =========================================================================
+    // 6. Unified 3D Canvas Renderer (3D Causal Attention Landscape + Beams!)
+    // =========================================================================
+    const canvas = document.getElementById("scene3d");
+    const ctx = canvas.getContext("2d");
+    const cam = M.createCamera(canvas, { yaw: -0.44, pitch: 0.56, dist: 31.0, tx: 0.6, ty: 0.6, tz: 0.2, minDist: 16, maxDist: 46 });
+
+    const POS = {
+      seq:  { x: -10.4, z: 0.0 },
+      qkv:  { x: -6.8,  z: 0.0 },
+      mat:  { x: -0.6,  z: 0.0 },
+      ctxV: { x:  5.2,  z: 0.0 },
+      sm:   { x:  8.4,  z: 0.0 },
+      loss: { x: 11.4,  z: 0.0 },
+    };
+
+    function renderFrame(nowMs) {
+      cam.step();
+      const progWrap = document.getElementById("stageProgressWrap");
+      const progBar = document.getElementById("stageProgressBar");
+
+      let stageT = 0, inferU = 0, activeInferPhase = 0;
+      if (viewMode === "train") {
+        const curStepMs = stepAnimMs(), curHoldMs = autoHoldMs();
+        stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / curStepMs) : 0;
+
+        if (mode === "step") {
+          progWrap.classList.remove("hidden");
+          progBar.style.width = `${(currentStage / 8) * 100}%`;
+          if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
+            performOneAdamWStep(); stage8Applied = true; renderAllUi();
+          }
+        } else if (mode === "autoplay") {
+          progWrap.classList.remove("hidden");
+          const elapsed = nowMs - stageStartMs;
+          stageT = Math.min(1, elapsed / curStepMs);
+          progBar.style.width = `${((currentStage - 1 + stageT) / 8) * 100}%`;
+          if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
+            performOneAdamWStep(); stage8Applied = true; renderAllUi();
+          }
+          if (elapsed >= curStepMs + curHoldMs) {
+            if (currentStage < 8) enterStage(currentStage + 1, nowMs);
+            else {
+              mode = "step"; updateTrainingHud();
+              const r = lastUpdateReport;
+              setTrainNarrator(
+                `✓ Step ${r.step} 完整 8 步走完！全序列 Loss: ${r.beforeSeq.toFixed(3)} → ${r.afterSeq.toFixed(3)}`,
+                `继续点「⚡ 快速训练 60 step」看注意力聚焦，或直接点「🎲 推理下一个字」只给 1 个「床」字体验接龙！`
+              );
+            }
+          }
+        } else if (mode === "train60") {
+          progWrap.classList.remove("hidden");
+          if (nowMs - lastTrainTick >= trainTickMs() && train60Remaining > 0) {
+            performOneAdamWStep(); train60Remaining -= 1; lastTrainTick = nowMs;
+            progBar.style.width = `${((60 - train60Remaining) / 60) * 100}%`;
+            renderAllUi();
+            setTrainNarrator(
+              `⚡ 快速训练中... Step ${trainStepCount}（全序列 Loss = ${trainCache.meanLoss.toFixed(4)}）`,
+              `观察中央 3D 因果下三角注意力山峰正在塑形，两个「月」正学会回望各自的前文！`
+            );
+          }
+          if (train60Remaining <= 0) {
+            mode = "idle"; currentStage = 0; progWrap.classList.add("hidden"); renderAllUi();
+            setTrainNarrator(
+              `🎉 训练完成（Step ${trainStepCount}，全序列 Loss = ${trainCache.meanLoss.toFixed(4)}）！`,
+              `点击 [3]月→光 和 [10]月→。 对比它们关注的历字，或点下方「🎲 推理下一个字」从单字「床」开始接龙！`
+            );
+          }
+        } else {
+          progWrap.classList.add("hidden");
+        }
+      } else {
+        const dur = INFER_ANIM_MS / animSpeed;
+        if (inferAnim) {
+          inferU = Math.min(1, (nowMs - inferAnim.startMs) / dur);
+          progWrap.classList.remove("hidden");
+          progBar.style.width = `${(inferU * 100).toFixed(1)}%`;
+          if (inferU < 0.28) {
+            activeInferPhase = 1;
+            setInferNarrator(
+              `🟢 ① 历史序列入场：「${inferAnim.prevSeqStr}」（共 ${inferAnim.prevSeqIds.length} 字，每个字叠加位置编码）`,
+              `无需固定 3 字！当前有多少历史字就送多少字，共用同一份 Step ${trainStepCount} 权重。`
+            );
+          } else if (inferU < 0.56) {
+            activeInferPhase = 2;
+            setInferNarrator(
+              `🟢 ② 末字「${VOCAB[inferAnim.prevSeqIds[inferAnim.prevSeqIds.length - 1]]}」举起 Query 探照灯，扫描全部 ${inferAnim.prevSeqIds.length} 个历史字！`,
+              `按真实注意力权重汇聚历史 Value，输出右侧 10 座温度概率塔 Softmax(z / T=${temperature.toFixed(1)})。`
+            );
+          } else if (inferU < 0.78) {
+            activeInferPhase = 3;
+            setInferNarrator(
+              `🟢 ③ 3D 轮盘掷骰 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」（概率 ${(inferAnim.prob * 100).toFixed(1)}%）！`,
+              `金色骰子光球精准落到「${VOCAB[inferAnim.nextId]}」塔顶，全程无 Loss、不改权重！`
+            );
+          } else {
+            activeInferPhase = 4;
+            setInferNarrator(
+              `🟢 ④ 自回归追加：「${VOCAB[inferAnim.nextId]}」飞回左侧序列末尾，上下文长度 +1！`,
+              `下一步推理时，新末尾字将能看到刚才生成的「${VOCAB[inferAnim.nextId]}」及更早全部历史！`
+            );
+          }
+          if (inferU >= 0.98 && !inferAnim.committed) {
+            flushPendingInfer();
+            const seqStr = genIds.map(id => VOCAB[id]).join("");
+            setInferNarrator(
+              `✓ 推理完成：抽出「${VOCAB[inferAnim.nextId]}」，序列已长到「${seqStr}」（权重 Step ${trainStepCount} 未变）`,
+              `继续点「🎲 推理下一个字」一路背完整首诗，或点「🔵 训练模式」回到训练现场！`
+            );
+          }
+          if (inferU >= 1) {
+            inferAnim = null;
+            progWrap.classList.add("hidden");
+            activeInferPhase = 0;
+          }
+        } else {
+          progWrap.classList.add("hidden");
+        }
+        updateInferPills(activeInferPhase);
+      }
+
+      // --- Compute Active 3D Display Data ---
+      const isTrain = viewMode === "train";
+      const lerpRate = Math.min(0.45, 0.18 * Math.sqrt(animSpeed));
+
+      let dispIds, activeQRow, curCache, targetProbs = null, targetH1 = null, matGrid = null;
+      if (isTrain) {
+        dispIds = TRAIN_INPUT;
+        activeQRow = selectedPos;
+        curCache = trainCache;
+        if (curCache && hasComputedStage >= 5) matGrid = getHeadMatrix(curCache.attnWeights, SEQ_LEN, selectedHead);
+        else if (curCache && hasComputedStage >= 3) {
+          // Normalize pre-mask scores visually into [0, 1] for Stage 3/4 preview
+          const raw = getHeadMatrix(curCache.rawScores, SEQ_LEN, selectedHead);
+          matGrid = new Float32Array(SEQ_LEN * SEQ_LEN);
+          for (let r = 0; r < SEQ_LEN; r++) {
+            for (let c = 0; c < SEQ_LEN; c++) {
+              if (hasComputedStage >= 4 && c > r) matGrid[r * SEQ_LEN + c] = 0;
+              else matGrid[r * SEQ_LEN + c] = Math.max(0.06, Math.min(0.95, 0.35 + raw[r * SEQ_LEN + c] * 0.35));
+            }
+          }
+        }
+        if (curCache && hasComputedStage >= 6) targetH1 = curCache.h1.subarray(activeQRow * D_MODEL, (activeQRow + 1) * D_MODEL);
+        if (curCache && hasComputedStage >= 7) targetProbs = softmaxRow(curCache.logits.subarray(activeQRow * V, (activeQRow + 1) * V), 1.0);
+      } else {
+        dispIds = (inferAnim && !inferAnim.committed) ? inferAnim.prevSeqIds : genIds;
+        activeQRow = dispIds.length - 1;
+        curCache = (inferAnim && !inferAnim.committed) ? inferAnim.cache : forwardSequence(model, dispIds, null);
+        matGrid = getHeadMatrix(curCache.attnWeights, dispIds.length, selectedHead);
+        targetH1 = curCache.h1.subarray(activeQRow * D_MODEL, (activeQRow + 1) * D_MODEL);
+        targetProbs = (inferAnim && !inferAnim.committed)
+          ? inferAnim.probs
+          : softmaxRow(curCache.logits.subarray(activeQRow * V, (activeQRow + 1) * V), temperature);
+      }
+
+      const T = dispIds.length;
+      for (let j = 0; j < V; j++) visualProbs[j] += ((targetProbs ? targetProbs[j] : 0) - visualProbs[j]) * lerpRate;
+      for (let c = 0; c < D_MODEL; c++) visualH1[c] += ((targetH1 ? targetH1[c] : 0) - visualH1[c]) * lerpRate;
+      for (let r = 0; r < T_MAX; r++) {
+        for (let c = 0; c < T_MAX; c++) {
+          const tv = (matGrid && r < T && c < T) ? matGrid[r * T + c] : 0;
+          visualAttnGrid[r * T_MAX + c] += (tv - visualAttnGrid[r * T_MAX + c]) * lerpRate;
+        }
+      }
+      const targetLoss = (isTrain && trainCache && hasComputedStage >= 7) ? trainCache.posLosses[selectedPos] : 0;
+      visualPosLoss += (targetLoss - visualPosLoss) * lerpRate;
+
+      // --- Begin 3D Frame ---
+      const theme = M.getThemeColors();
+      const { W, H } = M.beginFrame(canvas, ctx, theme);
+      const { project, eye } = M.makeProjector(W, H, cam, 1.15, 0.46);
+
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPrimary = M.parseRgb(theme.primary), rgbSuccess = M.parseRgb(theme.success);
+      const rgbError = M.parseRgb(theme.error), rgbWarning = M.parseRgb(theme.warning);
+
+      // Floor Grid
+      ctx.strokeStyle = isTrain ? M.shade(rgbBorder, 1, 0.25) : M.shade(rgbSuccess, 0.8, 0.16);
+      ctx.lineWidth = 1;
+      for (let gx = -12; gx <= 13; gx += 2.2) {
+        const a = project(gx, 0, -5.2), b = project(gx, 0, 5.2);
+        if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+      }
+      for (let gz = -5.2; gz <= 5.2; gz += 1.73) {
+        const a = project(-12, 0, gz), b = project(13, 0, gz);
+        if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+      }
+
+      // Main flow pipes
+      const pipes = [
+        [POS.seq, POS.qkv], [POS.qkv, POS.mat], [POS.mat, POS.ctxV], [POS.ctxV, POS.sm]
+      ];
+      if (isTrain) pipes.push([POS.sm, POS.loss]);
+      for (const [a, b] of pipes) {
+        M.drawPipe3D(ctx, project, { x: a.x, y: 0.35, z: a.z }, { x: b.x, y: 0.35, z: b.z }, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      }
+
+      const dl = [];
+      const seqSpan = 0.68;
+      const seqZ = idx => POS.seq.z + (idx - (T - 1) * 0.5) * seqSpan;
+
+      // 1. Sequence Token + Position Cubes on the Left
+      for (let idx = 0; idx < T; idx++) {
+        const cz = seqZ(idx);
+        const isActive = idx === activeQRow;
+        const isPast = idx < activeQRow;
+        const bh = isActive ? 1.25 : (isPast ? 0.85 : 0.35);
+        const col = isActive ? (isTrain ? rgbPrimary : rgbSuccess) : (isPast ? M.lerpRgb(rgbCard, rgbPrimary, 0.52) : rgbCard);
+        const alpha = (!isTrain || idx <= activeQRow) ? 0.94 : 0.42;
+        M.pushBox(dl, ctx, project, eye, POS.seq.x - 0.44, 0, cz - 0.25, POS.seq.x + 0.44, bh, cz + 0.25, col, alpha, isActive ? theme.fg : theme.border);
+        M.pushLabel3D(dl, ctx, project, POS.seq.x - 0.85, bh + 0.15, cz, `${idx}:${VOCAB[dispIds[idx]]}`, isActive ? (isTrain ? theme.primary : theme.success) : (isPast ? theme.fg : theme.muted), isActive ? "bold 11px monospace" : "10px monospace");
+      }
+      M.pushLabel3D(dl, ctx, project, POS.seq.x, 0.18, seqZ(T - 1) + 0.95, isTrain ? "词+位置编码 (11位)" : `历史序列 (${T}字)`, isTrain ? theme.primary : theme.success, "bold 11px sans-serif");
+
+      // 2. Active Query's Q / K / V 3-Column Projection Mini-Bars
+      const qkvLit = isTrain ? hasComputedStage >= 2 : true;
+      const qkvCols = [
+        { dx: -0.75, arr: curCache ? curCache.q : null, col: rgbPrimary, name: "Q" },
+        { dx:  0.00, arr: curCache ? curCache.k : null, col: rgbWarning, name: "K" },
+        { dx:  0.75, arr: curCache ? curCache.v : null, col: rgbSuccess, name: "V" },
+      ];
+      for (const colDef of qkvCols) {
+        const bx = POS.qkv.x + colDef.dx;
+        for (let d = 0; d < 4; d++) {
+          const bz = (d - 1.5) * 0.55;
+          const val = (qkvLit && colDef.arr) ? colDef.arr[activeQRow * D_MODEL + d] : 0;
+          const bh = qkvLit ? Math.max(0.14, Math.min(2.1, Math.abs(val) * 1.15 + 0.18)) : 0.12;
+          M.pushBox(dl, ctx, project, eye, bx - 0.22, 0, bz - 0.19, bx + 0.22, bh, bz + 0.19, qkvLit ? colDef.col : rgbCard, 0.9, theme.border);
+        }
+        M.pushLabel3D(dl, ctx, project, bx, 2.35, -1.35, colDef.name, qkvLit ? theme.fg : theme.muted, "bold 11px monospace");
+      }
+
+      // 3. Centerpiece: 3D Causal Attention Matrix (T × T Lower-Triangular Towers!)
+      const cellStep = T <= 6 ? 0.85 : 0.62;
+      const matOriginX = POS.mat.x - (T - 1) * cellStep * 0.5;
+      const matOriginZ = POS.mat.z - (T - 1) * cellStep * 0.5;
+      const cellPos = (r, c) => ({ x: matOriginX + c * cellStep, z: matOriginZ + r * cellStep });
+      const showMask = !isTrain || hasComputedStage >= 4;
+      const matLit = !isTrain || hasComputedStage >= 3;
+
+      for (let r = 0; r < T; r++) {
+        for (let c = 0; c < T; c++) {
+          const cp = cellPos(r, c);
+          const half = cellStep * 0.41;
+          const isFuture = c > r;
+          const isActiveRow = r === activeQRow;
+          if (isFuture) {
+            if (showMask) {
+              M.pushBox(dl, ctx, project, eye, cp.x - half, 0, cp.z - half, cp.x + half, 0.07, cp.z + half, M.lerpRgb(rgbCard, rgbError, 0.32), isActiveRow ? 0.72 : 0.35, theme.error);
+            } else {
+              // Stage 3 pre-mask warning preview
+              const w = visualAttnGrid[r * T_MAX + c];
+              const bh = matLit ? Math.max(0.1, w * 1.4) : 0.08;
+              M.pushBox(dl, ctx, project, eye, cp.x - half, 0, cp.z - half, cp.x + half, bh, cp.z + half, M.lerpRgb(rgbError, rgbWarning, 0.4), isActiveRow ? 0.75 : 0.35, theme.error);
+            }
+          } else {
+            const w = visualAttnGrid[r * T_MAX + c];
+            const bh = matLit ? Math.max(0.1, w * 3.8) : 0.08;
+            let col;
+            if (!matLit) col = rgbCard;
+            else if (isActiveRow) col = M.lerpRgb(rgbPrimary, rgbWarning, Math.min(1, w * 1.4));
+            else col = M.lerpRgb(rgbCard, rgbPrimary, 0.25 + w * 0.7);
+            M.pushBox(dl, ctx, project, eye, cp.x - half, 0, cp.z - half, cp.x + half, bh, cp.z + half, col, isActiveRow ? 0.96 : 0.65, isActiveRow ? theme.fg : theme.border);
+          }
+        }
+      }
+      M.pushLabel3D(
+        dl, ctx, project, POS.mat.x, 4.15, POS.mat.z - 2.6,
+        showMask ? `因果注意力矩阵 (${T}×${T} · 下三角可见 / 红区=-∞)` : `未掩码打分 S=Q·Kᵀ/√d（右上角有偷看风险！）`,
+        showMask ? (isTrain ? theme.primary : theme.success) : theme.error, "bold 11px sans-serif"
+      );
+
+      // Live Attention Beams from high-weight historical Keys on activeQRow -> Context Vector!
+      if ((!isTrain || hasComputedStage >= 5) && matGrid) {
+        for (let j = 0; j <= activeQRow; j++) {
+          const w = matGrid[activeQRow * T + j];
+          if (w < 0.08) continue;
+          const cp = cellPos(activeQRow, j);
+          const from = { x: cp.x, y: Math.max(0.3, visualAttnGrid[activeQRow * T_MAX + j] * 3.8), z: cp.z };
+          const to = { x: POS.ctxV.x, y: 1.2, z: POS.ctxV.z };
+          M.drawBezierArc3D(ctx, project, from, to, 1.4 + w * 1.4, 1.0, isTrain ? theme.warning : theme.success, 1.0 + w * 3.2, false);
+        }
+      }
+
+      // 4. Context + Residual Vector h1 (8 dims)
+      const h1Lit = !isTrain || hasComputedStage >= 6;
+      for (let d = 0; d < D_MODEL; d++) {
+        const hz = POS.ctxV.z + (d - 3.5) * 0.48;
+        const v = visualH1[d];
+        const bh = h1Lit ? Math.max(0.14, Math.min(2.5, Math.abs(v) * 0.95 + 0.16)) : 0.12;
+        const col = !h1Lit ? rgbCard : (v >= 0 ? rgbSuccess : rgbError);
+        M.pushBox(dl, ctx, project, eye, POS.ctxV.x - 0.32, 0, hz - 0.17, POS.ctxV.x + 0.32, bh, hz + 0.17, col, 0.9, theme.border);
+      }
+      M.pushLabel3D(dl, ctx, project, POS.ctxV.x, 2.75, POS.ctxV.z, "h1 = h0 + Context·Wo", h1Lit ? theme.success : theme.muted, "bold 10px monospace");
+
+      // 5. 10 Softmax Probability Towers
+      const smLit = !isTrain || hasComputedStage >= 7;
+      const pickedNow = (!isTrain && inferAnim && inferU >= 0.56) ? inferAnim.nextId : -1;
+      let topJ = 0;
+      for (let j = 1; j < V; j++) if (visualProbs[j] > visualProbs[topJ]) topJ = j;
+
+      for (let j = 0; j < V; j++) {
+        const sz = POS.sm.z + (j - 4.5) * 0.62;
+        const p = visualProbs[j];
+        const bh = smLit ? Math.max(0.08, p * 4.5) : 0.08;
+        let col, strokeCol, lblCol, isBold;
+        if (isTrain) {
+          const isTgt = j === TRAIN_TARGET[selectedPos];
+          col = !smLit ? rgbBorder : (isTgt ? rgbSuccess : rgbPrimary);
+          strokeCol = isTgt ? theme.fg : theme.border;
+          lblCol = isTgt ? theme.success : theme.muted;
+          isBold = isTgt;
+        } else {
+          const isPicked = j === pickedNow;
+          col = isPicked ? rgbSuccess : (j === topJ ? M.lerpRgb(rgbPrimary, rgbSuccess, 0.35) : rgbPrimary);
+          strokeCol = isPicked ? theme.fg : theme.border;
+          lblCol = isPicked ? theme.success : theme.muted;
+          isBold = isPicked;
+        }
+        M.pushBox(dl, ctx, project, eye, POS.sm.x - 0.28, 0, sz - 0.22, POS.sm.x + 0.28, bh, sz + 0.22, col, smLit ? 0.92 : 0.45, strokeCol);
+        const lbl = smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`;
+        M.pushLabel3D(dl, ctx, project, POS.sm.x + 0.85, 0.15, sz, lbl, lblCol, isBold ? "bold 11px monospace" : "10px monospace");
+      }
+      M.pushLabel3D(
+        dl, ctx, project, POS.sm.x, 4.95, POS.sm.z,
+        isTrain ? "训练概率塔 (T=1.0)" : `推理温度概率塔 (T=${temperature.toFixed(1)})`,
+        isTrain ? theme.primary : theme.success, "bold 11px monospace"
+      );
+
+      // 6. TRAINING-ONLY: Sample Loss Pillar (Completely Hidden in Infer Mode!)
+      if (isTrain) {
+        if (visualPosLoss < 0.01 && hasComputedStage < 7) {
+          M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.6, 0, POS.loss.z - 0.6, POS.loss.x + 0.6, 0.08, POS.loss.z + 0.6, rgbBorder, 0.5, theme.border);
+          M.pushLabel3D(dl, ctx, project, POS.loss.x, 0.55, POS.loss.z, "位置Loss: 0 (未计算)", theme.muted, "bold 10px monospace");
+        } else {
+          const lh = Math.max(0.14, Math.min(4.6, visualPosLoss * 1.45));
+          M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.6, 0, POS.loss.z - 0.6, POS.loss.x + 0.6, lh, POS.loss.z + 0.6, rgbWarning, 0.92, theme.fg);
+          M.pushLabel3D(dl, ctx, project, POS.loss.x, lh + 0.5, POS.loss.z, `pos[${selectedPos}] Loss ${visualPosLoss.toFixed(2)}`, theme.warning, "bold 11px monospace");
+        }
+      } else {
+        M.pushLabel3D(dl, ctx, project, 0.5, 0.22, 4.45, "🟢 推理模式：仅用同一套自注意力权重做纯前向（无 Loss · 无反传）", theme.success, "bold 12px sans-serif");
+      }
+
+      // 7. Active Stage / Inference Motion Orbs
+      const ptOf = (p, y = 1.2) => ({ x: p.x, y, z: p.z });
+      if (isTrain) {
+        if (currentStage === 1) {
+          const from = { x: POS.seq.x, y: 1.2, z: seqZ(activeQRow) };
+          const to = ptOf(POS.qkv, 1.3);
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, stageT, theme.primary, 2.5, true);
+          const cur = M.evalArc(from, to, 1.8, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.primary, theme.primary, CHARS[activeQRow], "#fff");
+        } else if (currentStage === 2) {
+          const from = ptOf(POS.qkv, 1.4);
+          const to = { x: POS.mat.x, y: 1.3, z: cellPos(activeQRow, Math.floor(activeQRow / 2)).z };
+          M.drawBezierArc3D(ctx, project, from, to, 1.6, stageT, theme.warning, 2.4);
+          const cur = M.evalArc(from, to, 1.6, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "QKV", "#000");
+        } else if (currentStage === 3 || currentStage === 4 || currentStage === 5) {
+          // Spotlight scanning across row activeQRow
+          const scanC = currentStage === 3 ? stageT * (T - 1) : stageT * activeQRow;
+          const sx = matOriginX + scanC * cellStep;
+          const sz = matOriginZ + activeQRow * cellStep;
+          const orbCol = currentStage === 4 ? theme.error : theme.primary;
+          M.pushOrb(dl, ctx, project, sx, 2.2, sz, 0.28, orbCol, orbCol, currentStage === 4 ? "×" : "α", "#fff");
+        } else if (currentStage === 6) {
+          const from = { x: POS.mat.x, y: 1.8, z: cellPos(activeQRow, activeQRow).z };
+          const to = ptOf(POS.ctxV, 1.4);
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, stageT, theme.success, 2.8);
+          const cur = M.evalArc(from, to, 1.8, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, "h1", "#000");
+        } else if (currentStage === 7) {
+          const targetZ = POS.sm.z + (TRAIN_TARGET[selectedPos] - 4.5) * 0.62;
+          const from = { x: POS.sm.x, y: Math.max(0.5, visualProbs[TRAIN_TARGET[selectedPos]] * 4.5), z: targetZ };
+          const to = { x: POS.loss.x, y: Math.max(0.5, visualPosLoss * 1.45), z: POS.loss.z };
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, stageT, theme.warning, 2.8);
+          const cur = M.evalArc(from, to, 1.8, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
+        } else if (currentStage === 8) {
+          const wps = [POS.loss, POS.sm, POS.ctxV, POS.mat, POS.qkv, POS.seq];
+          const segF = stageT * (wps.length - 1);
+          const segI = Math.min(wps.length - 2, Math.floor(segF));
+          const segU = segF - segI;
+          const a = ptOf(wps[segI], 1.7), b = ptOf(wps[segI + 1], 1.7);
+          M.drawBezierArc3D(ctx, project, a, b, 1.5, segU, theme.warning, 2.8, true);
+          const cur = M.evalArc(a, b, 1.5, segU);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, theme.warning, theme.warning, "∂", "#000");
+        }
+      } else if (inferAnim) {
+        if (inferU < 0.28) {
+          const p1 = inferU / 0.28;
+          const from = { x: POS.seq.x, y: 1.2, z: seqZ(activeQRow) };
+          const to = ptOf(POS.qkv, 1.3);
+          M.drawBezierArc3D(ctx, project, from, to, 1.7, p1, theme.primary, 2.4);
+          const pt = M.evalArc(from, to, 1.7, p1);
+          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.26, theme.primary, theme.primary, VOCAB[dispIds[activeQRow]], "#fff");
+        } else if (inferU < 0.56) {
+          const p2 = (inferU - 0.28) / 0.28;
+          const wps = [POS.qkv, POS.mat, POS.ctxV, POS.sm];
+          const segF = p2 * (wps.length - 1);
+          const segI = Math.min(wps.length - 2, Math.floor(segF));
+          const segU = segF - segI;
+          const a = ptOf(wps[segI], 1.5), b = ptOf(wps[segI + 1], 1.5);
+          M.drawBezierArc3D(ctx, project, a, b, 1.6, segU, theme.success, 2.8);
+          const pt = M.evalArc(a, b, 1.6, segU);
+          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.28, theme.success, theme.success, "→", "#000");
+        } else if (inferU < 0.78) {
+          const p3 = (inferU - 0.56) / 0.22;
+          const targetZ = POS.sm.z + (inferAnim.nextId - 4.5) * 0.62;
+          const targetY = Math.max(0.5, visualProbs[inferAnim.nextId] * 4.5) + 0.55;
+          const sweepZ = POS.sm.z - 2.8 + (targetZ - (POS.sm.z - 2.8)) * p3;
+          const dropY = 3.9 - (3.9 - targetY) * p3;
+          M.pushOrb(dl, ctx, project, POS.sm.x, dropY, sweepZ, 0.34, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
+          M.pushLabel3D(dl, ctx, project, POS.sm.x, dropY + 0.65, sweepZ, `🎲 抽中「${VOCAB[inferAnim.nextId]}」`, theme.success, "bold 12px sans-serif", -0.5);
+        } else {
+          const p4 = (inferU - 0.78) / 0.22;
+          const from = { x: POS.sm.x, y: Math.max(0.6, visualProbs[inferAnim.nextId] * 4.5) + 0.4, z: POS.sm.z + (inferAnim.nextId - 4.5) * 0.62 };
+          const to = { x: POS.seq.x, y: 1.1, z: seqZ(T - 1) + 0.6 };
+          M.drawBezierArc3D(ctx, project, from, to, 4.6, p4, theme.warning, 3.0, true);
+          const pt = M.evalArc(from, to, 4.6, p4);
+          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.36, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
+        }
+      }
+
+      M.flushDrawList(dl);
+      ctx.restore();
+      requestAnimationFrame(renderFrame);
+    }
+
+    // =========================================================================
+    // 7. Controls Wiring & Boot
+    // =========================================================================
+    function initAll() {
+      model = createModel(42);
+      trainStepCount = 0;
+      viewMode = "train";
+      mode = "idle";
+      currentStage = 0;
+      stage8Applied = false;
+      trainCache = null;
+      hasComputedStage = 0;
+      lastUpdateReport = null;
+      visualProbs.fill(0);
+      visualH1.fill(0);
+      visualAttnGrid.fill(0);
+      visualPosLoss = 0;
+      genIds = genStartStr.split("").map(ch => STOI[ch]);
+      lastGenDraw = null;
+      inferAnim = null;
+      setTrainNarrator(
+        `准备就绪：已选中 pos[${selectedPos}]「${prefixStr(selectedPos)} → ${CHARS[selectedPos + 1]}」，点一次「⏭ 下一步」开始拆解自注意力！`,
+        `当前为 🔵 训练模式（11 个位置并行计算 + 因果下三角掩码）。想从单字「床」直接体验自注意力接龙？点下方「🎲 推理下一个字」！`
+      );
+      setInferNarrator(
+        "🟢 推理模式：自注意力只需 1 个字就能起步（已隐藏 Loss 与反传，绝不改权重）",
+        "拖动「温度 T」实时看右侧 10 座 3D 概率塔变形；点「🎲 推理下一个字」看最后 1 字发射注意力光束扫描全部历史！"
+      );
+      document.getElementById("genReadout").textContent = "不用凑满 3 字！直接从 1 个「床」字点「🎲 推理下一个字」试试！";
+      renderAllUi();
+    }
+
+    document.getElementById("btnModeTrain").onclick = () => setViewMode("train");
+    document.getElementById("btnModeInfer").onclick = () => setViewMode("infer");
+
+    document.getElementById("btnNextStep").onclick = () => {
+      setViewMode("train");
+      flushPendingStage8();
+      mode = "step";
+      enterStage(currentStage >= 8 ? 1 : currentStage + 1, performance.now());
+    };
+
+    document.getElementById("btnAutoPlay").onclick = () => {
+      setViewMode("train");
+      flushPendingStage8();
+      if (mode === "autoplay") { mode = "step"; updateTrainingHud(); }
+      else { mode = "autoplay"; enterStage(currentStage >= 8 || currentStage === 0 ? 1 : currentStage, performance.now()); }
+    };
+
+    document.getElementById("btnTrain1").onclick = () => {
+      setViewMode("train");
+      flushPendingStage8();
+      mode = "idle"; currentStage = 0;
+      performOneAdamWStep();
+      renderAllUi();
+      const r = lastUpdateReport;
+      setTrainNarrator(
+        `+1 训练 step 完成（Step ${r.step}）！全序列 Loss: ${r.beforeSeq.toFixed(4)} → ${r.afterSeq.toFixed(4)}`,
+        `pos[${selectedPos}]「${CHARS[selectedPos]}→${CHARS[selectedPos + 1]}」Loss: ${r.beforePos.toFixed(4)} → ${r.afterPos.toFixed(4)}（已用新权重重算）。`
+      );
+    };
+
+    document.getElementById("btnTrain60").onclick = () => {
+      setViewMode("train");
+      flushPendingStage8();
+      mode = "train60"; currentStage = 8; stage8Applied = true;
+      train60Remaining = 60; lastTrainTick = performance.now();
+      updateTrainingHud();
+    };
+
+    document.getElementById("btnReset").onclick = () => {
+      initAll();
+      setTrainNarrator(
+        "已重置全部 522 个自注意力权重（Step 归 0，Loss 与注意力山峰归零）",
+        "点「⏭ 下一步」一步步走完 8 步，或点「⚡ 快速训练 60 step」看因果注意力学会整首短诗！"
+      );
+    };
+
+    document.getElementById("genStartSelect").onchange = e => {
+      inferAnim = null;
+      genStartStr = e.target.value;
+      genIds = genStartStr.split("").map(ch => STOI[ch]);
+      lastGenDraw = null;
+      setViewMode("infer");
+      renderInferenceStrip();
+      const txt = `接龙起点已切为「${genStartStr}」（长度 ${genIds.length}，共享权重 Step ${trainStepCount} 未变）`;
+      document.getElementById("genReadout").textContent = txt;
+      setInferNarrator(`🟢 ${txt}`, "点击「🎲 推理下一个字」观看末字回望全部历史并抽出下一个字！");
+    };
+
+    document.getElementById("btnGenNext").onclick = () => {
+      setViewMode("infer");
+      flushPendingInfer();
+      const curIds = [...genIds];
+      const prevSeqStr = curIds.map(id => VOCAB[id]).join("");
+      const cache = forwardSequence(model, curIds, null);
+      const lastOff = (curIds.length - 1) * V;
+      const probs = softmaxRow(cache.logits.subarray(lastOff, lastOff + V), temperature);
+
+      const r = Math.random();
+      let cdf = 0, nextId = V - 1;
+      for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
+
+      inferAnim = {
+        startMs: performance.now(),
+        prevSeqIds: curIds,
+        prevSeqStr,
+        nextId,
+        prob: probs[nextId],
+        dice: r,
+        probs,
+        cache,
+        committed: false,
+      };
+      document.getElementById("genReadout").textContent =
+        `正在 3D 自注意力推理「${prevSeqStr}」(T=${temperature.toFixed(1)})...`;
+    };
+
+    document.getElementById("btnGenReset").onclick = () => {
+      inferAnim = null;
+      genIds = genStartStr.split("").map(ch => STOI[ch]);
+      lastGenDraw = null;
+      setViewMode("infer");
+      renderInferenceStrip();
+      const txt = `已重置接龙序列为「${genStartStr}」（已训练权重 Step ${trainStepCount} 完整保留）`;
+      document.getElementById("genReadout").textContent = txt;
+      setInferNarrator(`🟢 ${txt}`, "点击「🎲 推理下一个字」重新观看自注意力接龙动画！");
+    };
+
+    document.getElementById("headSelect").onchange = e => {
+      selectedHead = parseInt(e.target.value, 10);
+      renderHeatmapAndBreakdown();
+    };
+    document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
+    document.getElementById("camIso").onclick = () => cam.setPreset(-0.44, 0.56, 31.0);
+    document.getElementById("camTop").onclick = () => cam.setPreset(0.0, 1.38, 28.5);
+    document.getElementById("camFront").onclick = () => cam.setPreset(0.0, 0.24, 27.5);
+    document.getElementById("camOrbit").onclick = () => { cam.autoOrbit = !cam.autoOrbit; };
+
+    document.getElementById("lrSlider").oninput = e => {
+      lr = parseFloat(e.target.value);
+      document.getElementById("lrVal").textContent = lr.toFixed(3);
+    };
+    document.getElementById("tempSlider").oninput = e => {
+      temperature = parseFloat(e.target.value);
+      document.getElementById("tempVal").textContent = temperature.toFixed(1);
+      setViewMode("infer");
+      renderInferenceStrip();
+    };
+
+    initAll();
+    requestAnimationFrame(renderFrame);
+  </script>
+</body>
+</html>

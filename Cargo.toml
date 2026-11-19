@@ -4,4 +4,5 @@ members = [
     "crates/mini-core",
     "crates/step01-bigram",
     "crates/step02-autograd",
+    "crates/step03-attention",
 ]
