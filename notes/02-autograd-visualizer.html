@@ -964,6 +964,7 @@
     ];
 
     const visualProbs = new Float32Array(V);
+    const visualX = new Float32Array(IN_DIM);
     const visualZ1 = new Float32Array(HIDDEN);
     const visualH = new Float32Array(HIDDEN);
     let visualSampleLoss = 0.0;
@@ -1708,6 +1709,10 @@
         const tp = targetProbs ? targetProbs[j] : 0;
         visualProbs[j] += (tp - visualProbs[j]) * lerpRate;
       }
+      for (let i = 0; i < IN_DIM; i++) {
+        const tx = liveX ? liveX[i] : 0;
+        visualX[i] += (tx - visualX[i]) * lerpRate;
+      }
       for (let k = 0; k < HIDDEN; k++) {
         const tz = targetZ1 ? targetZ1[k] : 0;
         const th = targetH ? targetH[k] : 0;
@@ -1798,16 +1803,22 @@
         }
       }
 
-      // 3. x (12-dim concatenated embedding mini-bars)
+      // 3. x (ALL 12 concatenated embedding dims: 3 char groups × 4 dims = 12 real bars!)
       const xLit = isTrain ? hasComputedForwardStage >= 2 : true;
-      for (let i = 0; i < 6; i++) {
-        const xz = POS.xVec.z + (i - 2.5) * 0.55;
-        const val = xLit && liveX ? liveX[i * 2] : 0;
-        const bh = xLit ? Math.max(0.18, Math.min(2.2, Math.abs(val) * 1.4 + 0.25)) : 0.15;
-        const col = !xLit ? rgbCard : (val >= 0 ? M.lerpRgb(rgbCard, rgbPrimary, 0.75) : M.lerpRgb(rgbCard, rgbError, 0.65));
-        M.pushBox(dl, ctx, project, eye, POS.xVec.x - 0.35, 0, xz - 0.2, POS.xVec.x + 0.35, bh, xz + 0.2, col, 0.92, theme.border);
+      for (let slot = 0; slot < CTX_LEN; slot++) {
+        const groupZ = POS.xVec.z + (slot - 1) * 1.38;
+        // Thin base tray per character so the 3×4 = 12 grouping is unmistakable
+        M.pushBox(dl, ctx, project, eye, POS.xVec.x - 0.36, 0, groupZ - 0.56, POS.xVec.x + 0.36, 0.06, groupZ + 0.56, rgbCard, 0.85, xLit ? theme.primary : theme.border);
+        for (let d = 0; d < EMB_DIM; d++) {
+          const idx = slot * EMB_DIM + d;
+          const xz = groupZ + (d - 1.5) * 0.28;
+          const val = xLit ? visualX[idx] : 0;
+          const bh = xLit ? Math.max(0.14, Math.min(2.15, Math.abs(val) * 1.45 + 0.20)) : 0.12;
+          const col = !xLit ? rgbCard : (val >= 0 ? M.lerpRgb(rgbCard, rgbPrimary, 0.78) : M.lerpRgb(rgbCard, rgbError, 0.68));
+          M.pushBox(dl, ctx, project, eye, POS.xVec.x - 0.30, 0.06, xz - 0.105, POS.xVec.x + 0.30, 0.06 + bh, xz + 0.105, col, 0.94, theme.border);
+        }
       }
-      M.pushLabel3D(dl, ctx, project, POS.xVec.x, 2.55, POS.xVec.z, "x (拼接12维)", xLit ? theme.primary : theme.muted, "bold 11px monospace");
+      M.pushLabel3D(dl, ctx, project, POS.xVec.x, 2.55, POS.xVec.z, "x (3×4=12维)", xLit ? theme.primary : theme.muted, "bold 11px monospace");
 
       // 4. z1 (8 pre-activations)
       const zLit = isTrain ? hasComputedForwardStage >= 3 : true;
@@ -2070,6 +2081,7 @@
       hasEverUpdated = false;
       lastUpdateReport = null;
       visualProbs.fill(0);
+      visualX.fill(0);
       visualZ1.fill(0);
       visualH.fill(0);
       visualSampleLoss = 0;
