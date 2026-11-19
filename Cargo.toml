@@ -2,4 +2,5 @@
 resolver = "3"
 members = [
     "crates/step01-bigram",
+    "crates/step02-autograd",
 ]
