@@ -206,7 +206,7 @@
             </label>
           </div>
           <div class="flex">
-            <button id="btnHopOne" class="primary">🎲 跳下一个字</button>
+            <button id="btnHopOne" class="primary">🎲 推理下一个字</button>
             <button id="btnGenReset">↺ 重置接龙</button>
           </div>
         </div>
@@ -650,7 +650,7 @@
         if (growRemaining <= 0) {
           mode = "idle"; currentStage = 0; progWrap.classList.add("hidden"); updateHud();
           setNarrator(`🎉 50 轮训练完成！Epoch ${epoch}（Loss = ${displayedLoss.toFixed(4)}，逼近下界 0.126）`,
-            `现在试试拖动底部「温度 T」滑块看右侧 3D 概率塔实时变形，再点「🎲 跳下一个字」！`);
+            `现在试试拖动底部「温度 T」滑块看右侧 3D 概率塔实时变形，再点「🎲 推理下一个字」！`);
         }
       } else if (mode === "hop") {
         progWrap.classList.add("hidden");
