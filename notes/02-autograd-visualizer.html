@@ -3,47 +3,287 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Step 02：Arena-Tape 自动求导与链式法则 3D 建模动画（离线版）</title>
+  <title>Step 02：Autograd 与三字上下文 MLP 3D 建模动画（离线版）</title>
   <link rel="stylesheet" href="./assets/visualizer.css" />
+  <style>
+    .section-tag {
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .section-tag.train {
+      background: color-mix(in srgb, var(--primary) 18%, var(--content));
+      border: 1px solid color-mix(in srgb, var(--primary) 55%, var(--border));
+      color: var(--primary);
+    }
+    .section-tag.infer {
+      background: color-mix(in srgb, var(--success) 16%, var(--content));
+      border: 1px solid color-mix(in srgb, var(--success) 55%, var(--border));
+      color: var(--success);
+    }
+    .corpus-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .corpus-char {
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      font-size: 13px;
+      transition: all 0.2s ease;
+    }
+    .corpus-char.ctx {
+      background: color-mix(in srgb, var(--primary) 24%, var(--content));
+      border-color: var(--primary);
+      color: var(--foreground);
+      font-weight: 700;
+    }
+    .corpus-char.tgt {
+      background: color-mix(in srgb, var(--success) 24%, var(--content));
+      border-color: var(--success);
+      color: var(--success);
+      font-weight: 700;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 7fr 5fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    @media (max-width: 960px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .subpanel {
+      background: var(--content);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      min-width: 0;
+    }
+    .tape-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 8px;
+    }
+    @media (max-width: 720px) {
+      .tape-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    .tape-slot {
+      padding: 5px 6px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      text-align: left;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+    }
+    .tape-slot:hover { border-color: var(--primary); }
+    .tape-slot.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+    .tape-slot.fwd { border-color: color-mix(in srgb, var(--primary) 70%, var(--border)); }
+    .tape-slot.bwd { border-color: var(--warning); }
+    .tape-slot.param-kind { background: color-mix(in srgb, var(--secondary) 65%, var(--card)); }
+    .val-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 4px;
+    }
+    .val-cell {
+      padding: 2px 6px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 11px;
+    }
+    .embed-groups {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      margin-top: 4px;
+    }
+    .embed-group {
+      border-left: 2px solid var(--primary);
+      padding-left: 6px;
+    }
+    .neuron-btn {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    .neuron-btn.open { border-color: var(--success); }
+    .neuron-btn.closed { border-color: var(--error); color: var(--error); }
+    .neuron-btn.selected {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-color: var(--primary);
+    }
+    .chip.win {
+      background: color-mix(in srgb, var(--primary) 24%, var(--card));
+      border-color: var(--primary);
+      font-weight: 700;
+    }
+    .chip.latest {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-color: var(--primary);
+      font-weight: 700;
+    }
+    /* Independent Inference Card Probability Bar Chart */
+    .infer-card {
+      border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+    }
+    .prob-bars {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 8px;
+      align-items: end;
+    }
+    @media (max-width: 720px) {
+      .prob-bars { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    .prob-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+    }
+    .prob-col.picked {
+      border-color: var(--success);
+      background: color-mix(in srgb, var(--success) 16%, var(--card));
+    }
+    .prob-track {
+      width: 100%;
+      max-width: 28px;
+      height: 76px;
+      border-radius: 5px;
+      background: var(--content);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: flex-end;
+      overflow: hidden;
+    }
+    .prob-fill {
+      width: 100%;
+      background: var(--primary);
+      transition: height 0.25s ease, background-color 0.2s ease;
+    }
+    .prob-col.picked .prob-fill { background: var(--success); }
+    .roulette-bar {
+      position: relative;
+      height: 18px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      display: flex;
+      margin-top: 8px;
+      background: var(--card);
+    }
+    .roulette-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--foreground);
+      pointer-events: none;
+    }
+    .modal-card {
+      max-width: 680px;
+      width: calc(100% - 24px);
+      max-height: calc(100% - 24px);
+      overflow: auto;
+      color: var(--foreground);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .modal-card::backdrop { background: rgba(0, 0, 0, 0.55); }
+    .scalar-flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin: 10px 0;
+    }
+    .scalar-node {
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      min-width: 92px;
+    }
+    input[type="range"] { width: 88px; }
+  </style>
 </head>
 <body>
   <div class="wrap">
+
+    <!-- =================================================================== -->
+    <!-- CARD 1: TRAINING (训练区 — 独立清晰，只负责前向/Tape/反传/AdamW)      -->
+    <!-- =================================================================== -->
     <div class="card row">
       <div>
         <div class="flex">
+          <span class="section-tag train mono">训练 Training</span>
           <span class="badge mono">Step 02 · 3D 建模</span>
-          <h1>Arena-Tape 计算图 &amp; 链式法则自动求导 3D 动画（离线版）</h1>
+          <h1>Arena-Tape 自动求导 &amp; 三字上下文 MLP 语言模型</h1>
         </div>
-        <div class="xs muted" style="margin-top:3px;">
-          网络：<strong class="mono" style="color:var(--foreground)">pred = ReLU(x·w1 + b1)·w2</strong>，目标 <strong class="mono" style="color:var(--foreground)">target = 2.0</strong>（输入固定 <span class="mono">x = 2.0</span> · 左键拖拽旋转 · 滚轮缩放）
+        <div class="corpus-strip">
+          <span class="xs muted">短语料原文：</span>
+          <div id="corpusChars" class="flex" style="gap:4px;"></div>
+          <span class="xs muted" style="margin-left:6px;">
+            （<span style="color:var(--primary);font-weight:600;">蓝框 = 3字输入窗口 x</span> · <span style="color:var(--success);font-weight:600;">绿框 = 正确答案 target</span>）
+          </span>
         </div>
       </div>
       <div class="flex">
-        <button id="btnNextStep" class="primary">⏭ 下一步：① 前向 Mul+Add (1/7)</button>
+        <button id="btnNextStep" class="primary">⏭ 下一步：① 字符编码与取样 (1/8)</button>
         <button id="btnAutoPlay">▶ 自动连播</button>
-        <button id="btnTrain1">+1 推进 1 轮</button>
-        <button id="btnTrain20">⚡ 20 轮收敛</button>
-        <button id="btnDeadRelu">💀 体验 Dead ReLU</button>
-        <button id="btnReset">↺ 重置</button>
+        <button id="btnTrain1">+1 训练 step</button>
+        <button id="btnTrain40">⚡ 快速训练 40 step</button>
+        <button id="btnReset">↺ 重置权重</button>
       </div>
     </div>
 
     <div class="card">
+      <!-- Read-only 8-Stage Training Ribbon + Speed + 3D Camera -->
       <div class="row xs">
-        <div class="flex" id="stagePills" title="严格单向因果流水线：请点击「⏭ 下一步」逐步推进">
-          <span data-stage="1" class="stage-pill">① 线性前向</span>
+        <div class="flex" id="stagePills" title="训练流水线严格单向推进：请使用「⏭ 下一步」逐步执行">
+          <span data-stage="1" class="stage-pill">① 编码与取样</span>
           <span class="muted">→</span>
-          <span data-stage="2" class="stage-pill">② ReLU 门</span>
+          <span data-stage="2" class="stage-pill">② Embed拼接</span>
           <span class="muted">→</span>
-          <span data-stage="3" class="stage-pill">③ 输出与 Loss</span>
+          <span data-stage="3" class="stage-pill">③ MatMul+b1</span>
           <span class="muted">→</span>
-          <span data-stage="4" class="stage-pill">④ 反向起跑</span>
+          <span data-stage="4" class="stage-pill">④ ReLU门控</span>
           <span class="muted">→</span>
-          <span data-stage="5" class="stage-pill">⑤ 穿 ReLU 门</span>
+          <span data-stage="5" class="stage-pill">⑤ MatMul+b2</span>
           <span class="muted">→</span>
-          <span data-stage="6" class="stage-pill">⑥ 传回叶子</span>
+          <span data-stage="6" class="stage-pill">⑥ 概率与Loss</span>
           <span class="muted">→</span>
-          <span data-stage="7" class="stage-pill">⑦ 更新权重</span>
+          <span data-stage="7" class="stage-pill">⑦ Tape反传</span>
+          <span class="muted">→</span>
+          <span data-stage="8" class="stage-pill">⑧ AdamW更新</span>
         </div>
         <div class="flex">
           <label class="flex muted" style="margin-right:4px;">
@@ -55,185 +295,1186 @@
               <option value="3">3.0x 极速</option>
             </select>
           </label>
-          <button id="camIso">立体</button>
-          <button id="camFront">正视</button>
-          <button id="camTop">俯视</button>
-          <button id="camOrbit">环绕</button>
+          <button id="camIso">立体视角</button>
+          <button id="camFront">正视结构</button>
+          <button id="camTop">俯视全图</button>
+          <button id="camOrbit">自动环绕</button>
         </div>
       </div>
 
+      <!-- Training 3D Canvas (Dedicated exclusively to Training!) -->
       <div class="viewport">
         <canvas id="scene3d"></canvas>
 
         <div class="hud hud-tl mono">
-          <div>Epoch: <strong id="hudEpoch">0</strong> &nbsp;|&nbsp; Loss: <strong id="hudLoss">未计算 (0)</strong></div>
-          <div class="muted">预测 pred: <strong id="hudPred" style="color:var(--foreground)">--</strong> &nbsp;|&nbsp; 目标 target: <strong style="color:var(--success)">2.00</strong></div>
-          <div class="muted">Tape 方向: <strong id="hudTapeDir" style="color:var(--primary)">等待前向写入 Vec[0..8]</strong></div>
+          <div>
+            Step: <strong id="hudStep">0</strong>
+            &nbsp;|&nbsp; Batch平均Loss(9窗): <strong id="hudBatchLoss">未计算 (0)</strong>
+          </div>
+          <div class="muted">
+            观察样本: <strong id="hudSample" style="color:var(--foreground)">床前明 → 月</strong>
+            &nbsp;|&nbsp; 样本Loss(橙柱): <strong id="hudSampleLoss" style="color:var(--warning)">未计算 (0)</strong>
+          </div>
+          <div class="muted">
+            更新前后对照: <span id="hudBeforeAfter" style="color:var(--foreground)">尚无更新记录</span>
+          </div>
         </div>
 
         <div class="hud hud-tr">
-          <span><span class="dot" style="background:var(--primary)"></span>前向数据流</span>
-          <span><span class="dot" style="background:var(--warning)"></span>反向梯度流</span>
-          <span><span class="dot" style="background:var(--success)"></span>ReLU 畅通</span>
-          <span><span class="dot" style="background:var(--error)"></span>ReLU 截断(0)</span>
+          <span><span class="dot" style="background:var(--primary)"></span>前向张量/概率</span>
+          <span><span class="dot" style="background:var(--warning)"></span>反向梯度/Loss</span>
+          <span><span class="dot" style="background:var(--success)"></span>正值/目标/ReLU通</span>
+          <span><span class="dot" style="background:var(--error)"></span>负值/ReLU断(×0)</span>
         </div>
 
         <div class="hud hud-bottom">
           <div class="row">
-            <strong id="narratorTitle">准备就绪：点一次「⏭ 下一步」走一步 3D 自动求导动画</strong>
+            <strong id="narratorTitle">准备就绪：已选中「床前明 → 月」，点一次「⏭ 下一步」开始训练拆解！</strong>
             <div id="stageProgressWrap" class="prog-track hidden"><div id="stageProgressBar" class="prog-fill"></div></div>
           </div>
           <div id="narratorDesc" class="muted" style="margin-top:3px;">
-            上方是 3D 计算图节点，最前排是 Rust 的 Arena Tape 数组 nodes[0..8]。前向按 0→8 压栈，反向按 8→0 倒序回放！
+            本区只负责训练（建 Tape、算 Loss、反传梯度、AdamW 更新权重）。下方独立卡片是用同一份权重做纯前向推理接龙。
           </div>
         </div>
       </div>
 
-      <div class="sliders xs mono">
-        <label class="slider-box"><span class="muted">w1:</span><input id="slW1" type="range" min="-2" max="2" step="0.05" value="0.60" /><span id="valW1">0.60</span></label>
-        <label class="slider-box"><span class="muted">b1:</span><input id="slB1" type="range" min="-2" max="2" step="0.05" value="-0.40" /><span id="valB1">-0.40</span></label>
-        <label class="slider-box"><span class="muted">w2:</span><input id="slW2" type="range" min="-2" max="2" step="0.05" value="0.80" /><span id="valW2">0.80</span></label>
-        <label class="slider-box"><span class="muted">lr:</span><input id="slLr" type="range" min="0.01" max="0.20" step="0.01" value="0.05" /><span id="valLr">0.05</span></label>
+      <!-- Sample Selector + Learning Rate + Teaching Config Banner -->
+      <div class="row divider xs">
+        <div class="flex">
+          <span class="muted">选择观察样本（切换样本只改观察对象，不改权重）：</span>
+          <div id="sampleButtons" class="flex"></div>
+        </div>
+        <div class="flex">
+          <label class="flex muted">
+            学习率 lr:
+            <input id="lrSlider" type="range" min="0.005" max="0.08" step="0.005" value="0.03" />
+            <span id="lrVal" class="mono" style="color:var(--foreground); min-width:36px;">0.030</span>
+          </label>
+        </div>
+      </div>
+      <div class="xs muted" style="margin-top:6px;">
+        <strong>网页教学配置</strong>：默认用短语料全部 <strong>9 个三字窗口</strong>组成 1 个完整 batch（所有样本均参与当前更新，方便对照 <span class="mono" style="color:var(--foreground)">前明月→光</span> 与 <span class="mono" style="color:var(--foreground)">望明月→。</span>）；维度 <span class="mono">V=10, ctx=3, emb=4, H=8</span>（共 234 参数，全真实计算）。Rust 命令行版 <span class="mono">crates/step02-autograd/src/main.rs</span> 每步随机抽取 64 个窗口（<span class="mono">emb=24, H=96</span>）。
+      </div>
+
+      <!-- Training Inspector: 12-Node Arena Tape (Left) + ReLU Gate & Contrast (Right) -->
+      <div class="grid-2 xs">
+        <!-- Left: Arena Tape 12 Nodes -->
+        <div class="subpanel">
+          <div class="row">
+            <strong>Arena Tape（5 个参数节点 + 7 个操作节点，点击查看）</strong>
+            <span id="tapeCursorBadge" class="mono muted">等待前向压栈 0→11</span>
+          </div>
+          <div id="tapeGrid" class="tape-grid mono"></div>
+
+          <div class="divider" id="nodeDetailBox">
+            <div class="row mono">
+              <strong id="ndTitle" style="color:var(--primary)">TensorId(5) · x</strong>
+              <span id="ndMeta" class="muted">op: EmbedConcat | shape: (9, 12)</span>
+            </div>
+            <div id="ndDeps" class="muted mono" style="margin-top:3px;">依赖父节点：TensorId(0) emb</div>
+            <div id="ndRule" class="muted mono" style="margin-top:2px;">局部反传规则：把拼接行梯度按 token ID 累加回 emb 对应行</div>
+            <div style="margin-top:6px;">
+              <span id="ndValLabel" class="muted">前向值 <span class="mono">data</span>：</span>
+              <div id="ndVals" class="val-grid mono"></div>
+            </div>
+            <div style="margin-top:6px;">
+              <span class="muted">反向梯度 <span class="mono" style="color:var(--warning)">grad = ∂Loss/∂node</span>（与参数变化量 Δw 分开显示）：</span>
+              <div id="ndGrads" class="val-grid mono"></div>
+            </div>
+            <div id="ndDeltaWrap" class="hidden" style="margin-top:6px;">
+              <span class="muted">最近一次 AdamW 实际变化量 <span class="mono" style="color:var(--success)">Δw = w_new - w_old</span>（注意与 grad 方向相反）：</span>
+              <div id="ndDeltas" class="val-grid mono"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: ReLU Gate Inspector + Experiments + Contrast -->
+        <div class="subpanel" style="display:flex; flex-direction:column; justify-content:space-between; gap:10px;">
+          <div>
+            <div class="row">
+              <strong>ReLU 神经元闸门解剖（选中 1 个隐藏神经元，共 8 个）</strong>
+              <span id="reluGateBadge" class="mono badge">等待前向</span>
+            </div>
+            <div id="neuronButtons" class="flex mono" style="margin-top:6px;"></div>
+            <div id="reluReadout" class="tape-box mono" style="margin-top:8px; line-height:1.7;">
+              <div>训练样本 <strong id="reluSampleTag">床前明</strong> · 神经元 <strong id="reluNeuronTag">#0</strong>：</div>
+              <div>线性输入 <span style="color:var(--primary)">z = (xW1 + b1)[k]</span> = <strong id="reluZVal">--</strong></div>
+              <div>门控输出 <span style="color:var(--success)">h = max(0, z)</span> = <strong id="reluHVal">--</strong></div>
+              <div>反传梯度：<span style="color:var(--warning)">传入 dH</span> = <strong id="reluDhVal">--</strong> &nbsp;→&nbsp; <span style="color:var(--warning)">传回 dZ</span> = <strong id="reluDzVal">--</strong></div>
+              <div id="reluRuleHint" class="muted" style="margin-top:2px;">门的状态完全由真实 z 决定：z &gt; 0 时梯度 ×1 放行，z ≤ 0 时梯度 ×0 截断。</div>
+            </div>
+            <div class="flex" style="margin-top:8px;">
+              <button id="btnDeadRelu" title="构造负偏置 b1=-3.2 使 z<=0，门状态仍由 ReLU 自动算出">💀 体验 Dead ReLU</button>
+              <button id="btnScalarModal" title="打开独立标量小例子细看单条链式法则乘法">🔍 放大看链式法则</button>
+            </div>
+          </div>
+
+          <div class="divider">
+            <strong>对照观察：「前明月 → 光」 vs 「望明月 → 。」</strong>
+            <div class="muted mono" style="margin-top:4px; line-height:1.6;">
+              <div>· 末尾都是「月」，但前两字不同 → 拼接出的 12 维输入 x 不同：</div>
+              <div id="contrastRowA">「前明月」预测：待第 ⑥ 步或训练后查看</div>
+              <div id="contrastRowB">「望明月」预测：待第 ⑥ 步或训练后查看</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- =================================================================== -->
+    <!-- CARD 2: INFERENCE (推理区 — 独立卡片！纯前向接龙，不建Tape不改权重)   -->
+    <!-- =================================================================== -->
+    <section class="card infer-card" aria-labelledby="inferTitle">
+      <div class="row">
+        <div class="flex">
+          <span class="section-tag infer mono">推理 Inference</span>
+          <h2 id="inferTitle" style="margin:0; font-size:15px;">三字自回归接龙（共享上方同一份已训练权重）</h2>
+          <span id="inferWeightTag" class="badge mono">当前权重：Step 0</span>
+        </div>
+        <div class="flex xs">
+          <label class="flex muted">
+            起始3字窗口:
+            <select id="genStartSelect" class="mono"></select>
+          </label>
+          <label class="flex muted">
+            温度 T:
+            <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.7" />
+            <span id="tempVal" class="mono" style="color:var(--foreground); min-width:24px;">0.7</span>
+          </label>
+          <button id="btnGenNext" class="primary">🎲 推理下一个字</button>
+          <button id="btnGenReset">↺ 重置接龙</button>
+        </div>
+      </div>
+
+      <div class="xs muted" style="margin-top:6px;">
+        <strong>与上方训练区的区别</strong>：推理阶段<strong>没有 target、不建 Tape、不算 Loss、不修改任何权重</strong>。每次只取末尾 3 个字做一次前向传播，经温度 <span class="mono">Softmax(logits / T)</span> 掷骰子抽 1 个字，再把新字拼回末尾滑动窗口继续预测。
+      </div>
+
+      <!-- Sliding Window Sequence Tape -->
+      <div class="tape-box row xs">
+        <div class="flex">
+          <span class="muted">接龙序列（蓝框 = 下一步输入的最后 3 字）：</span>
+          <div id="genTape" class="flex mono"></div>
+        </div>
+        <span id="genWindowBadge" class="mono" style="color:var(--primary); font-weight:600;">下一步输入窗口：「床前明」</span>
+      </div>
+
+      <!-- Independent Live Temperature Softmax Distribution & Roulette -->
+      <div style="margin-top:10px;" class="xs">
+        <div class="row">
+          <span id="inferDistTitle" class="muted mono">当前输入窗口「床前明」的温度 Softmax(logits / T=0.7) 概率分布：</span>
+          <span id="genReadout" class="mono" style="color:var(--foreground)">点击「🎲 推理下一个字」体验单步采样与窗口右滑</span>
+        </div>
+        <div id="inferProbBars" class="prob-bars mono"></div>
+        <div id="inferRoulette" class="roulette-bar" title="轮盘赌区间与最近一次骰子落点 r"></div>
+      </div>
+    </section>
+
   </div>
+
+  <!-- Optional Modal: Pure Scalar Chain Rule (Different x=1.5 & target=3.0) -->
+  <dialog id="scalarModal" class="modal-card xs" aria-labelledby="scalarTitle">
+    <div class="row">
+      <div>
+        <span class="badge mono">🔍 放大看链式法则（标量版）</span>
+        <strong id="scalarTitle" style="margin-left:6px; font-size:14px;">单条数值路径上的局部导数连乘</strong>
+      </div>
+      <button id="btnCloseScalar">✕ 关闭</button>
+    </div>
+    <div class="muted" style="margin-top:6px;">
+      这里故意用不同的输入 <span class="mono">x = 1.5</span> 和目标 <span class="mono">target = 3.0</span>，只看 1 个标量神经元 <span class="mono">pred = ReLU(x·w1 + b1)·w2</span>、<span class="mono">L = (pred - target)²</span>，直观核对每一步“上游梯度 × 局部导数”。
+    </div>
+    <div class="scalar-flow mono" id="scalarFlow"></div>
+    <div class="sliders mono" style="margin-top:10px;">
+      <label class="slider-box"><span class="muted">w1:</span><input id="scW1" type="range" min="-2" max="2" step="0.1" value="0.8" /><span id="scW1V">0.8</span></label>
+      <label class="slider-box"><span class="muted">b1:</span><input id="scB1" type="range" min="-2" max="2" step="0.1" value="-0.3" /><span id="scB1V">-0.3</span></label>
+      <label class="slider-box"><span class="muted">w2:</span><input id="scW2" type="range" min="-2" max="2" step="0.1" value="1.2" /><span id="scW2V">1.2</span></label>
+      <label class="slider-box"><span class="muted">x:</span><input id="scX" type="range" min="-2" max="3" step="0.1" value="1.5" /><span id="scXV">1.5</span></label>
+    </div>
+    <div id="scalarChainText" class="tape-box mono" style="margin-top:10px; line-height:1.7;"></div>
+  </dialog>
 
   <script src="./assets/engine3d.js"></script>
   <script>
     const M = window.Mini3D;
 
-    const X_VAL = 2.0, TARGET = 2.0;
-    let w1 = 0.60, b1 = -0.40, w2 = 0.80, lr = 0.05, epoch = 0;
+    // =========================================================================
+    // 1. Corpus, Tokenizer & 9 Three-Char Windows (Same Corpus as Step 01)
+    // =========================================================================
+    const CORPUS = "床前明月光，举头望明月。";
+    const CHARS = CORPUS.split("");
+    const VOCAB = Array.from(new Set(CHARS)).sort();
+    const V = VOCAB.length; // 10
+    const STOI = Object.fromEntries(VOCAB.map((ch, i) => [ch, i]));
+    const DATA = CHARS.map(ch => STOI[ch]);
 
-    const nodeVals = new Array(9).fill(null);
-    const nodeGrads = new Array(9).fill(null);
-    let forwardStale = false, visualLoss = 0.0;
-    let visualW = { w1, b1, w2 };
+    const CTX_LEN = 3;
+    const EMB_DIM = 4;
+    const IN_DIM = CTX_LEN * EMB_DIM; // 12
+    const HIDDEN = 8;
 
-    function computeExact() {
-      const m = X_VAL * w1, z = m + b1, h = Math.max(0, z), pred = h * w2;
-      const diff = pred - TARGET, loss = diff * diff;
-      const dLoss = 1.0, dPred = 2.0 * diff * dLoss, dW2 = dPred * h, dH = dPred * w2;
-      const dZ = z > 0 ? dH : 0.0, dB1 = dZ, dM = dZ, dW1 = dM * X_VAL, dX = dM * w1;
-      return { vals: [X_VAL, w1, b1, m, z, w2, h, pred, loss], grads: [dX, dW1, dB1, dM, dZ, dW2, dH, dPred, dLoss] };
+    const SAMPLES = [];
+    for (let i = 0; i <= DATA.length - CTX_LEN - 1; i++) {
+      SAMPLES.push({
+        start: i,
+        ctxIds: DATA.slice(i, i + CTX_LEN),
+        ctxText: CHARS.slice(i, i + CTX_LEN).join(""),
+        targetId: DATA[i + CTX_LEN],
+        targetChar: CHARS[i + CTX_LEN],
+      });
     }
+    const BATCH_CTX = SAMPLES.map(s => s.ctxIds);
+    const BATCH_TARGETS = SAMPLES.map(s => s.targetId);
 
-    function applySgd(refreshForward = false) {
-      const snap = computeExact();
-      w1 -= lr * snap.grads[1]; b1 -= lr * snap.grads[2]; w2 -= lr * snap.grads[5];
-      epoch += 1; syncSliders();
-      if (refreshForward) {
-        const after = computeExact();
-        for (let i = 0; i < 9; i++) { nodeVals[i] = after.vals[i]; nodeGrads[i] = after.grads[i]; }
-        forwardStale = false;
-      } else {
-        nodeVals[1] = w1; nodeVals[2] = b1; nodeVals[5] = w2; forwardStale = true;
+    // Deterministic Seeded RNG (matches crates/mini-core/src/rng.rs)
+    class Rng {
+      constructor(seed) {
+        let z = (BigInt(seed) + 0x9E3779B97F4A7C15n) & 0xFFFFFFFFFFFFFFFFn;
+        z = ((z ^ (z >> 30n)) * 0xBF58476D1CE4E5B9n) & 0xFFFFFFFFFFFFFFFFn;
+        z = ((z ^ (z >> 27n)) * 0x94D049BB133111EBn) & 0xFFFFFFFFFFFFFFFFn;
+        z = z ^ (z >> 31n);
+        this.state = z === 0n ? 1n : z;
+      }
+      nextU64() {
+        let x = this.state;
+        x = (x ^ ((x << 13n) & 0xFFFFFFFFFFFFFFFFn)) & 0xFFFFFFFFFFFFFFFFn;
+        x = (x ^ (x >> 7n)) & 0xFFFFFFFFFFFFFFFFn;
+        x = (x ^ ((x << 17n) & 0xFFFFFFFFFFFFFFFFn)) & 0xFFFFFFFFFFFFFFFFn;
+        this.state = x;
+        return x;
+      }
+      nextF32() {
+        return Number(this.nextU64() >> 40n) / 16777216;
+      }
+      normal(std) {
+        const u1 = Math.max(this.nextF32(), 1e-7);
+        const u2 = this.nextF32();
+        return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2) * std;
       }
     }
 
-    let mode = "idle", currentStage = 0, stageStartMs = 0, stage7Applied = false, animSpeed = 1.0;
-    const BASE_STEP_MS = 1350, BASE_HOLD_MS = 850;
-    const stepAnimMs = () => BASE_STEP_MS / animSpeed;
-    const autoHoldMs = () => BASE_HOLD_MS / animSpeed;
-    const convTickMs = () => 110 / animSpeed;
-    let convRemaining = 0, lastConvTick = 0;
-
-    const STAGE_NAMES = ["① 线性前向 Mul+Add", "② ReLU 门控激活", "③ 输出与算 Loss", "④ 反向起跑 dPred", "⑤ 梯度穿 ReLU 门", "⑥ 梯度传回叶子", "⑦ SGD 更新权重"];
-
-    function flushPendingStage7() {
-      if (currentStage === 7 && !stage7Applied) { applySgd(false); stage7Applied = true; }
+    function softmaxRow(logits, temp = 1.0) {
+      const invT = 1.0 / Math.max(temp, 1e-4);
+      let m = -Infinity;
+      for (let i = 0; i < logits.length; i++) {
+        const v = logits[i] * invT;
+        if (v > m) m = v;
+      }
+      const exps = new Float32Array(logits.length);
+      let sum = 0;
+      for (let i = 0; i < logits.length; i++) {
+        exps[i] = Math.exp(logits[i] * invT - m);
+        sum += exps[i];
+      }
+      const probs = new Float32Array(logits.length);
+      for (let i = 0; i < logits.length; i++) probs[i] = exps[i] / sum;
+      return probs;
     }
 
-    const canvas = document.getElementById("scene3d");
-    const ctx = canvas.getContext("2d");
-    const cam = M.createCamera(canvas, { yaw: -0.35, pitch: 0.44, dist: 23.5, tx: 0.0, ty: 1.0, tz: 0.5, minPitch: 0.12, maxPitch: 1.38, maxDist: 36 });
+    // =========================================================================
+    // 2. Real Arena-Tape Autograd Engine (1-to-1 Mirror of step02-autograd/src/main.rs)
+    // =========================================================================
+    class Param {
+      constructor(name, rows, cols, data, decay) {
+        this.name = name;
+        this.rows = rows;
+        this.cols = cols;
+        this.data = new Float32Array(data);
+        this.m = new Float32Array(rows * cols);
+        this.v = new Float32Array(rows * cols);
+        this.lastDelta = new Float32Array(rows * cols);
+        this.decay = decay;
+      }
+      static randn(name, rows, cols, std, rng, decay) {
+        const arr = new Float32Array(rows * cols);
+        for (let i = 0; i < arr.length; i++) arr[i] = rng.normal(std);
+        return new Param(name, rows, cols, arr, decay);
+      }
+      static zeros(name, rows, cols) {
+        return new Param(name, rows, cols, new Float32Array(rows * cols), false);
+      }
+      adamwStep(grad, lr, weightDecay, step) {
+        const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+        const bc1 = 1 - Math.pow(b1, step);
+        const bc2 = 1 - Math.pow(b2, step);
+        for (let i = 0; i < this.data.length; i++) {
+          const oldW = this.data[i];
+          const g = grad[i];
+          if (this.decay) this.data[i] -= lr * weightDecay * this.data[i];
+          this.m[i] = b1 * this.m[i] + (1 - b1) * g;
+          this.v[i] = b2 * this.v[i] + (1 - b2) * g * g;
+          const mHat = this.m[i] / bc1;
+          const vHat = this.v[i] / bc2;
+          this.data[i] -= lr * mHat / (Math.sqrt(vHat) + eps);
+          this.lastDelta[i] = this.data[i] - oldW;
+        }
+      }
+    }
 
-    const NODES_META = [
-      { id: 0, name: "x (输入)", short: "x", x: -7.5, z: -2.2, kind: "input" },
-      { id: 1, name: "w1 (权重)", short: "w1", x: -7.5, z: 1.4, kind: "param" },
-      { id: 2, name: "b1 (偏置)", short: "b1", x: -3.6, z: 2.2, kind: "param" },
-      { id: 3, name: "Mul (×)", short: "m", x: -4.4, z: -0.8, kind: "op" },
-      { id: 4, name: "Add (+)", short: "z", x: -1.4, z: 0.0, kind: "op" },
-      { id: 5, name: "w2 (权重)", short: "w2", x: 3.6, z: 2.2, kind: "param" },
-      { id: 6, name: "ReLU 门", short: "h", x: 1.6, z: 0.0, kind: "relu" },
-      { id: 7, name: "Mul (×)", short: "pred", x: 4.6, z: 0.0, kind: "op" },
-      { id: 8, name: "Loss", short: "L", x: 7.8, z: 0.0, kind: "loss" },
+    class Tape {
+      constructor() {
+        this.nodes = [];
+      }
+      push(name, rows, cols, data, op, parents, opLabel, ruleText) {
+        const id = this.nodes.length;
+        this.nodes.push({
+          id,
+          name,
+          rows,
+          cols,
+          data: new Float32Array(data),
+          grad: new Float32Array(rows * cols),
+          op,
+          parents,
+          opLabel,
+          ruleText,
+        });
+        return id;
+      }
+      param(p) {
+        return this.push(p.name, p.rows, p.cols, p.data, { kind: "Leaf" }, [], "Leaf (Param)", "叶子参数节点：收集下游传回的全部梯度，供第 ⑧ 步 AdamW 更新。");
+      }
+      embedConcat(name, tableId, ctxIndices) {
+        const tbl = this.nodes[tableId];
+        const d = tbl.cols, batch = ctxIndices.length, outCols = ctxIndices[0].length * d;
+        const out = new Float32Array(batch * outCols);
+        for (let b = 0; b < batch; b++) {
+          for (let slot = 0; slot < ctxIndices[b].length; slot++) {
+            const tok = ctxIndices[b][slot];
+            for (let j = 0; j < d; j++) out[b * outCols + slot * d + j] = tbl.data[tok * d + j];
+          }
+        }
+        return this.push(
+          name, batch, outCols, out,
+          { kind: "EmbedConcat", table: tableId, ctxIndices },
+          [tableId], "EmbedConcat",
+          "把 x 每行切回 3 段 4 维梯度，按 token ID 累加(+=)回 emb 对应行。"
+        );
+      }
+      matmul(name, aId, bId) {
+        const a = this.nodes[aId], b = this.nodes[bId];
+        const m = a.rows, k = a.cols, n = b.cols;
+        const out = new Float32Array(m * n);
+        for (let i = 0; i < m; i++) {
+          for (let p = 0; p < k; p++) {
+            const aip = a.data[i * k + p];
+            for (let j = 0; j < n; j++) out[i * n + j] += aip * b.data[p * n + j];
+          }
+        }
+        return this.push(
+          name, m, n, out,
+          { kind: "MatMul", a: aId, b: bId },
+          [aId, bId], "MatMul",
+          "矩阵乘反传：dA += dOut @ Bᵀ，dB += Aᵀ @ dOut。"
+        );
+      }
+      add(name, aId, bId) {
+        const a = this.nodes[aId], b = this.nodes[bId];
+        const ra = a.rows, ca = a.cols, rb = b.rows;
+        const out = new Float32Array(ra * ca);
+        for (let r = 0; r < ra; r++) {
+          const br = rb === 1 ? 0 : r;
+          for (let c = 0; c < ca; c++) out[r * ca + c] = a.data[r * ca + c] + b.data[br * ca + c];
+        }
+        return this.push(
+          name, ra, ca, out,
+          { kind: "Add", a: aId, b: bId },
+          [aId, bId], "Add (行广播)",
+          "加法反传：dA += dOut，偏置 dB 沿 batch 行求和累加。"
+        );
+      }
+      relu(name, xId) {
+        const x = this.nodes[xId];
+        const out = new Float32Array(x.data.length);
+        for (let i = 0; i < out.length; i++) out[i] = x.data[i] > 0 ? x.data[i] : 0;
+        return this.push(
+          name, x.rows, x.cols, out,
+          { kind: "Relu", x: xId },
+          [xId], "ReLU",
+          "ReLU 门控反传：前向 x > 0 处梯度 ×1 放行，x ≤ 0 处梯度 ×0 截断。"
+        );
+      }
+      crossEntropy(name, logitsId, targets) {
+        const z = this.nodes[logitsId];
+        const batch = z.rows, v = z.cols;
+        const sampleLosses = new Float32Array(batch);
+        let total = 0;
+        for (let b = 0; b < batch; b++) {
+          const probs = softmaxRow(z.data.subarray(b * v, (b + 1) * v), 1.0);
+          const l = -Math.log(probs[targets[b]] + 1e-12);
+          sampleLosses[b] = l;
+          total += l;
+        }
+        const id = this.push(
+          name, 1, 1, [total / batch],
+          { kind: "CrossEntropy", logits: logitsId, targets },
+          [logitsId], "CrossEntropy",
+          "融合 Softmax+交叉熵反传：dLogits[b,j] += (probs[b,j] - one_hot) / B。"
+        );
+        this.nodes[id].sampleLosses = sampleLosses;
+        return id;
+      }
+      backwardNode(id) {
+        const node = this.nodes[id];
+        const dOut = node.grad;
+        let anyNonZero = false;
+        for (let i = 0; i < dOut.length; i++) { if (dOut[i] !== 0) { anyNonZero = true; break; } }
+        if (!anyNonZero) return;
+
+        const op = node.op;
+        if (op.kind === "Add") {
+          const a = this.nodes[op.a], b = this.nodes[op.b];
+          for (let r = 0; r < a.rows; r++) {
+            const br = b.rows === 1 ? 0 : r;
+            for (let c = 0; c < a.cols; c++) {
+              const g = dOut[r * a.cols + c];
+              a.grad[r * a.cols + c] += g;
+              b.grad[br * b.cols + c] += g;
+            }
+          }
+        } else if (op.kind === "MatMul") {
+          const a = this.nodes[op.a], b = this.nodes[op.b];
+          const m = a.rows, k = a.cols, n = b.cols;
+          for (let i = 0; i < m; i++) {
+            for (let p = 0; p < k; p++) {
+              let acc = 0;
+              for (let j = 0; j < n; j++) acc += dOut[i * n + j] * b.data[p * n + j];
+              a.grad[i * k + p] += acc;
+            }
+          }
+          for (let i = 0; i < m; i++) {
+            for (let p = 0; p < k; p++) {
+              const aip = a.data[i * k + p];
+              for (let j = 0; j < n; j++) b.grad[p * n + j] += aip * dOut[i * n + j];
+            }
+          }
+        } else if (op.kind === "Relu") {
+          const x = this.nodes[op.x];
+          for (let i = 0; i < dOut.length; i++) {
+            if (x.data[i] > 0) x.grad[i] += dOut[i];
+          }
+        } else if (op.kind === "EmbedConcat") {
+          const tbl = this.nodes[op.table];
+          const d = tbl.cols, outCols = op.ctxIndices[0].length * d;
+          for (let b = 0; b < op.ctxIndices.length; b++) {
+            for (let slot = 0; slot < op.ctxIndices[b].length; slot++) {
+              const tok = op.ctxIndices[b][slot];
+              for (let j = 0; j < d; j++) tbl.grad[tok * d + j] += dOut[b * outCols + slot * d + j];
+            }
+          }
+        } else if (op.kind === "CrossEntropy") {
+          const logits = this.nodes[op.logits];
+          const batch = logits.rows, v = logits.cols;
+          const scale = dOut[0] / batch;
+          for (let b = 0; b < batch; b++) {
+            const probs = softmaxRow(logits.data.subarray(b * v, (b + 1) * v), 1.0);
+            const y = op.targets[b];
+            for (let j = 0; j < v; j++) {
+              logits.grad[b * v + j] += (probs[j] - (j === y ? 1.0 : 0.0)) * scale;
+            }
+          }
+        }
+      }
+      backward(lossId) {
+        this.nodes[lossId].grad[0] = 1.0;
+        for (let id = lossId; id >= 0; id--) this.backwardNode(id);
+      }
+    }
+
+    // =========================================================================
+    // 3. Shared Model Weights + Strictly Separated Training & Inference Helpers
+    // =========================================================================
+    let model = null;
+    let trainStepCount = 0;
+    let lr = 0.03;
+
+    // Training state (Card 1)
+    let selectedSampleIdx = 0; // Default: 「床前明 → 月」
+    let selectedNodeId = 5;
+    let selectedNeuron = 0;
+    let activeTape = null;
+    let hasComputedForwardStage = 0; // 0..6
+    let hasComputedBackward = false;
+    let hasEverUpdated = false;
+    let lastUpdateReport = null;
+
+    // Inference state (Card 2 — completely independent of Card 1 UI/3D stage!)
+    let temperature = 0.7;
+    let genStartSampleIdx = 0; // Default: 「床前明」
+    let genIds = [...SAMPLES[0].ctxIds];
+    let lastGenDraw = null; // { prevWinText, nextId, prob, dice, newWinText }
+
+    function createModel(seed = 42, deadRelu = false) {
+      const rng = new Rng(seed);
+      const std1 = Math.sqrt(2.0 / IN_DIM);
+      const std2 = Math.sqrt(1.0 / HIDDEN);
+      const m = {
+        emb: Param.randn("emb", V, EMB_DIM, 0.35, rng, true),
+        w1: Param.randn("w1", IN_DIM, HIDDEN, std1, rng, true),
+        b1: Param.zeros("b1", 1, HIDDEN),
+        w2: Param.randn("w2", HIDDEN, V, std2, rng, true),
+        b2: Param.zeros("b2", 1, V),
+      };
+      if (deadRelu) m.b1.data.fill(-3.2);
+      return m;
+    }
+
+    // Training forward: builds full 12-node Arena Tape on 9-window batch
+    function runTrainingForward() {
+      const t = new Tape();
+      const embId = t.param(model.emb);                    // 0
+      const w1Id = t.param(model.w1);                      // 1
+      const b1Id = t.param(model.b1);                      // 2
+      const w2Id = t.param(model.w2);                      // 3
+      const b2Id = t.param(model.b2);                      // 4
+      const xId = t.embedConcat("x", embId, BATCH_CTX);    // 5
+      const z1RawId = t.matmul("z1_raw", xId, w1Id);       // 6
+      const z1Id = t.add("z1", z1RawId, b1Id);             // 7
+      const hId = t.relu("h", z1Id);                       // 8
+      const z2RawId = t.matmul("z2_raw", hId, w2Id);       // 9
+      const logitsId = t.add("logits", z2RawId, b2Id);     // 10
+      t.crossEntropy("loss", logitsId, BATCH_TARGETS);     // 11
+      return t;
+    }
+
+    // Pure Inference forward: NO Tape, NO target, NO grad, NO weight mutation!
+    function inferLogitsForWindow(ctxIds) {
+      const x = new Float32Array(IN_DIM);
+      for (let slot = 0; slot < CTX_LEN; slot++) {
+        const tok = ctxIds[slot];
+        for (let j = 0; j < EMB_DIM; j++) x[slot * EMB_DIM + j] = model.emb.data[tok * EMB_DIM + j];
+      }
+      const h = new Float32Array(HIDDEN);
+      for (let k = 0; k < HIDDEN; k++) {
+        let acc = model.b1.data[k];
+        for (let i = 0; i < IN_DIM; i++) acc += x[i] * model.w1.data[i * HIDDEN + k];
+        h[k] = acc > 0 ? acc : 0;
+      }
+      const logits = new Float32Array(V);
+      for (let j = 0; j < V; j++) {
+        let acc = model.b2.data[j];
+        for (let k = 0; k < HIDDEN; k++) acc += h[k] * model.w2.data[k * V + j];
+        logits[j] = acc;
+      }
+      return logits;
+    }
+
+    function getParamByNodeId(id) {
+      return [model.emb, model.w1, model.b1, model.w2, model.b2][id] || null;
+    }
+
+    // Executes 1 real AdamW update + authentic before/after forward Loss comparison!
+    function performOneAdamWStep(useExistingBackward = false) {
+      const oldTape = useExistingBackward && activeTape ? activeTape : runTrainingForward();
+      if (!useExistingBackward) oldTape.backward(11);
+
+      const beforeBatch = oldTape.nodes[11].data[0];
+      const beforeSample = oldTape.nodes[11].sampleLosses[selectedSampleIdx];
+
+      trainStepCount += 1;
+      const wd = 0.01;
+      model.emb.adamwStep(oldTape.nodes[0].grad, lr, wd, trainStepCount);
+      model.w1.adamwStep(oldTape.nodes[1].grad, lr, wd, trainStepCount);
+      model.b1.adamwStep(oldTape.nodes[2].grad, lr, wd, trainStepCount);
+      model.w2.adamwStep(oldTape.nodes[3].grad, lr, wd, trainStepCount);
+      model.b2.adamwStep(oldTape.nodes[4].grad, lr, wd, trainStepCount);
+
+      // Re-forward on the NEW weights so post-update Loss comes strictly from NEW logits!
+      const newTape = runTrainingForward();
+      for (let i = 0; i < 12; i++) newTape.nodes[i].grad.set(oldTape.nodes[i].grad);
+      activeTape = newTape;
+      hasComputedForwardStage = 6;
+      hasComputedBackward = true;
+      hasEverUpdated = true;
+
+      lastUpdateReport = {
+        step: trainStepCount,
+        beforeBatch,
+        afterBatch: newTape.nodes[11].data[0],
+        beforeSample,
+        afterSample: newTape.nodes[11].sampleLosses[selectedSampleIdx],
+        sampleIdx: selectedSampleIdx,
+      };
+    }
+
+    // =========================================================================
+    // 4. Training 8-Stage State Machine (Strict Forward-Only Single Step)
+    // =========================================================================
+    let mode = "idle"; // "idle" | "step" | "autoplay" | "train40"
+    let currentStage = 0; // 0 or 1..8
+    let stageStartMs = 0;
+    let stage8Applied = false;
+    let animSpeed = 1.0;
+
+    const BASE_STEP_MS = 1250;
+    const BASE_HOLD_MS = 850;
+    const stepAnimMs = () => BASE_STEP_MS / animSpeed;
+    const autoHoldMs = () => BASE_HOLD_MS / animSpeed;
+    const trainTickMs = () => 55 / animSpeed;
+    let train40Remaining = 0, lastTrainTick = 0;
+
+    const STAGE_NAMES = [
+      "① 字符编码与取样",
+      "② Embedding 查表拼接",
+      "③ MatMul + b1",
+      "④ ReLU 门控",
+      "⑤ MatMul + b2",
+      "⑥ 概率与交叉熵",
+      "⑦ Tape 倒序反传",
+      "⑧ AdamW 更新",
     ];
-    const EDGES = [[0, 3], [1, 3], [3, 4], [2, 4], [4, 6], [6, 7], [5, 7], [7, 8]];
 
+    const visualProbs = new Float32Array(V);
+    const visualZ1 = new Float32Array(HIDDEN);
+    const visualH = new Float32Array(HIDDEN);
+    let visualSampleLoss = 0.0;
+
+    function flushPendingStage8() {
+      if (currentStage === 8 && !stage8Applied) {
+        performOneAdamWStep(true);
+        stage8Applied = true;
+      }
+    }
+
+    function countOpenNeurons(sampleIdx) {
+      if (!activeTape) return 0;
+      let cnt = 0;
+      for (let k = 0; k < HIDDEN; k++) if (activeTape.nodes[7].data[sampleIdx * HIDDEN + k] > 0) cnt += 1;
+      return cnt;
+    }
+
+    function enterStage(stageNum, nowMs) {
+      flushPendingStage8();
+      currentStage = stageNum;
+      stageStartMs = nowMs;
+      stage8Applied = false;
+
+      const s = SAMPLES[selectedSampleIdx];
+      if (stageNum === 1) {
+        activeTape = runTrainingForward();
+        hasComputedForwardStage = 1;
+        hasComputedBackward = false;
+        selectedNodeId = 0;
+        setNarrator(
+          `① 字符编码与取样：「${s.ctxText}」→ 输入 ID [${s.ctxIds.join(", ")}]；正确答案「${s.targetChar}」→ target = ${s.targetId}`,
+          `前 3 个字将查词向量拼成输入 x 送进网络；「${s.targetChar}」是 target，要等到第 ⑥ 步算 Loss 时才使用！`
+        );
+      } else if (stageNum === 2) {
+        if (!activeTape) activeTape = runTrainingForward();
+        hasComputedForwardStage = 2;
+        selectedNodeId = 5;
+        setNarrator(
+          `② Embedding 查表并拼接（Tape 写入 Node[5] x）：3 个 4 维词向量拼成 12 维输入 x`,
+          `9 个窗口一起组成形状 (9, 12) 的张量 x。因为带上了前两个字，「前明月」和「望明月」拼出的 x 完全不同！`
+        );
+      } else if (stageNum === 3) {
+        hasComputedForwardStage = 3;
+        selectedNodeId = 7;
+        const zVal = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron];
+        setNarrator(
+          `③ 第一层线性变换（Node[6] MatMul → Node[7] +b1）：x(9,12) @ w1(12,8) + b1 → z1(9,8)`,
+          `选中的神经元 #${selectedNeuron} 线性输出 z = ${zVal.toFixed(3)}（绿=正，红=负），即将进入 ReLU 闸门！`
+        );
+      } else if (stageNum === 4) {
+        hasComputedForwardStage = 4;
+        selectedNodeId = 8;
+        const zVal = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron];
+        const hVal = activeTape.nodes[8].data[selectedSampleIdx * HIDDEN + selectedNeuron];
+        const openCount = countOpenNeurons(selectedSampleIdx);
+        setNarrator(
+          `④ ReLU 门控激活（Node[8] h = max(0, z1)）：本样本 8 个神经元中 ${openCount} 个开启、${HIDDEN - openCount} 个归零`,
+          zVal > 0
+            ? `神经元 #${selectedNeuron} 的 z = ${zVal.toFixed(3)} > 0，绿色大门开启，输出 h = ${hVal.toFixed(3)}！`
+            : `神经元 #${selectedNeuron} 的 z = ${zVal.toFixed(3)} ≤ 0，红色闸门自动关闭，输出归零为 h = 0！`
+        );
+      } else if (stageNum === 5) {
+        hasComputedForwardStage = 5;
+        selectedNodeId = 10;
+        const logits = activeTape.nodes[10].data.subarray(selectedSampleIdx * V, (selectedSampleIdx + 1) * V);
+        setNarrator(
+          `⑤ 输出层线性变换（Node[9] MatMul → Node[10] +b2）：h(9,8) @ w2(8,10) + b2 → logits(9,10)`,
+          `模型对词表 10 个字打出原始分 logits，正确答案「${s.targetChar}」当前打分 = ${logits[s.targetId].toFixed(2)}。`
+        );
+      } else if (stageNum === 6) {
+        hasComputedForwardStage = 6;
+        selectedNodeId = 11;
+        const logits = activeTape.nodes[10].data.subarray(selectedSampleIdx * V, (selectedSampleIdx + 1) * V);
+        const probs = softmaxRow(logits, 1.0);
+        const sLoss = activeTape.nodes[11].sampleLosses[selectedSampleIdx];
+        const bLoss = activeTape.nodes[11].data[0];
+        setNarrator(
+          `⑥ 概率与交叉熵（Tape 写入融合节点 Node[11] CrossEntropy）：「${s.targetChar}」概率 ${(probs[s.targetId] * 100).toFixed(1)}%`,
+          `橙色柱 = 当前样本 Loss (${sLoss.toFixed(4)})，顶部显示 9 窗 Batch 平均 Loss (${bLoss.toFixed(4)})。前向完成，下一步倒序反传！`
+        );
+      } else if (stageNum === 7) {
+        activeTape.backward(11);
+        hasComputedBackward = true;
+        selectedNodeId = 1;
+        const zVal = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron];
+        const dH = activeTape.nodes[8].grad[selectedSampleIdx * HIDDEN + selectedNeuron];
+        const dZ = activeTape.nodes[7].grad[selectedSampleIdx * HIDDEN + selectedNeuron];
+        setNarrator(
+          `⑦ Tape 倒序自动反传（11 → 0）：已按每个节点的 op 规则算出全部 grad（权重尚未修改！）`,
+          zVal > 0
+            ? `神经元 #${selectedNeuron} 的 ReLU 门开启，dH=${dH.toFixed(3)} × 1 → dZ=${dZ.toFixed(3)}。点击下方任意 Tape 节点查看 grad！`
+            : `💥 神经元 #${selectedNeuron} 的 z ≤ 0，上游梯度 dH=${dH.toFixed(3)} 撞上 ReLU 红墙被截断为 dZ = 0.000！`
+        );
+      } else if (stageNum === 8) {
+        selectedNodeId = 1;
+        setNarrator(
+          `⑧ AdamW 更新 5 组权重（lr = ${lr.toFixed(3)}）：用第 ⑦ 步的 grad 计算 Δw 更新参数，并重算新 Loss！`,
+          `3D 箭头标注的是参数变化量 Δw（与节点详情里的 grad 方向相反），顶部 HUD 同时对照更新前/后两次前向的真实 Loss。`
+        );
+      }
+      renderAllUi();
+    }
+
+    // =========================================================================
+    // 5. UI Rendering (Card 1 Training + Card 2 Independent Inference)
+    // =========================================================================
     function setNarrator(title, desc) {
       document.getElementById("narratorTitle").textContent = title;
       document.getElementById("narratorDesc").textContent = desc;
     }
 
-    function syncSliders() {
-      const clamp = v => Math.max(-2, Math.min(2, v));
-      document.getElementById("slW1").value = clamp(w1).toFixed(2); document.getElementById("valW1").textContent = w1.toFixed(2);
-      document.getElementById("slB1").value = clamp(b1).toFixed(2); document.getElementById("valB1").textContent = b1.toFixed(2);
-      document.getElementById("slW2").value = clamp(w2).toFixed(2); document.getElementById("valW2").textContent = w2.toFixed(2);
-      document.getElementById("slLr").value = lr.toFixed(2); document.getElementById("valLr").textContent = lr.toFixed(2);
+    function renderCorpusStrip() {
+      const wrap = document.getElementById("corpusChars");
+      wrap.innerHTML = "";
+      const s = SAMPLES[selectedSampleIdx];
+      CHARS.forEach((ch, idx) => {
+        const span = document.createElement("span");
+        span.className = "corpus-char mono";
+        if (idx >= s.start && idx < s.start + CTX_LEN) span.classList.add("ctx");
+        else if (idx === s.start + CTX_LEN) span.classList.add("tgt");
+        span.textContent = ch;
+        span.title = `位置 ${idx} · 字「${ch}」· ID ${STOI[ch]}`;
+        wrap.appendChild(span);
+      });
     }
 
-    function updateHud() {
-      document.getElementById("hudEpoch").textContent = epoch;
-      if (nodeVals[8] === null) document.getElementById("hudLoss").textContent = "未计算 (0)";
-      else if (forwardStale) document.getElementById("hudLoss").textContent = `${nodeVals[8].toFixed(4)} (旧值，待下轮重算)`;
-      else document.getElementById("hudLoss").textContent = nodeVals[8].toFixed(4);
-      document.getElementById("hudPred").textContent = nodeVals[7] === null ? "--" : `${nodeVals[7].toFixed(2)}${forwardStale ? " (旧)" : ""}`;
+    function renderSampleButtons() {
+      const wrap = document.getElementById("sampleButtons");
+      wrap.innerHTML = "";
+      SAMPLES.forEach((s, idx) => {
+        const b = document.createElement("button");
+        b.className = "mono";
+        b.style.padding = "2px 7px";
+        if (idx === selectedSampleIdx) b.classList.add("primary");
+        else if (idx === 1 || idx === 8) b.style.borderColor = "var(--warning)";
+        b.textContent = `${s.ctxText}→${s.targetChar}`;
+        b.title = idx === 1 || idx === 8 ? "重点对照样本：末尾都是「月」，但前两个字不同" : `样本 #${idx}`;
+        b.onclick = () => {
+          flushPendingStage8();
+          selectedSampleIdx = idx;
+          // Switching sample ONLY changes observation target — NEVER modifies weights or trainStepCount!
+          renderAllUi();
+          const cur = SAMPLES[idx];
+          if (hasComputedForwardStage >= 6 && activeTape) {
+            const sLoss = activeTape.nodes[11].sampleLosses[idx];
+            const probs = softmaxRow(activeTape.nodes[10].data.subarray(idx * V, (idx + 1) * V), 1.0);
+            setNarrator(
+              `已切换观察样本为「${cur.ctxText} → ${cur.targetChar}」（权重与步数保持不变）`,
+              `当前权重下，该样本给「${cur.targetChar}」的概率 = ${(probs[cur.targetId] * 100).toFixed(1)}%，样本 Loss = ${sLoss.toFixed(4)}（3D 橙柱与概率塔已同步刷新）。`
+            );
+          } else {
+            setNarrator(
+              `已切换观察样本为「${cur.ctxText} → ${cur.targetChar}」（输入 ID [${cur.ctxIds.join(",")}]，target = ${cur.targetId}）`,
+              `切换样本只改变观察对象，不会修改权重。点击「⏭ 下一步」观察它的前向与反传！`
+            );
+          }
+        };
+        wrap.appendChild(b);
+      });
+    }
 
-      let dir = "等待前向写入 Vec[0..8]";
-      if (currentStage >= 1 && currentStage <= 3) dir = "前向正序压栈 0 → 8 (构建计算图)";
-      else if (currentStage >= 4 && currentStage <= 6) dir = "反向逆序回放 8 → 0 (链式法则)";
-      else if (currentStage === 7) dir = "叶子参数 SGD 更新 (w -= lr·grad)";
-      document.getElementById("hudTapeDir").textContent = dir;
+    function renderTapeAndNodeInspector() {
+      const grid = document.getElementById("tapeGrid");
+      grid.innerHTML = "";
+      const stageMaxNode = [-1, 4, 5, 7, 8, 10, 11, 11, 11][currentStage] ?? -1;
+      const revealedMax = hasComputedForwardStage >= 6 ? 11 : stageMaxNode;
+
+      const metaList = [
+        { id: 0, name: "emb",    shape: "(10,4)", op: "Param" },
+        { id: 1, name: "w1",     shape: "(12,8)", op: "Param" },
+        { id: 2, name: "b1",     shape: "(1,8)",  op: "Param" },
+        { id: 3, name: "w2",     shape: "(8,10)", op: "Param" },
+        { id: 4, name: "b2",     shape: "(1,10)", op: "Param" },
+        { id: 5, name: "x",      shape: "(9,12)", op: "Embed" },
+        { id: 6, name: "z1_raw", shape: "(9,8)",  op: "MatMul" },
+        { id: 7, name: "z1",     shape: "(9,8)",  op: "Add" },
+        { id: 8, name: "h",      shape: "(9,8)",  op: "ReLU" },
+        { id: 9, name: "z2_raw", shape: "(9,10)", op: "MatMul" },
+        { id: 10, name: "logits", shape: "(9,10)", op: "Add" },
+        { id: 11, name: "loss",   shape: "(1,1)", op: "CE Loss" },
+      ];
+
+      metaList.forEach(item => {
+        const btn = document.createElement("button");
+        btn.className = "tape-slot";
+        if (item.id <= 4) btn.classList.add("param-kind");
+        if (item.id <= revealedMax) btn.classList.add("fwd");
+        if (hasComputedBackward) btn.classList.add("bwd");
+        if (item.id === selectedNodeId) btn.classList.add("selected");
+        btn.innerHTML = `<div style="font-weight:700;">[${item.id}] ${item.name}</div><div class="muted">${item.op} ${item.shape}</div>`;
+        btn.onclick = () => { selectedNodeId = item.id; renderTapeAndNodeInspector(); };
+        grid.appendChild(btn);
+      });
+
+      const badge = document.getElementById("tapeCursorBadge");
+      if (currentStage >= 1 && currentStage <= 6) badge.textContent = `前向正序压栈 0 → ${revealedMax}`;
+      else if (currentStage === 7) badge.textContent = "反向逆序回放 11 → 0（算 grad）";
+      else if (currentStage === 8) badge.textContent = "AdamW 用 grad 更新 0..4 参数";
+      else badge.textContent = hasComputedForwardStage >= 6 ? "Tape 已记录 12 个节点（点击查看）" : "等待前向压栈 0→11";
+
+      const meta = metaList[selectedNodeId];
+      const node = activeTape ? activeTape.nodes[selectedNodeId] : null;
+      const isParam = selectedNodeId <= 4;
+      const isVisibleVal = isParam || (node && selectedNodeId <= revealedMax);
+      const isVisibleGrad = node && hasComputedBackward;
+      const s = SAMPLES[selectedSampleIdx];
+
+      document.getElementById("ndTitle").textContent = `TensorId(${meta.id}) · ${meta.name}`;
+      document.getElementById("ndMeta").textContent = node
+        ? `op: ${node.opLabel} | shape: (${node.rows}, ${node.cols})`
+        : `op: ${meta.op} | shape: ${meta.shape}`;
+      document.getElementById("ndDeps").textContent = (!node || node.parents.length === 0)
+        ? (isParam ? "依赖父节点：无（可训练叶子参数）" : "依赖父节点：待前向构建")
+        : `依赖父节点：${node.parents.map(pid => `TensorId(${pid}) ${activeTape.nodes[pid].name}`).join(", ")}`;
+      document.getElementById("ndRule").textContent = node
+        ? `反传规则：${node.ruleText}`
+        : "反传规则：点击「⏭ 下一步」执行前向后自动写入计算图";
+
+      const valsEl = document.getElementById("ndVals");
+      const gradsEl = document.getElementById("ndGrads");
+      const deltaWrap = document.getElementById("ndDeltaWrap");
+      const deltasEl = document.getElementById("ndDeltas");
+      valsEl.innerHTML = ""; gradsEl.innerHTML = ""; deltasEl.innerHTML = "";
+
+      // Special rich 3-token grouping for Node[5] x so user clearly sees 3 chars × 4 dims = 12 dims!
+      if (selectedNodeId === 5 && isVisibleVal && node) {
+        document.getElementById("ndValLabel").textContent = `前向值 data（当前样本「${s.ctxText}」拼接的 3×4 = 12 维输入 x）：`;
+        const rowOff = selectedSampleIdx * IN_DIM;
+        const grpWrap = document.createElement("div");
+        grpWrap.className = "embed-groups";
+        for (let slot = 0; slot < CTX_LEN; slot++) {
+          const ch = VOCAB[s.ctxIds[slot]];
+          const gDiv = document.createElement("div");
+          gDiv.className = "embed-group";
+          const vals = [];
+          for (let j = 0; j < EMB_DIM; j++) {
+            const v = node.data[rowOff + slot * EMB_DIM + j];
+            vals.push(`${v >= 0 ? "+" : ""}${v.toFixed(2)}`);
+          }
+          gDiv.innerHTML = `<div class="muted">第${slot + 1}字「${ch}」(ID ${s.ctxIds[slot]})</div><div>[${vals.join(", ")}]</div>`;
+          grpWrap.appendChild(gDiv);
+        }
+        valsEl.appendChild(grpWrap);
+
+        if (isVisibleGrad) {
+          for (let i = 0; i < IN_DIM; i++) {
+            const g = node.grad[rowOff + i];
+            const cell = document.createElement("span");
+            cell.className = "val-cell";
+            cell.style.color = Math.abs(g) < 1e-5 ? "var(--muted-foreground)" : "var(--warning)";
+            cell.textContent = `x[${i}]:${g >= 0 ? "+" : ""}${g.toFixed(3)}`;
+            gradsEl.appendChild(cell);
+          }
+        } else {
+          gradsEl.innerHTML = `<span class="muted">尚未反向传播（第 ⑦ 步才算出 grad）</span>`;
+        }
+        deltaWrap.classList.add("hidden");
+        return;
+      }
+
+      document.getElementById("ndValLabel").innerHTML = isParam
+        ? `参数当前值 <span class="mono">data</span>（矩阵展开前几格）：`
+        : `前向值 <span class="mono">data</span>（当前样本「${s.ctxText}」对应行）：`;
+
+      let sliceData = null, sliceGrad = null, sliceLabels = null;
+      if (isParam) {
+        const p = getParamByNodeId(selectedNodeId);
+        if (selectedNodeId === 0) {
+          const tokId = s.ctxIds[0];
+          sliceData = p.data.subarray(tokId * EMB_DIM, (tokId + 1) * EMB_DIM);
+          sliceGrad = node ? node.grad.subarray(tokId * EMB_DIM, (tokId + 1) * EMB_DIM) : null;
+          sliceLabels = Array.from({ length: EMB_DIM }, (_, j) => `「${VOCAB[tokId]}」[${j}]`);
+        } else {
+          const cnt = Math.min(8, p.data.length);
+          sliceData = p.data.subarray(0, cnt);
+          sliceGrad = node ? node.grad.subarray(0, cnt) : null;
+          sliceLabels = Array.from({ length: cnt }, (_, j) => `[${j}]`);
+        }
+      } else if (node && selectedNodeId >= 6 && selectedNodeId <= 10) {
+        const cols = node.cols, rowStart = selectedSampleIdx * cols;
+        const cnt = Math.min(10, cols);
+        sliceData = node.data.subarray(rowStart, rowStart + cnt);
+        sliceGrad = node.grad.subarray(rowStart, rowStart + cnt);
+        sliceLabels = selectedNodeId === 10 ? VOCAB.slice(0, cnt) : Array.from({ length: cnt }, (_, j) => `#${j}`);
+      } else if (node && selectedNodeId === 11) {
+        sliceData = node.data; sliceGrad = node.grad; sliceLabels = ["batchLoss"];
+      }
+
+      if (isVisibleVal && sliceData) {
+        for (let i = 0; i < sliceData.length; i++) {
+          const v = sliceData[i];
+          const cell = document.createElement("span");
+          cell.className = "val-cell";
+          cell.style.color = v > 0.001 ? "var(--success)" : (v < -0.001 ? "var(--error)" : "var(--muted-foreground)");
+          cell.textContent = `${sliceLabels[i]}:${v >= 0 ? "+" : ""}${v.toFixed(2)}`;
+          valsEl.appendChild(cell);
+        }
+      } else {
+        valsEl.innerHTML = `<span class="muted">尚未算到该节点（继续点「⏭ 下一步」）</span>`;
+      }
+
+      if (isVisibleGrad && sliceGrad) {
+        for (let i = 0; i < sliceGrad.length; i++) {
+          const g = sliceGrad[i];
+          const cell = document.createElement("span");
+          cell.className = "val-cell";
+          cell.style.color = Math.abs(g) < 1e-5 ? "var(--muted-foreground)" : "var(--warning)";
+          cell.textContent = `${sliceLabels[i]}:${g >= 0 ? "+" : ""}${g.toFixed(3)}`;
+          gradsEl.appendChild(cell);
+        }
+      } else {
+        gradsEl.innerHTML = `<span class="muted">尚未反向传播（第 ⑦ 步才算出 grad）</span>`;
+      }
+
+      if (isParam && hasEverUpdated) {
+        deltaWrap.classList.remove("hidden");
+        const p = getParamByNodeId(selectedNodeId);
+        const dSlice = selectedNodeId === 0
+          ? p.lastDelta.subarray(s.ctxIds[0] * EMB_DIM, (s.ctxIds[0] + 1) * EMB_DIM)
+          : p.lastDelta.subarray(0, Math.min(8, p.lastDelta.length));
+        for (let i = 0; i < dSlice.length; i++) {
+          const dv = dSlice[i];
+          const cell = document.createElement("span");
+          cell.className = "val-cell";
+          cell.style.color = dv > 1e-5 ? "var(--success)" : (dv < -1e-5 ? "var(--error)" : "var(--muted-foreground)");
+          cell.textContent = `${sliceLabels[i]}:${dv >= 0 ? "+" : ""}${dv.toFixed(3)}`;
+          deltasEl.appendChild(cell);
+        }
+      } else {
+        deltaWrap.classList.add("hidden");
+      }
+    }
+
+    function renderReluInspector() {
+      const btnWrap = document.getElementById("neuronButtons");
+      btnWrap.innerHTML = "";
+      const s = SAMPLES[selectedSampleIdx];
+      document.getElementById("reluSampleTag").textContent = s.ctxText;
+      document.getElementById("reluNeuronTag").textContent = `#${selectedNeuron}`;
+
+      const hasZ = activeTape && hasComputedForwardStage >= 3;
+      const hasH = activeTape && hasComputedForwardStage >= 4;
+
+      for (let k = 0; k < HIDDEN; k++) {
+        const b = document.createElement("button");
+        b.className = "neuron-btn";
+        if (k === selectedNeuron) b.classList.add("selected");
+        if (hasZ) {
+          const zv = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + k];
+          b.classList.add(zv > 0 ? "open" : "closed");
+          b.textContent = `#${k} ${zv > 0 ? "通" : "断"}`;
+        } else {
+          b.textContent = `#${k}`;
+        }
+        b.onclick = () => { selectedNeuron = k; renderReluInspector(); };
+        btnWrap.appendChild(b);
+      }
+
+      const gateBadge = document.getElementById("reluGateBadge");
+      if (!hasZ) {
+        gateBadge.textContent = "等待第 ③④ 步";
+        gateBadge.style.color = "var(--muted-foreground)";
+        document.getElementById("reluZVal").textContent = "--";
+        document.getElementById("reluHVal").textContent = "--";
+        document.getElementById("reluDhVal").textContent = "--";
+        document.getElementById("reluDzVal").textContent = "--";
+        return;
+      }
+
+      const z = activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron];
+      const h = hasH ? activeTape.nodes[8].data[selectedSampleIdx * HIDDEN + selectedNeuron] : null;
+      const open = z > 0;
+      gateBadge.textContent = open ? `神经元 #${selectedNeuron}：开启 (×1)` : `神经元 #${selectedNeuron}：关闭 (×0)`;
+      gateBadge.style.color = open ? "var(--success)" : "var(--error)";
+      document.getElementById("reluZVal").textContent = `${z >= 0 ? "+" : ""}${z.toFixed(4)}`;
+      document.getElementById("reluHVal").textContent = h !== null ? h.toFixed(4) : "待第④步";
+
+      if (hasComputedBackward) {
+        const dH = activeTape.nodes[8].grad[selectedSampleIdx * HIDDEN + selectedNeuron];
+        const dZ = activeTape.nodes[7].grad[selectedSampleIdx * HIDDEN + selectedNeuron];
+        document.getElementById("reluDhVal").textContent = `${dH >= 0 ? "+" : ""}${dH.toFixed(4)}`;
+        document.getElementById("reluDzVal").textContent = `${dZ >= 0 ? "+" : ""}${dZ.toFixed(4)}`;
+        document.getElementById("reluRuleHint").textContent = open
+          ? `z > 0 ⇒ 导数为 1，梯度完整通过：dZ = dH × 1 = ${dZ.toFixed(4)}`
+          : `z ≤ 0 ⇒ 导数为 0，梯度被红墙截断：dZ = dH × 0 = 0.0000（上游 w1/b1 该神经元梯度归零！）`;
+      } else {
+        document.getElementById("reluDhVal").textContent = "待第⑦步";
+        document.getElementById("reluDzVal").textContent = "待第⑦步";
+        document.getElementById("reluRuleHint").textContent = open
+          ? "前向 z > 0，绿色大门开启（到第 ⑦ 步反传时梯度将 ×1 放行）。"
+          : "前向 z ≤ 0，红色闸门关闭（输出归零，第 ⑦ 步反传时梯度将被 ×0 截断）。";
+      }
+    }
+
+    function renderContrastBox() {
+      const rowA = document.getElementById("contrastRowA");
+      const rowB = document.getElementById("contrastRowB");
+      if (!activeTape || hasComputedForwardStage < 6) {
+        rowA.textContent = "「前明月 → 光」：待第 ⑥ 步或训练后显示真实概率";
+        rowB.textContent = "「望明月 → 。」：待第 ⑥ 步或训练后显示真实概率";
+        return;
+      }
+      const fmt = idx => {
+        const s = SAMPLES[idx];
+        const probs = softmaxRow(activeTape.nodes[10].data.subarray(idx * V, (idx + 1) * V), 1.0);
+        return `「${s.ctxText}」(目标「${s.targetChar}」) → P(光)=${(probs[STOI["光"]] * 100).toFixed(1)}% | P(。)=${(probs[STOI["。"]] * 100).toFixed(1)}% | Loss=${activeTape.nodes[11].sampleLosses[idx].toFixed(3)}`;
+      };
+      rowA.textContent = fmt(1);
+      rowB.textContent = fmt(8);
+    }
+
+    // Card 2: Independent Inference UI Renderer (Never touches Training 3D Canvas!)
+    function renderInferenceCard() {
+      document.getElementById("inferWeightTag").textContent = `当前权重：Step ${trainStepCount}`;
+
+      // Sequence chips with blue sliding 3-char window
+      const tape = document.getElementById("genTape");
+      tape.innerHTML = "";
+      const winStart = Math.max(0, genIds.length - CTX_LEN);
+      genIds.forEach((id, i) => {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        if (i === genIds.length - 1) chip.classList.add("latest");
+        else if (i >= winStart) chip.classList.add("win");
+        chip.textContent = VOCAB[id];
+        tape.appendChild(chip);
+      });
+
+      const curWin = genIds.slice(-CTX_LEN);
+      const curWinText = curWin.map(id => VOCAB[id]).join("");
+      document.getElementById("genWindowBadge").textContent = `下一步输入窗口：「${curWinText}」`;
+
+      // Compute LIVE pure-forward Softmax(logits / T) for curWin using shared `model` weights!
+      const logits = inferLogitsForWindow(curWin);
+      const probs = softmaxRow(logits, temperature);
+      document.getElementById("inferDistTitle").textContent =
+        `当前输入窗口「${curWinText}」经温度 Softmax(logits / T=${temperature.toFixed(1)}) 的 10 字预测分布：`;
+
+      const barsEl = document.getElementById("inferProbBars");
+      barsEl.innerHTML = "";
+      let bestId = 0;
+      for (let j = 1; j < V; j++) if (probs[j] > probs[bestId]) bestId = j;
+      for (let j = 0; j < V; j++) {
+        const p = probs[j];
+        const col = document.createElement("div");
+        col.className = "prob-col";
+        if (j === bestId) col.classList.add("picked");
+        col.innerHTML = `
+          <div class="muted" style="font-size:10px;">${(p * 100).toFixed(0)}%</div>
+          <div class="prob-track"><div class="prob-fill" style="height:${Math.max(2, p * 100).toFixed(1)}%"></div></div>
+          <div style="font-weight:700;">${VOCAB[j]}</div>
+          <div class="muted" style="font-size:10px;">z=${logits[j].toFixed(1)}</div>
+        `;
+        barsEl.appendChild(col);
+      }
+
+      // Roulette wheel bar
+      const rBar = document.getElementById("inferRoulette");
+      rBar.innerHTML = "";
+      const palette = ["#4f8cff", "#22c55e", "#f59e0b", "#a855f7", "#ec4899", "#06b6d4"];
+      for (let j = 0; j < V; j++) {
+        const seg = document.createElement("div");
+        seg.style.width = `${probs[j] * 100}%`;
+        seg.style.background = palette[j % palette.length];
+        seg.style.color = "#fff";
+        seg.style.fontSize = "10px";
+        seg.style.display = "flex";
+        seg.style.alignItems = "center";
+        seg.style.justifyContent = "center";
+        seg.style.overflow = "hidden";
+        seg.className = "mono";
+        seg.title = `「${VOCAB[j]}」 ${(probs[j] * 100).toFixed(1)}%`;
+        if (probs[j] >= 0.08) seg.textContent = VOCAB[j];
+        rBar.appendChild(seg);
+      }
+      if (lastGenDraw) {
+        const mk = document.createElement("div");
+        mk.className = "roulette-marker";
+        mk.style.left = `${lastGenDraw.dice * 100}%`;
+        rBar.appendChild(mk);
+      }
+    }
+
+    function updateTrainingHud() {
+      const s = SAMPLES[selectedSampleIdx];
+      document.getElementById("hudStep").textContent = trainStepCount;
+      document.getElementById("hudSample").textContent = `${s.ctxText} → ${s.targetChar}`;
+
+      if (activeTape && hasComputedForwardStage >= 6) {
+        document.getElementById("hudBatchLoss").textContent = activeTape.nodes[11].data[0].toFixed(4);
+        document.getElementById("hudSampleLoss").textContent = activeTape.nodes[11].sampleLosses[selectedSampleIdx].toFixed(4);
+      } else {
+        document.getElementById("hudBatchLoss").textContent = "未计算 (0)";
+        document.getElementById("hudSampleLoss").textContent = "未计算 (0)";
+      }
+
+      const baEl = document.getElementById("hudBeforeAfter");
+      if (lastUpdateReport) {
+        const r = lastUpdateReport;
+        const rs = SAMPLES[r.sampleIdx];
+        baEl.textContent = `Step ${r.step} Batch ${r.beforeBatch.toFixed(3)} → ${r.afterBatch.toFixed(3)}（样本「${rs.ctxText}」${r.beforeSample.toFixed(3)} → ${r.afterSample.toFixed(3)}）`;
+      } else {
+        baEl.textContent = "尚无更新记录（完成第 ⑧ 步或 +1 step 后显示新旧对照）";
+      }
 
       document.querySelectorAll("#stagePills .stage-pill").forEach(el => {
         const st = parseInt(el.dataset.stage, 10);
         el.classList.toggle("active", st === currentStage);
         el.classList.toggle("done", currentStage > 0 && st < currentStage);
       });
-      const nextSt = currentStage >= 7 ? 1 : currentStage + 1;
-      document.getElementById("btnNextStep").textContent = `${currentStage >= 7 ? "⏭ 下一轮：" : "⏭ 下一步："}${STAGE_NAMES[nextSt - 1]} (${nextSt}/7)`;
-      document.getElementById("btnAutoPlay").textContent = mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
+
+      const nextSt = currentStage >= 8 ? 1 : currentStage + 1;
+      document.getElementById("btnNextStep").textContent =
+        `${currentStage >= 8 ? "⏭ 下一轮：" : "⏭ 下一步："}${STAGE_NAMES[nextSt - 1]} (${nextSt}/8)`;
+      document.getElementById("btnAutoPlay").textContent =
+        mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
     }
 
-    function enterStage(stageNum, nowMs) {
-      flushPendingStage7();
-      currentStage = stageNum; stageStartMs = nowMs; stage7Applied = false;
-      const ex = computeExact();
-      if (stageNum === 1) {
-        for (let i = 0; i < 9; i++) nodeGrads[i] = null;
-        for (let i = 6; i < 9; i++) nodeVals[i] = null;
-        for (let i = 0; i <= 5; i++) nodeVals[i] = ex.vals[i];
-        forwardStale = false;
-        setNarrator(`① 前向传播（Tape 压栈 0→4）：m = x·w1 = ${ex.vals[3].toFixed(2)}，z = m + b1 = ${ex.vals[4].toFixed(2)}`,
-          `前排 Arena Tape 数组按创建顺序记录 nodes[0..4]。播完暂停，准备好再点「⏭ 下一步」。`);
-      } else if (stageNum === 2) {
-        nodeVals[6] = ex.vals[6];
-        setNarrator(`② ReLU 3D 门控（Tape 压栈 6）：z = ${ex.vals[4].toFixed(2)} → h = max(0, z) = ${ex.vals[6].toFixed(2)}`,
-          ex.vals[4] > 0 ? `z > 0，绿色 ReLU 大门敞开，信号原样通过！` : `z ≤ 0，红色 ReLU 闸门关闭！输出被截断为 0（Dead ReLU：反向梯度也会被挡死！）。`);
-      } else if (stageNum === 3) {
-        nodeVals[7] = ex.vals[7]; nodeVals[8] = ex.vals[8];
-        setNarrator(`③ 输出层与 Loss（Tape 压栈 7→8）：pred = ${ex.vals[7].toFixed(2)}，Loss = (pred - 2)² = ${ex.vals[8].toFixed(3)}`,
-          `前向全部完成！Rust 的 Tape.nodes[0..8] 已天然排好拓扑序，下一步就开始 8→0 倒放链式法则！`);
-      } else if (stageNum === 4) {
-        nodeGrads[8] = ex.grads[8]; nodeGrads[7] = ex.grads[7]; nodeGrads[5] = ex.grads[5];
-        setNarrator(`④ 反向传播起跑（Tape 倒序 8→7→5）：dLoss = 1 → dPred = ${ex.grads[7].toFixed(2)}，dw2 = dPred·h = ${ex.grads[5].toFixed(2)}`,
-          `链式法则第一步：误差从 Loss 柱反向涌入 pred，并按乘法规则把梯度乘上 h 传给权重 w2！`);
-      } else if (stageNum === 5) {
-        nodeGrads[6] = ex.grads[6]; nodeGrads[4] = ex.grads[4];
-        setNarrator(`⑤ 梯度穿越 ReLU 门（Tape 倒序 6→4）：dH = ${ex.grads[6].toFixed(2)} → dZ = ${ex.grads[4].toFixed(2)}`,
-          ex.vals[4] > 0 ? `前向 z = ${ex.vals[4].toFixed(2)} > 0，ReLU 导数为 1，梯度完整穿透绿门！` : `💥 撞墙！前向 z = ${ex.vals[4].toFixed(2)} ≤ 0，ReLU 导数为 0，上游梯度被红墙彻底归零（Dead ReLU）！`);
-      } else if (stageNum === 6) {
-        nodeGrads[3] = ex.grads[3]; nodeGrads[2] = ex.grads[2]; nodeGrads[1] = ex.grads[1]; nodeGrads[0] = ex.grads[0];
-        setNarrator(`⑥ 梯度传回叶子（Tape 倒序 4→3→2→1）：db1 = ${ex.grads[2].toFixed(2)}，dw1 = dZ·x = ${ex.grads[1].toFixed(2)}`,
-          `加法节点分流梯度给 b1 和 m；乘法节点乘上 x=2.0 传给 w1。全网所有参数梯度已算完！`);
-      } else if (stageNum === 7) {
-        setNarrator(`⑦ SGD 参数更新（w -= lr·grad，lr = ${lr.toFixed(2)}）：物理推拉 w1、b1、w2 柱高！`,
-          `注意：本步只改权重，新的 pred 和 Loss 尚未重算！请点「⏭ 下一轮」重新走 ①→②→③ 验收新 Loss！`);
-      }
-      updateHud();
+    function renderAllUi() {
+      renderCorpusStrip();
+      renderSampleButtons();
+      renderTapeAndNodeInspector();
+      renderReluInspector();
+      renderContrastBox();
+      updateTrainingHud();
+      renderInferenceCard();
     }
+
+    // =========================================================================
+    // 6. Training 3D Canvas (Dedicated 100% to Training!)
+    // =========================================================================
+    const canvas = document.getElementById("scene3d");
+    const ctx = canvas.getContext("2d");
+    const cam = M.createCamera(canvas, { yaw: -0.38, pitch: 0.48, dist: 29.0, tx: 0.2, ty: 0.6, tz: 0.6, minDist: 15, maxDist: 44 });
+
+    const POS = {
+      input:  { x: -10.5, z: -0.6 },
+      emb:    { x: -7.6,  z:  2.2 },
+      xVec:   { x: -7.2,  z: -0.8 },
+      w1:     { x: -4.2,  z:  2.4 },
+      b1:     { x: -2.4,  z:  2.4 },
+      z1:     { x: -3.2,  z: -0.8 },
+      relu:   { x:  0.2,  z: -0.8 },
+      hVec:   { x:  2.6,  z: -0.8 },
+      w2:     { x:  3.6,  z:  2.4 },
+      b2:     { x:  5.4,  z:  2.4 },
+      sm:     { x:  6.4,  z: -0.8 },
+      loss:   { x:  9.8,  z: -0.8 },
+    };
 
     function renderFrame(nowMs) {
       cam.step();
@@ -242,158 +1483,271 @@
       const progWrap = document.getElementById("stageProgressWrap"), progBar = document.getElementById("stageProgressBar");
 
       if (mode === "step") {
-        progWrap.classList.remove("hidden"); progBar.style.width = `${(currentStage / 7) * 100}%`;
-        if (currentStage === 7 && stageT >= 0.42 && !stage7Applied) { applySgd(false); stage7Applied = true; updateHud(); }
+        progWrap.classList.remove("hidden");
+        progBar.style.width = `${(currentStage / 8) * 100}%`;
+        if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
+          performOneAdamWStep(true); stage8Applied = true; renderAllUi();
+        }
       } else if (mode === "autoplay") {
-        progWrap.classList.remove("hidden"); const elapsed = nowMs - stageStartMs;
-        stageT = Math.min(1, elapsed / curStepMs); progBar.style.width = `${((currentStage - 1 + stageT) / 7) * 100}%`;
-        if (currentStage === 7 && stageT >= 0.42 && !stage7Applied) { applySgd(false); stage7Applied = true; updateHud(); }
+        progWrap.classList.remove("hidden");
+        const elapsed = nowMs - stageStartMs;
+        stageT = Math.min(1, elapsed / curStepMs);
+        progBar.style.width = `${((currentStage - 1 + stageT) / 8) * 100}%`;
+        if (currentStage === 8 && stageT >= 0.42 && !stage8Applied) {
+          performOneAdamWStep(true); stage8Applied = true; renderAllUi();
+        }
         if (elapsed >= curStepMs + curHoldMs) {
-          if (currentStage < 7) enterStage(currentStage + 1, nowMs);
+          if (currentStage < 8) enterStage(currentStage + 1, nowMs);
           else {
-            mode = "step"; updateHud();
-            setNarrator(`✓ 第 ${epoch} 轮权重更新完毕！点「⏭ 下一轮」重新走前向 ①→②→③ 验收新 Loss！`,
-              `或直接点「⚡ 20 轮收敛」看橙色 Loss 能量柱一路塌缩到 0.00！`);
+            mode = "step"; updateTrainingHud();
+            const r = lastUpdateReport;
+            setNarrator(
+              `✓ Step ${r.step} 完整 8 步走完！Batch Loss: ${r.beforeBatch.toFixed(3)} → ${r.afterBatch.toFixed(3)}（已用新权重重算）`,
+              `现在可以继续点「⚡ 快速训练 40 step」，再去下方「推理区」用同一份权重接龙！`
+            );
           }
         }
-      } else if (mode === "conv20") {
+      } else if (mode === "train40") {
         progWrap.classList.remove("hidden");
-        if (nowMs - lastConvTick >= convTickMs() && convRemaining > 0) {
-          applySgd(true); convRemaining -= 1; lastConvTick = nowMs;
-          progBar.style.width = `${((20 - convRemaining) / 20) * 100}%`; updateHud();
-          setNarrator(`⚡ 自动收敛中... Epoch ${epoch}（pred = ${nodeVals[7].toFixed(3)} → 目标 2.00，Loss = ${nodeVals[8].toFixed(4)}）`,
-            `观察 w1、b1、w2 三根 3D 权重柱如何协同调整，让右侧 Loss 柱迅速归零！`);
+        if (nowMs - lastTrainTick >= trainTickMs() && train40Remaining > 0) {
+          performOneAdamWStep(false); train40Remaining -= 1; lastTrainTick = nowMs;
+          progBar.style.width = `${((40 - train40Remaining) / 40) * 100}%`;
+          renderAllUi();
+          setNarrator(
+            `⚡ 快速训练中... Step ${trainStepCount}（Batch Loss = ${activeTape.nodes[11].data[0].toFixed(4)}）`,
+            `右下「对照观察」里「前明月→光」和「望明月→。」正在分开，下方推理区也已实时同步新权重！`
+          );
         }
-        if (convRemaining <= 0) {
-          mode = "idle"; currentStage = 0; progWrap.classList.add("hidden"); updateHud();
-          setNarrator(`🎉 收敛完成！Epoch ${epoch}，pred = ${nodeVals[7].toFixed(3)}，Loss = ${nodeVals[8].toFixed(5)}`,
-            `你可以点「💀 体验 Dead ReLU」试试梯度撞墙，或者拖动 w1/b1/w2 再单步走一遍！`);
+        if (train40Remaining <= 0) {
+          mode = "idle"; currentStage = 0; progWrap.classList.add("hidden"); renderAllUi();
+          setNarrator(
+            `🎉 训练完成（Step ${trainStepCount}，Batch Loss = ${activeTape.nodes[11].data[0].toFixed(4)}）！`,
+            `现在可切换「前明月→光」和「望明月→。」对照，或直接滚到下方「推理 Inference」卡片开玩接龙！`
+          );
         }
-      } else progWrap.classList.add("hidden");
+      } else {
+        progWrap.classList.add("hidden");
+      }
 
-      const lerpRate = Math.min(0.45, 0.16 * Math.sqrt(animSpeed));
-      visualW.w1 += (w1 - visualW.w1) * lerpRate; visualW.b1 += (b1 - visualW.b1) * lerpRate; visualW.w2 += (w2 - visualW.w2) * lerpRate;
-      visualLoss += ((nodeVals[8] === null ? 0.0 : nodeVals[8]) - visualLoss) * lerpRate;
+      // Smooth interpolation for Training 3D visuals
+      const lerpRate = Math.min(0.45, 0.17 * Math.sqrt(animSpeed));
+      const targetProbs = (activeTape && hasComputedForwardStage >= 6)
+        ? softmaxRow(activeTape.nodes[10].data.subarray(selectedSampleIdx * V, (selectedSampleIdx + 1) * V), 1.0)
+        : new Float32Array(V);
+      for (let j = 0; j < V; j++) visualProbs[j] += (targetProbs[j] - visualProbs[j]) * lerpRate;
+
+      const targetLoss = (activeTape && hasComputedForwardStage >= 6)
+        ? activeTape.nodes[11].sampleLosses[selectedSampleIdx] : 0.0;
+      visualSampleLoss += (targetLoss - visualSampleLoss) * lerpRate;
+
+      for (let k = 0; k < HIDDEN; k++) {
+        const tz = (activeTape && hasComputedForwardStage >= 3) ? activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + k] : 0;
+        const th = (activeTape && hasComputedForwardStage >= 4) ? activeTape.nodes[8].data[selectedSampleIdx * HIDDEN + k] : 0;
+        visualZ1[k] += (tz - visualZ1[k]) * lerpRate;
+        visualH[k] += (th - visualH[k]) * lerpRate;
+      }
 
       const theme = M.getThemeColors();
       const { W, H } = M.beginFrame(canvas, ctx, theme);
-      const { project, eye } = M.makeProjector(W, H, cam, 1.2, 0.52);
+      const { project, eye } = M.makeProjector(W, H, cam, 1.15, 0.46);
 
       const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border), rgbPrimary = M.parseRgb(theme.primary);
       const rgbSuccess = M.parseRgb(theme.success), rgbError = M.parseRgb(theme.error), rgbWarning = M.parseRgb(theme.warning);
 
-      ctx.strokeStyle = M.shade(rgbBorder, 1, 0.28); ctx.lineWidth = 1;
-      for (let gx = -9; gx <= 9; gx += 1.5) {
-        const a = project(gx, 0, -3.5), b = project(gx, 0, 6.2);
+      ctx.strokeStyle = M.shade(rgbBorder, 1, 0.25); ctx.lineWidth = 1;
+      for (let gx = -12; gx <= 12; gx += 2) {
+        const a = project(gx, 0, -4.8), b = project(gx, 0, 6.4);
         if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
       }
-      for (let gz = -3.5; gz <= 6.2; gz += 1.6) {
-        const a = project(-9, 0, gz), b = project(9, 0, gz);
+      for (let gz = -4.8; gz <= 6.4; gz += 1.8) {
+        const a = project(-12, 0, gz), b = project(12, 0, gz);
         if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
       }
 
-      for (const [u, v] of EDGES) {
-        M.drawPipe3D(ctx, project, { x: NODES_META[u].x, y: 0.7, z: NODES_META[u].z }, { x: NODES_META[v].x, y: 0.7, z: NODES_META[v].z }, M.shade(rgbBorder, 1.1, 0.8), 2.2);
+      for (const [a, b] of [
+        [POS.input, POS.xVec], [POS.emb, POS.xVec],
+        [POS.xVec, POS.z1], [POS.w1, POS.z1], [POS.b1, POS.z1],
+        [POS.z1, POS.relu], [POS.relu, POS.hVec],
+        [POS.hVec, POS.sm], [POS.w2, POS.sm], [POS.b2, POS.sm],
+        [POS.sm, POS.loss],
+      ]) {
+        M.drawPipe3D(ctx, project, { x: a.x, y: 0.45, z: a.z }, { x: b.x, y: 0.45, z: b.z }, M.shade(rgbBorder, 1.05, 0.65), 1.8);
       }
 
       const dl = [];
-      const zNow = nodeVals[4] !== null ? nodeVals[4] : (X_VAL * w1 + b1);
-      const reluOpen = zNow > 0;
-      const exCur = computeExact();
+      const s = SAMPLES[selectedSampleIdx];
 
-      for (const n of NODES_META) {
-        const val = nodeVals[n.id], grd = nodeGrads[n.id];
-        if (n.kind === "loss") {
-          if (visualLoss < 0.005 && nodeVals[8] === null) {
-            M.pushBox(dl, ctx, project, eye, n.x - 0.75, 0, n.z - 0.75, n.x + 0.75, 0.08, n.z + 0.75, rgbBorder, 0.55, theme.border);
-            M.pushLabel3D(dl, ctx, project, n.x, 0.65, n.z, "Loss: 0 (未计算)", theme.muted, "bold 11px monospace");
-          } else {
-            const lh = Math.max(0.16, Math.min(4.6, visualLoss * 1.1 + 0.14));
-            M.pushBox(dl, ctx, project, eye, n.x - 0.75, 0, n.z - 0.75, n.x + 0.75, lh, n.z + 0.75, rgbWarning, 0.92, theme.fg);
-            M.pushLabel3D(dl, ctx, project, n.x, lh + 0.55, n.z, `Loss ${visualLoss.toFixed(3)}`, theme.warning, "bold 12px monospace");
+      // A. Input 3-Char Training Window Cubes
+      for (let slot = 0; slot < CTX_LEN; slot++) {
+        const cz = POS.input.z + (slot - 1) * 1.35;
+        M.pushBox(dl, ctx, project, eye, POS.input.x - 0.5, 0, cz - 0.48, POS.input.x + 0.5, 1.05, cz + 0.48, rgbPrimary, 0.92, theme.fg);
+        M.pushLabel3D(dl, ctx, project, POS.input.x, 1.48, cz, `${VOCAB[s.ctxIds[slot]]}:${s.ctxIds[slot]}`, theme.fg, "bold 11px monospace");
+      }
+      M.pushLabel3D(dl, ctx, project, POS.input.x, 0.12, POS.input.z + 2.35, "3字训练窗口", theme.primary, "bold 11px sans-serif");
+
+      // B. 5 Trainable Parameter Blocks (emb, w1, b1, w2, b2)
+      for (const pb of [
+        { id: 0, p: model.emb, pos: POS.emb, label: "emb(10×4)" },
+        { id: 1, p: model.w1,  pos: POS.w1,  label: "w1(12×8)"  },
+        { id: 2, p: model.b1,  pos: POS.b1,  label: "b1(1×8)"   },
+        { id: 3, p: model.w2,  pos: POS.w2,  label: "w2(8×10)"  },
+        { id: 4, p: model.b2,  pos: POS.b2,  label: "b2(1×10)"  },
+      ]) {
+        let rms = 0;
+        for (let i = 0; i < pb.p.data.length; i++) rms += pb.p.data[i] * pb.p.data[i];
+        rms = Math.sqrt(rms / pb.p.data.length);
+        const h = Math.max(0.45, Math.min(2.6, rms * 2.1 + 0.35));
+        const isSel = selectedNodeId === pb.id;
+        const col = isSel ? rgbPrimary : M.lerpRgb(rgbCard, rgbSuccess, 0.35);
+        M.pushBox(dl, ctx, project, eye, pb.pos.x - 0.62, 0, pb.pos.z - 0.55, pb.pos.x + 0.62, h, pb.pos.z + 0.55, col, 0.94, isSel ? theme.fg : theme.border);
+        M.pushLabel3D(dl, ctx, project, pb.pos.x, h + 0.42, pb.pos.z, pb.label, theme.fg, "bold 10px monospace");
+
+        if (currentStage === 8) {
+          const pulse = Math.sin(nowMs * 0.012) * 0.14;
+          let maxAbsD = 0, signedTop = 0;
+          for (let i = 0; i < pb.p.lastDelta.length; i++) {
+            if (Math.abs(pb.p.lastDelta[i]) > maxAbsD) { maxAbsD = Math.abs(pb.p.lastDelta[i]); signedTop = pb.p.lastDelta[i]; }
           }
-        } else if (n.kind === "relu") {
-          const gateRgb = reluOpen ? rgbSuccess : rgbError;
-          M.pushBox(dl, ctx, project, eye, n.x - 0.28, 0, n.z - 0.95, n.x + 0.28, 2.5, n.z - 0.65, rgbBorder, 0.95, theme.fg);
-          M.pushBox(dl, ctx, project, eye, n.x - 0.28, 0, n.z + 0.65, n.x + 0.28, 2.5, n.z + 0.95, rgbBorder, 0.95, theme.fg);
-          M.pushBox(dl, ctx, project, eye, n.x - 0.28, 2.2, n.z - 0.95, n.x + 0.28, 2.55, n.z + 0.95, gateRgb, 0.95, theme.fg);
-          if (!reluOpen) M.pushBox(dl, ctx, project, eye, n.x - 0.14, 0.05, n.z - 0.64, n.x + 0.14, 2.18, n.z + 0.64, rgbError, 0.72, theme.error);
-          else M.pushBox(dl, ctx, project, eye, n.x - 0.08, 0.05, n.z - 0.64, n.x + 0.08, 2.18, n.z + 0.64, rgbSuccess, 0.18, theme.success);
-          M.pushLabel3D(dl, ctx, project, n.x, 3.05, n.z, reluOpen ? "ReLU 门 (通 ×1)" : "ReLU 门 (断 ×0!)", reluOpen ? theme.success : theme.error, "bold 11px sans-serif");
-          if (val !== null) M.pushLabel3D(dl, ctx, project, n.x, 1.35, n.z + 1.25, `h=${val.toFixed(2)}`, theme.fg, "bold 11px monospace");
-          if (grd !== null) M.pushLabel3D(dl, ctx, project, n.x, 0.55, n.z + 1.25, `dH=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
-        } else if (n.kind === "param") {
-          const curV = n.id === 1 ? visualW.w1 : (n.id === 2 ? visualW.b1 : visualW.w2);
-          const h = Math.max(0.25, Math.min(3.4, Math.abs(curV) * 1.2 + 0.35));
-          const col = curV >= 0 ? M.lerpRgb(rgbCard, rgbSuccess, 0.55) : M.lerpRgb(rgbCard, rgbError, 0.55);
-          M.pushBox(dl, ctx, project, eye, n.x - 0.65, 0, n.z - 0.65, n.x + 0.65, h, n.z + 0.65, col, 0.94, theme.fg);
-          M.pushLabel3D(dl, ctx, project, n.x, h + 0.55, n.z, `${n.short}=${curV.toFixed(2)}`, theme.fg, "bold 12px monospace");
-          if (grd !== null) M.pushLabel3D(dl, ctx, project, n.x, h + 1.05, n.z, `grad=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
-          if (currentStage === 7) {
-            const delta = -lr * exCur.grads[n.id], pulse = Math.sin(nowMs * 0.012) * 0.14;
-            if (Math.abs(delta) > 0.002) {
-              const len = Math.min(1.9, 0.45 + Math.abs(delta) * 4.2);
-              if (delta > 0) {
-                M.pushArrow3D(dl, ctx, project, n.x, h + 1.3 + pulse, h + 1.3 + len + pulse, n.z, theme.success, 3.2);
-                M.pushLabel3D(dl, ctx, project, n.x, h + 1.6 + len + pulse, n.z, `↑ +${delta.toFixed(3)}`, theme.success, "bold 11px monospace");
-              } else {
-                M.pushArrow3D(dl, ctx, project, n.x, h + 1.3 + len - pulse, h + 1.3 - pulse, n.z, theme.error, 3.2);
-                M.pushLabel3D(dl, ctx, project, n.x, h + 1.6 + len - pulse, n.z, `↓ ${delta.toFixed(3)}`, theme.error, "bold 11px monospace");
-              }
-            } else M.pushLabel3D(dl, ctx, project, n.x, h + 1.45, n.z, "Δw=0 (冻结)", theme.muted, "10px monospace");
-          }
-        } else {
-          const isLit = val !== null;
-          const col = n.kind === "input" ? rgbBorder : (isLit ? rgbPrimary : rgbCard);
-          M.pushBox(dl, ctx, project, eye, n.x - 0.65, 0, n.z - 0.65, n.x + 0.65, 1.25, n.z + 0.65, col, 0.92, isLit ? theme.fg : theme.border);
-          M.pushLabel3D(dl, ctx, project, n.x, 1.7, n.z, n.name, theme.fg, "bold 11px sans-serif");
-          if (val !== null) M.pushLabel3D(dl, ctx, project, n.x, 2.2, n.z, `${n.short}=${val.toFixed(2)}`, theme.primary, "bold 11px monospace");
-          if (grd !== null) M.pushLabel3D(dl, ctx, project, n.x, 2.7, n.z, `d${n.short}=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
+          const dirUp = signedTop >= 0;
+          const arrowCol = dirUp ? theme.success : theme.error;
+          const len = Math.min(1.6, 0.5 + maxAbsD * 18);
+          if (dirUp) M.pushArrow3D(dl, ctx, project, pb.pos.x, h + 0.7 + pulse, h + 0.7 + len + pulse, pb.pos.z, arrowCol, 2.8);
+          else M.pushArrow3D(dl, ctx, project, pb.pos.x, h + 0.7 + len - pulse, h + 0.7 - pulse, pb.pos.z, arrowCol, 2.8);
+          M.pushLabel3D(dl, ctx, project, pb.pos.x, h + 1.05 + len, pb.pos.z, `Δw ${signedTop >= 0 ? "+" : ""}${signedTop.toFixed(3)}`, arrowCol, "bold 10px monospace");
         }
       }
 
-      const tapeZ = 4.9;
-      M.pushLabel3D(dl, ctx, project, -8.4, 0.25, tapeZ, "Tape:", theme.muted, "bold 12px monospace");
-      for (let i = 0; i < 9; i++) {
-        const tx = -6.4 + i * 1.6, hv = nodeVals[i] !== null, hg = nodeGrads[i] !== null;
-        const slotRgb = hg ? rgbWarning : (hv ? rgbPrimary : rgbCard);
-        const slotH = hg ? 0.62 : (hv ? 0.45 : 0.22);
-        M.pushBox(dl, ctx, project, eye, tx - 0.58, 0, tapeZ - 0.52, tx + 0.58, slotH, tapeZ + 0.52, slotRgb, 0.9, hv || hg ? theme.fg : theme.border);
-        M.pushLabel3D(dl, ctx, project, tx, slotH + 0.32, tapeZ, `[${i}] ${NODES_META[i].short}`, hg ? theme.warning : (hv ? theme.primary : theme.muted), "bold 10px monospace");
+      // C. x (12-dim concatenated embedding mini-bars)
+      const xLit = hasComputedForwardStage >= 2;
+      for (let i = 0; i < 6; i++) {
+        const xz = POS.xVec.z + (i - 2.5) * 0.55;
+        const val = xLit && activeTape ? activeTape.nodes[5].data[selectedSampleIdx * IN_DIM + i * 2] : 0;
+        const bh = xLit ? Math.max(0.18, Math.min(2.2, Math.abs(val) * 1.4 + 0.25)) : 0.15;
+        const col = !xLit ? rgbCard : (val >= 0 ? M.lerpRgb(rgbCard, rgbPrimary, 0.75) : M.lerpRgb(rgbCard, rgbError, 0.65));
+        M.pushBox(dl, ctx, project, eye, POS.xVec.x - 0.35, 0, xz - 0.2, POS.xVec.x + 0.35, bh, xz + 0.2, col, 0.92, theme.border);
+      }
+      M.pushLabel3D(dl, ctx, project, POS.xVec.x, 2.55, POS.xVec.z, "x (拼接12维)", xLit ? theme.primary : theme.muted, "bold 11px monospace");
+
+      // D. z1 (8 pre-activations)
+      const zLit = hasComputedForwardStage >= 3;
+      for (let k = 0; k < HIDDEN; k++) {
+        const zz = POS.z1.z + (k - 3.5) * 0.52;
+        const v = visualZ1[k], isSelN = k === selectedNeuron;
+        const bh = zLit ? Math.max(0.14, Math.min(2.6, Math.abs(v) * 0.9 + 0.18)) : 0.12;
+        const col = !zLit ? rgbCard : (v > 0 ? rgbSuccess : rgbError);
+        M.pushBox(dl, ctx, project, eye, POS.z1.x - 0.34, 0, zz - 0.19, POS.z1.x + 0.34, bh, zz + 0.19, col, isSelN ? 1.0 : 0.78, isSelN ? theme.fg : theme.border);
+      }
+      M.pushLabel3D(dl, ctx, project, POS.z1.x, 2.85, POS.z1.z, "z1 = xW1+b1 (8维)", zLit ? theme.fg : theme.muted, "bold 11px monospace");
+
+      // E. 3D ReLU Gate
+      const selZ = activeTape && hasComputedForwardStage >= 3 ? activeTape.nodes[7].data[selectedSampleIdx * HIDDEN + selectedNeuron] : 1.0;
+      const selOpen = selZ > 0;
+      const gateRgb = !zLit ? rgbBorder : (selOpen ? rgbSuccess : rgbError);
+      M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.22, 0, POS.relu.z - 1.9, POS.relu.x + 0.22, 2.7, POS.relu.z - 1.62, rgbBorder, 0.95, theme.fg);
+      M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.22, 0, POS.relu.z + 1.62, POS.relu.x + 0.22, 2.7, POS.relu.z + 1.9, rgbBorder, 0.95, theme.fg);
+      M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.22, 2.42, POS.relu.z - 1.9, POS.relu.x + 0.22, 2.75, POS.relu.z + 1.9, gateRgb, 0.95, theme.fg);
+      if (zLit && !selOpen) M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.1, 0.05, POS.relu.z - 1.6, POS.relu.x + 0.1, 2.4, POS.relu.z + 1.6, rgbError, 0.65, theme.error);
+      else if (zLit) M.pushBox(dl, ctx, project, eye, POS.relu.x - 0.06, 0.05, POS.relu.z - 1.6, POS.relu.x + 0.06, 2.4, POS.relu.z + 1.6, rgbSuccess, 0.16, theme.success);
+      M.pushLabel3D(dl, ctx, project, POS.relu.x, 3.55, POS.relu.z, !zLit ? "ReLU 门" : (selOpen ? `ReLU #${selectedNeuron} 通(×1)` : `ReLU #${selectedNeuron} 断(×0!)`), !zLit ? theme.muted : (selOpen ? theme.success : theme.error), "bold 11px sans-serif");
+
+      // F. h = ReLU(z1)
+      const hLit = hasComputedForwardStage >= 4;
+      for (let k = 0; k < HIDDEN; k++) {
+        const hz = POS.hVec.z + (k - 3.5) * 0.52;
+        const v = visualH[k], isSelN = k === selectedNeuron;
+        const bh = hLit ? Math.max(0.08, Math.min(2.6, v * 0.9 + 0.08)) : 0.10;
+        const col = !hLit ? rgbCard : (v > 0.001 ? rgbSuccess : rgbBorder);
+        M.pushBox(dl, ctx, project, eye, POS.hVec.x - 0.34, 0, hz - 0.19, POS.hVec.x + 0.34, bh, hz + 0.19, col, isSelN ? 1.0 : 0.8, isSelN ? theme.fg : theme.border);
+      }
+      M.pushLabel3D(dl, ctx, project, POS.hVec.x + 0.25, 2.15, POS.hVec.z - 2.35, "h = ReLU(z1)", hLit ? theme.success : theme.muted, "bold 11px monospace");
+
+      // G. Training Softmax 10 Probability Towers (T = 1.0, Target highlighted green)
+      const smLit = hasComputedForwardStage >= 6;
+      for (let j = 0; j < V; j++) {
+        const sz = POS.sm.z + (j - 4.5) * 0.62;
+        const p = visualProbs[j], isTgt = j === s.targetId;
+        const bh = smLit ? Math.max(0.08, p * 4.5) : 0.08;
+        const col = !smLit ? rgbBorder : (isTgt ? rgbSuccess : rgbPrimary);
+        M.pushBox(dl, ctx, project, eye, POS.sm.x - 0.28, 0, sz - 0.22, POS.sm.x + 0.28, bh, sz + 0.22, col, smLit ? 0.92 : 0.45, isTgt ? theme.fg : theme.border);
+        const lbl = smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`;
+        M.pushLabel3D(dl, ctx, project, POS.sm.x + 0.85, 0.15, sz, lbl, isTgt ? theme.success : theme.muted, isTgt ? "bold 11px monospace" : "10px monospace");
+      }
+      M.pushLabel3D(dl, ctx, project, POS.sm.x, 4.95, POS.sm.z, "训练 Softmax 概率塔", theme.primary, "bold 11px monospace");
+
+      // H. Current Sample Loss 3D Energy Pillar
+      if (visualSampleLoss < 0.01 && hasComputedForwardStage < 6) {
+        M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.65, 0, POS.loss.z - 0.65, POS.loss.x + 0.65, 0.08, POS.loss.z + 0.65, rgbBorder, 0.5, theme.border);
+        M.pushLabel3D(dl, ctx, project, POS.loss.x, 0.55, POS.loss.z, "样本Loss: 0 (未计算)", theme.muted, "bold 10px monospace");
+      } else {
+        const lh = Math.max(0.14, Math.min(4.6, visualSampleLoss * 1.45));
+        M.pushBox(dl, ctx, project, eye, POS.loss.x - 0.65, 0, POS.loss.z - 0.65, POS.loss.x + 0.65, lh, POS.loss.z + 0.65, rgbWarning, 0.92, theme.fg);
+        M.pushLabel3D(dl, ctx, project, POS.loss.x, lh + 0.5, POS.loss.z, `样本Loss ${visualSampleLoss.toFixed(2)}`, theme.warning, "bold 11px monospace");
       }
 
-      if (currentStage >= 1 && currentStage <= 3) {
-        const [a, b] = [[0, 4], [4, 6], [6, 8]][currentStage - 1];
-        M.pushOrb(dl, ctx, project, -6.4 + (a + (b - a) * stageT) * 1.6, 1.1, tapeZ, 0.22, theme.primary, theme.primary, "→", "#fff");
-      } else if (currentStage >= 4 && currentStage <= 6) {
-        const [a, b] = [[8, 5], [6, 4], [4, 0]][currentStage - 4];
-        M.pushOrb(dl, ctx, project, -6.4 + (a + (b - a) * stageT) * 1.6, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
+      // I. Front 12-Slot 3D Arena Tape
+      const tapeZ = 4.35;
+      const stageMaxNode = [-1, 4, 5, 7, 8, 10, 11, 11, 11][currentStage] ?? -1;
+      const revealedMax = hasComputedForwardStage >= 6 ? 11 : stageMaxNode;
+      const shortNames = ["emb", "w1", "b1", "w2", "b2", "x", "z1r", "z1", "h", "z2r", "log", "L"];
+      M.pushLabel3D(dl, ctx, project, -10.8, 0.25, tapeZ, "Tape:", theme.muted, "bold 11px monospace");
+      for (let i = 0; i < 12; i++) {
+        const tx = -9.1 + i * 1.65;
+        const isFwd = i <= revealedMax, isBwd = hasComputedBackward, isSel = i === selectedNodeId;
+        const col = isBwd ? rgbWarning : (isFwd ? (i <= 4 ? rgbSuccess : rgbPrimary) : rgbCard);
+        const h = isBwd ? 0.58 : (isFwd ? 0.42 : 0.18);
+        M.pushBox(dl, ctx, project, eye, tx - 0.58, 0, tapeZ - 0.45, tx + 0.58, h, tapeZ + 0.45, col, 0.9, isSel ? theme.fg : theme.border);
+        M.pushLabel3D(dl, ctx, project, tx, h + 0.28, tapeZ, `[${i}]${shortNames[i]}`, isSel ? theme.fg : (isBwd ? theme.warning : (isFwd ? theme.primary : theme.muted)), "bold 10px monospace");
       }
 
-      const pOf = id => ({ x: NODES_META[id].x, y: 1.0, z: NODES_META[id].z });
+      // J. Stage-Specific 3D Motion Trajectories
+      const ptOf = (p, y = 1.0) => ({ x: p.x, y, z: p.z });
       if (currentStage === 1) {
-        if (stageT <= 0.55) { const u = Math.min(1, stageT / 0.55); for (const s of [0, 1]) { const pt = M.evalArc(pOf(s), pOf(3), 1.3, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
-        else { const u = Math.min(1, (stageT - 0.5) / 0.5); for (const s of [3, 2]) { const pt = M.evalArc(pOf(s), pOf(4), 1.3, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
+        for (let slot = 0; slot < CTX_LEN; slot++) {
+          const from = { x: POS.input.x, y: 1.0, z: POS.input.z + (slot - 1) * 1.35 };
+          const to = ptOf(POS.emb, 1.2);
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, stageT, theme.primary, 2.2, true);
+          const cur = M.evalArc(from, to, 1.8, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.24, theme.primary, theme.primary, VOCAB[s.ctxIds[slot]], "#fff");
+        }
       } else if (currentStage === 2) {
-        const pt = M.evalArc(pOf(4), pOf(6), 1.2, stageT);
-        M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.25, reluOpen ? theme.success : theme.error, reluOpen ? theme.success : theme.error, reluOpen ? "通" : "0");
+        const cur = M.evalArc(ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stageT);
+        M.drawBezierArc3D(ctx, project, ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stageT, theme.success, 2.6);
+        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.success, theme.success, "x", "#fff");
       } else if (currentStage === 3) {
-        if (stageT <= 0.52) { const u = Math.min(1, stageT / 0.52); for (const s of [6, 5]) { const pt = M.evalArc(pOf(s), pOf(7), 1.3, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
-        else { const pt = M.evalArc(pOf(7), pOf(8), 1.5, Math.min(1, (stageT - 0.5) / 0.5)); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.26, theme.warning, theme.warning, "L", "#000"); }
+        for (const src of [POS.xVec, POS.w1, POS.b1]) {
+          M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stageT, theme.primary, 2.0);
+          const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
+        }
       } else if (currentStage === 4) {
-        if (stageT <= 0.5) { const pt = M.evalArc(pOf(8), pOf(7), 1.6, stageT / 0.5); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.25, theme.warning, theme.warning, "∂", "#000"); }
-        else { const pt = M.evalArc(pOf(7), pOf(5), 1.5, (stageT - 0.5) / 0.5); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.24, theme.warning, theme.warning, "∂", "#000"); }
+        const cur = M.evalArc(ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stageT);
+        M.drawBezierArc3D(ctx, project, ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stageT, selOpen ? theme.success : theme.error, 2.6);
+        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, selOpen ? theme.success : theme.error, selOpen ? theme.success : theme.error, selOpen ? "通" : "0");
       } else if (currentStage === 5) {
-        if (stageT <= 0.45) { const pt = M.evalArc(pOf(7), pOf(6), 1.4, stageT / 0.45); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.24, theme.warning, theme.warning, "∂", "#000"); }
-        else {
-          const u = (stageT - 0.45) / 0.55;
-          if (reluOpen) { const pt = M.evalArc(pOf(6), pOf(4), 1.4, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.25, theme.success, theme.success, "×1", "#fff"); }
-          else { const pt = M.evalArc(pOf(6), pOf(4), 0.6, u * 0.28); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.28, theme.error, theme.error, "×0", "#fff"); }
+        for (const src of [POS.hVec, POS.w2, POS.b2]) {
+          M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stageT, theme.primary, 2.0);
+          const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stageT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
         }
       } else if (currentStage === 6) {
-        const col = reluOpen ? theme.warning : theme.error;
-        if (stageT <= 0.5) { const u = stageT / 0.5; for (const d of [2, 3]) { const pt = M.evalArc(pOf(4), pOf(d), 1.5, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, col, col, reluOpen ? "∂" : "0", "#000"); } }
-        else { const u = (stageT - 0.5) / 0.5; for (const d of [1, 0]) { const pt = M.evalArc(pOf(3), pOf(d), 1.5, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, col, col, reluOpen ? "∂" : "0", "#000"); } }
+        const targetZ = POS.sm.z + (s.targetId - 4.5) * 0.62;
+        const fromSm = { x: POS.sm.x, y: Math.max(0.5, visualProbs[s.targetId] * 4.5), z: targetZ };
+        const toLoss = { x: POS.loss.x, y: Math.max(0.5, visualSampleLoss * 1.45), z: POS.loss.z };
+        M.drawBezierArc3D(ctx, project, fromSm, toLoss, 1.8, stageT, theme.warning, 2.8);
+        const cur = M.evalArc(fromSm, toLoss, 1.8, stageT);
+        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
+      } else if (currentStage === 7) {
+        const revIdx = 11 * (1 - stageT);
+        M.pushOrb(dl, ctx, project, -9.1 + revIdx * 1.65, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
+        const waypoints = [POS.loss, POS.sm, POS.hVec, POS.relu, POS.z1, POS.xVec, POS.emb];
+        const segFloat = stageT * (waypoints.length - 1);
+        const segIdx = Math.min(waypoints.length - 2, Math.floor(segFloat));
+        const segU = segFloat - segIdx;
+        const a = ptOf(waypoints[segIdx], 1.5), b = ptOf(waypoints[segIdx + 1], 1.5);
+        const hitWall = !selOpen && segIdx >= 3;
+        const cur = M.evalArc(a, b, 1.4, segU);
+        M.drawBezierArc3D(ctx, project, a, b, 1.4, segU, hitWall ? theme.error : theme.warning, 2.8, true);
+        M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, hitWall ? theme.error : theme.warning, hitWall ? theme.error : theme.warning, hitWall ? "0" : "∂", "#000");
       }
 
       M.flushDrawList(dl);
@@ -401,52 +1755,198 @@
       requestAnimationFrame(renderFrame);
     }
 
-    function resetState(nw1 = 0.60, nb1 = -0.40, nw2 = 0.80, msg = null) {
-      mode = "idle"; currentStage = 0; stage7Applied = false;
-      w1 = nw1; b1 = nb1; w2 = nw2; epoch = 0;
-      nodeVals.fill(null); nodeGrads.fill(null); forwardStale = false;
-      syncSliders(); updateHud();
-      setNarrator(msg || "已重置网络（Loss 与计算图归零，等待首次前向传播）", "点击「⏭ 下一步」严格按 ①→⑦ 体验前向压栈与反向倒放！");
+    // =========================================================================
+    // 7. Scalar Chain Rule Modal (x=1.5, target=3.0)
+    // =========================================================================
+    function renderScalarModal() {
+      const x = parseFloat(document.getElementById("scX").value);
+      const w1 = parseFloat(document.getElementById("scW1").value);
+      const b1 = parseFloat(document.getElementById("scB1").value);
+      const w2 = parseFloat(document.getElementById("scW2").value);
+      const target = 3.0;
+      document.getElementById("scXV").textContent = x.toFixed(1);
+      document.getElementById("scW1V").textContent = w1.toFixed(1);
+      document.getElementById("scB1V").textContent = b1.toFixed(1);
+      document.getElementById("scW2V").textContent = w2.toFixed(1);
+
+      const m = x * w1, z = m + b1, h = Math.max(0, z), pred = h * w2;
+      const diff = pred - target, loss = diff * diff;
+      const dPred = 2 * diff, dW2 = dPred * h, dH = dPred * w2;
+      const dZ = z > 0 ? dH : 0, dB1 = dZ, dW1 = dZ * x;
+
+      const nodes = [
+        { k: "m = x·w1", v: m, g: dZ },
+        { k: "z = m+b1", v: z, g: dZ },
+        { k: z > 0 ? "h = ReLU(通)" : "h = ReLU(断!)", v: h, g: dH },
+        { k: "pred = h·w2", v: pred, g: dPred },
+        { k: "Loss=(pred-3)²", v: loss, g: 1.0 },
+      ];
+      document.getElementById("scalarFlow").innerHTML = nodes.map((n, i) => `
+        <div class="scalar-node">
+          <div class="muted">${n.k}</div>
+          <div style="color:var(--primary)">val = ${n.v.toFixed(2)}</div>
+          <div style="color:var(--warning)">grad = ${n.g.toFixed(2)}</div>
+        </div>${i < nodes.length - 1 ? '<span class="muted">→</span>' : ''}
+      `).join("");
+
+      document.getElementById("scalarChainText").innerHTML = `
+        <div><strong>链式法则逐项相乘（上游梯度 × 局部导数）：</strong></div>
+        <div>· dPred = 2·(pred - 3.0) = <strong>${dPred.toFixed(3)}</strong></div>
+        <div>· dw2 = dPred · h = ${dPred.toFixed(2)} × ${h.toFixed(2)} = <strong style="color:var(--warning)">${dW2.toFixed(3)}</strong></div>
+        <div>· dH = dPred · w2 = ${dPred.toFixed(2)} × ${w2.toFixed(2)} = <strong>${dH.toFixed(3)}</strong></div>
+        <div>· dZ = dH · ReLU'(z=${z.toFixed(2)}) = ${dH.toFixed(2)} × ${z > 0 ? "1" : '<span style="color:var(--error)">0 (截断!)</span>'} = <strong>${dZ.toFixed(3)}</strong></div>
+        <div>· db1 = dZ × 1 = <strong style="color:var(--warning)">${dB1.toFixed(3)}</strong> &nbsp;|&nbsp; dw1 = dZ · x = ${dZ.toFixed(2)} × ${x.toFixed(1)} = <strong style="color:var(--warning)">${dW1.toFixed(3)}</strong></div>
+      `;
     }
 
-    document.getElementById("btnNextStep").onclick = () => { flushPendingStage7(); mode = "step"; enterStage(currentStage >= 7 ? 1 : currentStage + 1, performance.now()); };
+    // =========================================================================
+    // 8. Controls Wiring & Boot
+    // =========================================================================
+    function initAll(deadRelu = false) {
+      model = createModel(42, deadRelu);
+      trainStepCount = 0;
+      mode = "idle";
+      currentStage = 0;
+      stage8Applied = false;
+      activeTape = null;
+      hasComputedForwardStage = 0;
+      hasComputedBackward = false;
+      hasEverUpdated = false;
+      lastUpdateReport = null;
+      visualProbs.fill(0);
+      visualZ1.fill(0);
+      visualH.fill(0);
+      visualSampleLoss = 0;
+      genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
+      lastGenDraw = null;
+      document.getElementById("genReadout").textContent = "点击「🎲 推理下一个字」体验单步采样与窗口右滑";
+      renderAllUi();
+    }
+
+    const genStartSelect = document.getElementById("genStartSelect");
+    SAMPLES.forEach((s, idx) => {
+      const opt = document.createElement("option");
+      opt.value = idx;
+      opt.textContent = `「${s.ctxText}」(样本#${idx})`;
+      if (idx === 0) opt.selected = true;
+      genStartSelect.appendChild(opt);
+    });
+    genStartSelect.onchange = () => {
+      genStartSampleIdx = parseInt(genStartSelect.value, 10);
+      genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
+      lastGenDraw = null;
+      renderInferenceCard();
+      document.getElementById("genReadout").textContent =
+        `接龙起点已切换为「${SAMPLES[genStartSampleIdx].ctxText}」（上方训练区与已训练权重完全不受影响）`;
+    };
+
+    document.getElementById("btnNextStep").onclick = () => {
+      flushPendingStage8();
+      mode = "step";
+      enterStage(currentStage >= 8 ? 1 : currentStage + 1, performance.now());
+    };
+
     document.getElementById("btnAutoPlay").onclick = () => {
-      flushPendingStage7();
-      if (mode === "autoplay") { mode = "step"; updateHud(); }
-      else { mode = "autoplay"; enterStage(currentStage >= 7 || currentStage === 0 ? 1 : currentStage, performance.now()); }
+      flushPendingStage8();
+      if (mode === "autoplay") { mode = "step"; updateTrainingHud(); }
+      else { mode = "autoplay"; enterStage(currentStage >= 8 || currentStage === 0 ? 1 : currentStage, performance.now()); }
     };
+
     document.getElementById("btnTrain1").onclick = () => {
-      flushPendingStage7(); mode = "idle"; currentStage = 0; stage7Applied = true; applySgd(true); updateHud();
-      setNarrator(`+1 推进 1 轮完成！Epoch = ${epoch}，pred = ${nodeVals[7].toFixed(3)}，Loss = ${nodeVals[8].toFixed(4)}`, `调大或调小学习率 lr 再点「+1 推进 1 轮」，感受步幅变化！`);
+      flushPendingStage8();
+      mode = "idle"; currentStage = 0;
+      performOneAdamWStep(false);
+      renderAllUi();
+      const r = lastUpdateReport;
+      setNarrator(
+        `+1 训练 step 完成（Step ${r.step}）！Batch Loss: ${r.beforeBatch.toFixed(4)} → ${r.afterBatch.toFixed(4)}`,
+        `当前样本「${SAMPLES[selectedSampleIdx].ctxText}→${SAMPLES[selectedSampleIdx].targetChar}」Loss: ${r.beforeSample.toFixed(4)} → ${r.afterSample.toFixed(4)}（已用新权重重算，下方推理区已同步最新权重）。`
+      );
     };
-    document.getElementById("btnTrain20").onclick = () => {
-      flushPendingStage7(); mode = "conv20"; currentStage = 7; stage7Applied = true; convRemaining = 20; lastConvTick = performance.now(); updateHud();
+
+    document.getElementById("btnTrain40").onclick = () => {
+      flushPendingStage8();
+      mode = "train40"; currentStage = 8; stage8Applied = true;
+      train40Remaining = 40; lastTrainTick = performance.now();
+      updateTrainingHud();
     };
+
     document.getElementById("btnDeadRelu").onclick = () => {
-      resetState(-0.75, -0.50, 0.80);
-      setNarrator("💀 Dead ReLU 实验已就绪：现在前向 z = 2×(-0.75) - 0.5 = -2.0 ≤ 0，ReLU 门已红灯锁死！",
-        "一路点「⏭ 下一步」走到第 ⑤ 步，亲眼看反向梯度如何撞上红墙变成 0，导致 w1 和 b1 永远无法被更新！");
+      initAll(true);
+      setNarrator(
+        "💀 已构造 Dead ReLU 条件（b1 = -3.2，使 z1 = x·w1 + b1 全部 ≤ 0）",
+        "一路点「⏭ 下一步」：到第 ④ 步看 ReLU 门按真实 z1 自动关闭，到第 ⑦ 步看反向梯度撞墙归零！"
+      );
     };
-    document.getElementById("btnReset").onclick = () => resetState();
+
+    document.getElementById("btnReset").onclick = () => {
+      initAll(false);
+      setNarrator(
+        "已重置全部 234 个权重（Step 归 0，Loss 与概率塔归零，等待首次前向）",
+        "点击「⏭ 下一步」从 ① 开始走完 8 步，或点「⚡ 快速训练 40 step」看它学会整首短诗！"
+      );
+    };
+
+    // Pure Inference Button — NEVER touches Training 3D stage, Tape, or Weights!
+    document.getElementById("btnGenNext").onclick = () => {
+      flushPendingStage8();
+      const curWin = genIds.slice(-CTX_LEN);
+      const prevWinText = curWin.map(id => VOCAB[id]).join("");
+      const logits = inferLogitsForWindow(curWin);
+      const probs = softmaxRow(logits, temperature);
+
+      const r = Math.random();
+      let cdf = 0, nextId = V - 1;
+      for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
+
+      genIds.push(nextId);
+      if (genIds.length > 24) genIds.shift();
+      const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
+      lastGenDraw = { prevWinText, nextId, prob: probs[nextId], dice: r, newWinText };
+
+      renderInferenceCard();
+      document.getElementById("genReadout").textContent =
+        `输入「${prevWinText}」(T=${temperature.toFixed(1)}) 骰子 r=${r.toFixed(2)} → 抽中「${VOCAB[nextId]}」(p=${(probs[nextId] * 100).toFixed(1)}%) → 新窗口「${newWinText}」`;
+    };
+
+    document.getElementById("btnGenReset").onclick = () => {
+      genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
+      lastGenDraw = null;
+      renderInferenceCard();
+      document.getElementById("genReadout").textContent =
+        `已重置接龙序列为「${SAMPLES[genStartSampleIdx].ctxText}」（已训练权重 Step ${trainStepCount} 完整保留）`;
+    };
+
     document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
-    document.getElementById("camIso").onclick = () => cam.setPreset(-0.35, 0.44, 23.5);
-    document.getElementById("camFront").onclick = () => cam.setPreset(0.0, 0.22, 22.5);
-    document.getElementById("camTop").onclick = () => cam.setPreset(0.0, 1.32, 24.5);
+    document.getElementById("camIso").onclick = () => cam.setPreset(-0.38, 0.48, 29.0);
+    document.getElementById("camFront").onclick = () => cam.setPreset(0.0, 0.22, 26.5);
+    document.getElementById("camTop").onclick = () => cam.setPreset(0.0, 1.35, 28.5);
     document.getElementById("camOrbit").onclick = () => { cam.autoOrbit = !cam.autoOrbit; };
 
-    function onManualParamChange() {
-      flushPendingStage7();
-      w1 = parseFloat(document.getElementById("slW1").value);
-      b1 = parseFloat(document.getElementById("slB1").value);
-      w2 = parseFloat(document.getElementById("slW2").value);
-      lr = parseFloat(document.getElementById("slLr").value);
-      syncSliders();
-      if (nodeVals[8] !== null) forwardStale = true;
-      updateHud();
-    }
-    ["slW1", "slB1", "slW2", "slLr"].forEach(id => document.getElementById(id).oninput = onManualParamChange);
+    document.getElementById("lrSlider").oninput = e => {
+      lr = parseFloat(e.target.value);
+      document.getElementById("lrVal").textContent = lr.toFixed(3);
+    };
 
-    syncSliders(); updateHud();
+    document.getElementById("tempSlider").oninput = e => {
+      temperature = parseFloat(e.target.value);
+      document.getElementById("tempVal").textContent = temperature.toFixed(1);
+      renderInferenceCard();
+    };
+
+    const scalarDlg = document.getElementById("scalarModal");
+    document.getElementById("btnScalarModal").onclick = () => {
+      renderScalarModal();
+      if (scalarDlg.showModal) scalarDlg.showModal();
+      else scalarDlg.setAttribute("open", "");
+    };
+    document.getElementById("btnCloseScalar").onclick = () => {
+      if (scalarDlg.close) scalarDlg.close();
+      else scalarDlg.removeAttribute("open");
+    };
+    ["scW1", "scB1", "scW2", "scX"].forEach(id => document.getElementById(id).oninput = renderScalarModal);
+
+    initAll(false);
     requestAnimationFrame(renderFrame);
   </script>
 </body>
