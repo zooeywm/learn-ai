@@ -447,7 +447,30 @@
       </div>
 
       <div class="xs muted" style="margin-top:6px;">
-        <strong>与上方训练区的区别</strong>：推理阶段<strong>没有 target、不建 Tape、不算 Loss、不修改任何权重</strong>。每次只取末尾 3 个字做一次前向传播，经温度 <span class="mono">Softmax(logits / T)</span> 掷骰子抽 1 个字，再把新字拼回末尾滑动窗口继续预测。
+        <strong>与上方训练区的区别</strong>：推理阶段<strong>没有 target、不建 Tape、不算 Loss、不修改任何权重</strong>。下方专属 3D 推理舞台只保留纯前向路径：末尾 3 字 → MLP 前向 → 温度 Softmax 概率塔 → 3D 骰子抽字 → 新字飞回窗口右滑！
+      </div>
+
+      <!-- Dedicated 3D Inference Stage (Pure Forward + Sampling + Window Slide!) -->
+      <div class="viewport" style="margin-top:8px;">
+        <canvas id="infer3d" style="height:310px;"></canvas>
+        <div class="hud hud-tl mono">
+          <div>模式: <strong style="color:var(--success)">纯前向推理（无 Tape / 无 Loss / 不改权重）</strong></div>
+          <div class="muted">当前窗口: <strong id="inferHudWin" style="color:var(--foreground)">「床前明」</strong> &nbsp;|&nbsp; 温度 T = <strong id="inferHudTemp" style="color:var(--primary)">0.7</strong></div>
+        </div>
+        <div class="hud hud-tr">
+          <span><span class="dot" style="background:var(--primary)"></span>输入/概率塔</span>
+          <span><span class="dot" style="background:var(--success)"></span>ReLU激活/抽中字</span>
+          <span><span class="dot" style="background:var(--warning)"></span>骰子与回流</span>
+        </div>
+        <div class="hud hud-bottom">
+          <div class="row">
+            <strong id="inferAnimTitle">推理待命：点击「🎲 推理下一个字」观看 3D 前向采样与窗口滑动动画（左键可旋转视角）</strong>
+            <div id="inferProgWrap" class="prog-track hidden"><div id="inferProgBar" class="prog-fill" style="background:var(--success);"></div></div>
+          </div>
+          <div id="inferAnimDesc" class="muted" style="margin-top:2px;">
+            拖动上方「温度 T」滑块，右侧 10 座 3D 概率塔会立刻实时变形；点「🎲 推理下一个字」看小球穿过 MLP 抽字并飞回输入槽！
+          </div>
+        </div>
       </div>
 
       <!-- Sliding Window Sequence Tape -->
@@ -838,7 +861,7 @@
     }
 
     // Pure Inference forward: NO Tape, NO target, NO grad, NO weight mutation!
-    function inferLogitsForWindow(ctxIds) {
+    function inferForwardForWindow(ctxIds) {
       const x = new Float32Array(IN_DIM);
       for (let slot = 0; slot < CTX_LEN; slot++) {
         const tok = ctxIds[slot];
@@ -856,7 +879,11 @@
         for (let k = 0; k < HIDDEN; k++) acc += h[k] * model.w2.data[k * V + j];
         logits[j] = acc;
       }
-      return logits;
+      return { x, h, logits };
+    }
+
+    function inferLogitsForWindow(ctxIds) {
+      return inferForwardForWindow(ctxIds).logits;
     }
 
     function getParamByNodeId(id) {
@@ -1752,7 +1779,204 @@
 
       M.flushDrawList(dl);
       ctx.restore();
+      renderInfer3D(nowMs);
       requestAnimationFrame(renderFrame);
+    }
+
+    // =========================================================================
+    // 6B. Dedicated 3D Inference Animation Stage (Card 2 — Pure Forward + Dice + Slide!)
+    // =========================================================================
+    const inferCanvas = document.getElementById("infer3d");
+    const inferCtx = inferCanvas.getContext("2d");
+    const inferCam = M.createCamera(inferCanvas, {
+      yaw: -0.34, pitch: 0.44, dist: 21.5, tx: 0.0, ty: 0.7, tz: 0.0, minDist: 12, maxDist: 34
+    });
+
+    const inferVisProbs = new Float32Array(V);
+    const inferVisH = new Float32Array(HIDDEN);
+    let inferAnim = null; // { startMs, prevWinIds, prevWinText, nextId, prob, dice, probs, h, committed }
+    const INFER_ANIM_MS = 1650;
+
+    function flushPendingInfer() {
+      if (inferAnim && !inferAnim.committed) {
+        inferAnim.committed = true;
+        genIds.push(inferAnim.nextId);
+        if (genIds.length > 24) genIds.shift();
+        const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
+        lastGenDraw = {
+          prevWinText: inferAnim.prevWinText,
+          nextId: inferAnim.nextId,
+          prob: inferAnim.prob,
+          dice: inferAnim.dice,
+          newWinText,
+        };
+        renderInferenceCard();
+        document.getElementById("genReadout").textContent =
+          `输入「${inferAnim.prevWinText}」(T=${temperature.toFixed(1)}) 骰子 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」(p=${(inferAnim.prob * 100).toFixed(1)}%) → 新窗口「${newWinText}」`;
+      }
+    }
+
+    function renderInfer3D(nowMs) {
+      inferCam.step();
+      const theme = M.getThemeColors();
+      const { W, H } = M.beginFrame(inferCanvas, inferCtx, theme);
+      if (!W || !H) { inferCtx.restore(); return; }
+      const { project, eye } = M.makeProjector(W, H, inferCam, 1.15, 0.46);
+
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPrimary = M.parseRgb(theme.primary), rgbSuccess = M.parseRgb(theme.success);
+      const rgbWarning = M.parseRgb(theme.warning);
+
+      // Determine active inference window & animation phase u ∈ [0, 1]
+      const dur = INFER_ANIM_MS / animSpeed;
+      let u = 0;
+      const progWrap = document.getElementById("inferProgWrap");
+      const progBar = document.getElementById("inferProgBar");
+
+      if (inferAnim) {
+        u = Math.min(1, (nowMs - inferAnim.startMs) / dur);
+        progWrap.classList.remove("hidden");
+        progBar.style.width = `${(u * 100).toFixed(1)}%`;
+
+        if (u < 0.28) {
+          document.getElementById("inferAnimTitle").textContent = `① 取末尾 3 字「${inferAnim.prevWinText}」送入 MLP 前向（无 Tape）`;
+          document.getElementById("inferAnimDesc").textContent = "3 个字查 embedding 拼成 12 维向量，穿入隐藏层。";
+        } else if (u < 0.56) {
+          document.getElementById("inferAnimTitle").textContent = `② 经 ReLU 隐藏层输出 10 字温度概率 Softmax(logits / T=${temperature.toFixed(1)})`;
+          document.getElementById("inferAnimDesc").textContent = "只做纯前向计算，不建计算图、不算 Loss、绝不改权重。";
+        } else if (u < 0.78) {
+          document.getElementById("inferAnimTitle").textContent = `③ 3D 轮盘掷骰 r=${inferAnim.dice.toFixed(2)} → 抽中「${VOCAB[inferAnim.nextId]}」（概率 ${(inferAnim.prob * 100).toFixed(1)}%）！`;
+          document.getElementById("inferAnimDesc").textContent = "金色骰子光球精准落到被抽中的候选字概率塔顶。";
+        } else {
+          document.getElementById("inferAnimTitle").textContent = `④ 自回归回流：「${VOCAB[inferAnim.nextId]}」飞回输入槽，窗口右滑！`;
+          document.getElementById("inferAnimDesc").textContent = "最老的字滑出窗口，新 3 字窗口立刻准备好预测下一个字。";
+        }
+
+        if (u >= 0.98 && !inferAnim.committed) {
+          flushPendingInfer();
+          const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
+          document.getElementById("inferAnimTitle").textContent = `✓ 已抽出「${VOCAB[inferAnim.nextId]}」，窗口已滑至「${newWinText}」！`;
+          document.getElementById("inferAnimDesc").textContent = "再点一次「🎲 推理下一个字」继续接龙，或拖动温度 T 观察右侧 10 座 3D 塔实时变化。";
+        }
+        if (u >= 1) {
+          inferAnim = null;
+          progWrap.classList.add("hidden");
+        }
+      } else {
+        progWrap.classList.add("hidden");
+      }
+
+      const dispWinIds = (inferAnim && !inferAnim.committed) ? inferAnim.prevWinIds : genIds.slice(-CTX_LEN);
+      const dispWinText = dispWinIds.map(id => VOCAB[id]).join("");
+      document.getElementById("inferHudWin").textContent = `「${dispWinText}」`;
+      document.getElementById("inferHudTemp").textContent = temperature.toFixed(1);
+
+      const fwd = inferForwardForWindow(dispWinIds);
+      const liveProbs = (inferAnim && !inferAnim.committed) ? inferAnim.probs : softmaxRow(fwd.logits, temperature);
+      const liveH = (inferAnim && !inferAnim.committed) ? inferAnim.h : fwd.h;
+
+      const lerpRate = Math.min(0.45, 0.18 * Math.sqrt(animSpeed));
+      for (let j = 0; j < V; j++) inferVisProbs[j] += (liveProbs[j] - inferVisProbs[j]) * lerpRate;
+      for (let k = 0; k < HIDDEN; k++) inferVisH[k] += (liveH[k] - inferVisH[k]) * lerpRate;
+
+      // Floor grid
+      inferCtx.strokeStyle = M.shade(rgbBorder, 1, 0.25); inferCtx.lineWidth = 1;
+      for (let gx = -9; gx <= 9; gx += 1.8) {
+        const a = project(gx, 0, -3.6), b = project(gx, 0, 3.6);
+        if (a && b) { inferCtx.beginPath(); inferCtx.moveTo(a.x, a.y); inferCtx.lineTo(b.x, b.y); inferCtx.stroke(); }
+      }
+      for (let gz = -3.6; gz <= 3.6; gz += 1.8) {
+        const a = project(-9, 0, gz), b = project(9, 0, gz);
+        if (a && b) { inferCtx.beginPath(); inferCtx.moveTo(a.x, a.y); inferCtx.lineTo(b.x, b.y); inferCtx.stroke(); }
+      }
+
+      const IPOS = {
+        input: { x: -7.2, z: 0 },
+        mlp:   { x: -1.4, z: 0 },
+        sm:    { x:  5.4, z: 0 },
+      };
+
+      M.drawPipe3D(inferCtx, project, { x: IPOS.input.x, y: 0.45, z: 0 }, { x: IPOS.mlp.x, y: 0.45, z: 0 }, M.shade(rgbBorder, 1.1, 0.7), 2);
+      M.drawPipe3D(inferCtx, project, { x: IPOS.mlp.x, y: 0.45, z: 0 }, { x: IPOS.sm.x, y: 0.45, z: 0 }, M.shade(rgbBorder, 1.1, 0.7), 2);
+
+      const dl = [];
+
+      // 1. Left: 3-Char Sliding Input Window Cubes
+      for (let slot = 0; slot < CTX_LEN; slot++) {
+        const cz = (slot - 1) * 1.45;
+        M.pushBox(dl, inferCtx, project, eye, IPOS.input.x - 0.55, 0, cz - 0.52, IPOS.input.x + 0.55, 1.1, cz + 0.52, rgbPrimary, 0.94, theme.fg);
+        M.pushLabel3D(dl, inferCtx, project, IPOS.input.x, 1.55, cz, `${VOCAB[dispWinIds[slot]]}`, theme.fg, "bold 12px sans-serif");
+      }
+      M.pushLabel3D(dl, inferCtx, project, IPOS.input.x, 0.12, 2.75, "末尾 3 字输入", theme.primary, "bold 11px sans-serif");
+
+      // 2. Center: Pure Forward MLP (8 ReLU hidden bars)
+      M.pushBox(dl, inferCtx, project, eye, IPOS.mlp.x - 1.35, 0, -2.55, IPOS.mlp.x + 1.35, 0.2, 2.55, rgbCard, 0.85, theme.border);
+      for (let k = 0; k < HIDDEN; k++) {
+        const hz = (k - 3.5) * 0.58;
+        const v = inferVisH[k];
+        const bh = Math.max(0.12, Math.min(2.4, v * 0.85 + 0.12));
+        const col = v > 0.005 ? rgbSuccess : rgbBorder;
+        M.pushBox(dl, inferCtx, project, eye, IPOS.mlp.x - 0.42, 0.2, hz - 0.21, IPOS.mlp.x + 0.42, 0.2 + bh, hz + 0.21, col, 0.92, theme.border);
+      }
+      M.pushLabel3D(dl, inferCtx, project, IPOS.mlp.x, 2.95, 0, "MLP 前向 (Embed→ReLU→Logits)", theme.success, "bold 11px sans-serif");
+
+      // 3. Right: 10 Live Temperature Softmax 3D Towers
+      let topJ = 0;
+      for (let j = 1; j < V; j++) if (inferVisProbs[j] > inferVisProbs[topJ]) topJ = j;
+      const pickedNow = inferAnim && u >= 0.56 ? inferAnim.nextId : -1;
+
+      for (let j = 0; j < V; j++) {
+        const sz = (j - 4.5) * 0.66;
+        const p = inferVisProbs[j];
+        const bh = Math.max(0.08, p * 4.4);
+        const isPicked = j === pickedNow;
+        const col = isPicked ? rgbSuccess : (j === topJ ? M.lerpRgb(rgbPrimary, rgbSuccess, 0.35) : rgbPrimary);
+        M.pushBox(dl, inferCtx, project, eye, IPOS.sm.x - 0.3, 0, sz - 0.24, IPOS.sm.x + 0.3, bh, sz + 0.24, col, 0.94, isPicked ? theme.fg : theme.border);
+        M.pushLabel3D(dl, inferCtx, project, IPOS.sm.x + 1.0, 0.18, sz, `${VOCAB[j]} ${(p * 100).toFixed(0)}%`, isPicked ? theme.success : theme.muted, isPicked ? "bold 11px monospace" : "10px monospace");
+      }
+      M.pushLabel3D(dl, inferCtx, project, IPOS.sm.x, 4.85, 0, `温度概率塔 Softmax(z / T=${temperature.toFixed(1)})`, theme.primary, "bold 11px monospace");
+
+      // 4. Active 4-Phase 3D Inference Motion!
+      if (inferAnim) {
+        if (u < 0.28) {
+          const p1 = u / 0.28;
+          for (let slot = 0; slot < CTX_LEN; slot++) {
+            const from = { x: IPOS.input.x, y: 1.0, z: (slot - 1) * 1.45 };
+            const to = { x: IPOS.mlp.x, y: 1.2, z: (slot - 1) * 0.9 };
+            M.drawBezierArc3D(inferCtx, project, from, to, 1.6, p1, theme.primary, 2.3);
+            const pt = M.evalArc(from, to, 1.6, p1);
+            M.pushOrb(dl, inferCtx, project, pt.x, pt.y, pt.z, 0.24, theme.primary, theme.primary, VOCAB[inferAnim.prevWinIds[slot]], "#fff");
+          }
+        } else if (u < 0.56) {
+          const p2 = (u - 0.28) / 0.28;
+          for (let k = 0; k < 4; k++) {
+            const from = { x: IPOS.mlp.x, y: 1.3, z: (k - 1.5) * 1.1 };
+            const to = { x: IPOS.sm.x, y: 1.6, z: (k - 1.5) * 1.6 };
+            M.drawBezierArc3D(inferCtx, project, from, to, 1.6, p2, theme.success, 2.0);
+            const pt = M.evalArc(from, to, 1.6, p2);
+            M.pushOrb(dl, inferCtx, project, pt.x, pt.y, pt.z, 0.2, theme.success, theme.success);
+          }
+        } else if (u < 0.78) {
+          const p3 = (u - 0.56) / 0.22;
+          const targetZ = (inferAnim.nextId - 4.5) * 0.66;
+          const targetY = Math.max(0.5, inferVisProbs[inferAnim.nextId] * 4.4) + 0.55;
+          const sweepZ = -3.0 + (targetZ + 3.0) * p3;
+          const dropY = 3.6 - (3.6 - targetY) * p3;
+          M.pushOrb(dl, inferCtx, project, IPOS.sm.x, dropY, sweepZ, 0.32, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
+          M.pushLabel3D(dl, inferCtx, project, IPOS.sm.x, dropY + 0.65, sweepZ, `🎲 抽中「${VOCAB[inferAnim.nextId]}」`, theme.success, "bold 12px sans-serif", -0.5);
+        } else {
+          // Phase 4: Autoregressive feedback arc from picked tower BACK to bottom slot of 3-char input!
+          const p4 = (u - 0.78) / 0.22;
+          const from = { x: IPOS.sm.x, y: Math.max(0.6, inferVisProbs[inferAnim.nextId] * 4.4) + 0.4, z: (inferAnim.nextId - 4.5) * 0.66 };
+          const to = { x: IPOS.input.x, y: 1.1, z: 1.45 };
+          M.drawBezierArc3D(inferCtx, project, from, to, 3.6, p4, theme.warning, 2.8, true);
+          const pt = M.evalArc(from, to, 3.6, p4);
+          M.pushOrb(dl, inferCtx, project, pt.x, pt.y, pt.z, 0.34, theme.warning, theme.warning, VOCAB[inferAnim.nextId], "#000");
+        }
+      }
+
+      M.flushDrawList(dl);
+      inferCtx.restore();
     }
 
     // =========================================================================
@@ -1819,7 +2043,10 @@
       visualSampleLoss = 0;
       genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
       lastGenDraw = null;
-      document.getElementById("genReadout").textContent = "点击「🎲 推理下一个字」体验单步采样与窗口右滑";
+      inferAnim = null;
+      document.getElementById("inferAnimTitle").textContent = "推理待命：点击「🎲 推理下一个字」观看 3D 前向采样与窗口滑动动画";
+      document.getElementById("inferAnimDesc").textContent = "拖动上方「温度 T」滑块，右侧 10 座 3D 概率塔会立刻实时变形；点「🎲 推理下一个字」看小球穿过 MLP 抽字并飞回输入槽！";
+      document.getElementById("genReadout").textContent = "点击「🎲 推理下一个字」体验单步 3D 采样与窗口右滑";
       renderAllUi();
     }
 
@@ -1832,6 +2059,7 @@
       genStartSelect.appendChild(opt);
     });
     genStartSelect.onchange = () => {
+      inferAnim = null;
       genStartSampleIdx = parseInt(genStartSelect.value, 10);
       genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
       lastGenDraw = null;
@@ -1887,32 +2115,41 @@
       );
     };
 
-    // Pure Inference Button — NEVER touches Training 3D stage, Tape, or Weights!
+    // Pure Inference Button — launches dedicated 4-phase 3D Inference Animation inside Card 2!
     document.getElementById("btnGenNext").onclick = () => {
       flushPendingStage8();
+      flushPendingInfer();
       const curWin = genIds.slice(-CTX_LEN);
       const prevWinText = curWin.map(id => VOCAB[id]).join("");
-      const logits = inferLogitsForWindow(curWin);
-      const probs = softmaxRow(logits, temperature);
+      const fwd = inferForwardForWindow(curWin);
+      const probs = softmaxRow(fwd.logits, temperature);
 
       const r = Math.random();
       let cdf = 0, nextId = V - 1;
       for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
 
-      genIds.push(nextId);
-      if (genIds.length > 24) genIds.shift();
-      const newWinText = genIds.slice(-CTX_LEN).map(id => VOCAB[id]).join("");
-      lastGenDraw = { prevWinText, nextId, prob: probs[nextId], dice: r, newWinText };
-
-      renderInferenceCard();
+      inferAnim = {
+        startMs: performance.now(),
+        prevWinIds: [...curWin],
+        prevWinText,
+        nextId,
+        prob: probs[nextId],
+        dice: r,
+        probs,
+        h: fwd.h,
+        committed: false,
+      };
       document.getElementById("genReadout").textContent =
-        `输入「${prevWinText}」(T=${temperature.toFixed(1)}) 骰子 r=${r.toFixed(2)} → 抽中「${VOCAB[nextId]}」(p=${(probs[nextId] * 100).toFixed(1)}%) → 新窗口「${newWinText}」`;
+        `正在 3D 推理「${prevWinText}」(T=${temperature.toFixed(1)})...`;
     };
 
     document.getElementById("btnGenReset").onclick = () => {
+      inferAnim = null;
       genIds = [...SAMPLES[genStartSampleIdx].ctxIds];
       lastGenDraw = null;
       renderInferenceCard();
+      document.getElementById("inferAnimTitle").textContent = `已重置接龙起点为「${SAMPLES[genStartSampleIdx].ctxText}」（权重 Step ${trainStepCount} 完整保留）`;
+      document.getElementById("inferAnimDesc").textContent = "点击「🎲 推理下一个字」重新观看 3D 前向抽字与窗口右滑动画。";
       document.getElementById("genReadout").textContent =
         `已重置接龙序列为「${SAMPLES[genStartSampleIdx].ctxText}」（已训练权重 Step ${trainStepCount} 完整保留）`;
     };
