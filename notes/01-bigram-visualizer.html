@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Step 01：Bigram 语言模型建模与训练动画</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #171a22;
+      --content: #1e222d;
+      --border: #2c3242;
+      --fg: #e8ecf4;
+      --muted: #93a0b8;
+      --primary: #4f8cff;
+      --primary-fg: #ffffff;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --c1: #4f8cff; --c2: #22c55e; --c3: #f59e0b; --c4: #a855f7; --c5: #ec4899; --c6: #06b6d4;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --content: #f0f3f8;
+        --border: #dce2ee;
+        --fg: #182030;
+        --muted: #5a667d;
+        --primary: #2563eb;
+        --primary-fg: #ffffff;
+        --success: #16a34a;
+        --warning: #d97706;
+        --error: #dc2626;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .container { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .row-between { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+    .flex-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .muted { color: var(--muted); }
+    .xs { font-size: 12px; }
+    h1 { margin: 0; font-size: 18px; }
+    h2 { margin: 0; font-size: 14px; }
+    .tag {
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: var(--content);
+      border: 1px solid var(--border);
+      font-size: 12px;
+    }
+    button {
+      font-family: inherit;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      color: var(--fg);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    button:hover { border-color: var(--primary); }
+    button.primary {
+      background: var(--primary);
+      color: var(--primary-fg);
+      border-color: var(--primary);
+      font-weight: 600;
+    }
+    button.primary:hover { opacity: 0.9; }
+    .pill { border-radius: 999px; padding: 4px 10px; }
+    .pill.active {
+      background: var(--primary);
+      color: var(--primary-fg);
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+    .divider { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
+    .narrator {
+      background: var(--content);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .grid-main { display: grid; grid-template-columns: 7fr 5fr; gap: 16px; }
+    @media (max-width: 920px) { .grid-main { grid-template-columns: 1fr; } }
+    .matrix-wrap { overflow-x: auto; margin-top: 10px; }
+    .matrix-grid { display: inline-grid; gap: 4px; font-size: 12px; user-select: none; }
+    .matrix-cell {
+      padding: 5px 2px;
+      border-radius: 6px;
+      text-align: center;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background-color 0.3s ease, border-color 0.2s ease;
+    }
+    @keyframes pulseRing {
+      0% { box-shadow: 0 0 0 0 rgba(79, 140, 255, 0.65); }
+      70% { box-shadow: 0 0 0 6px rgba(79, 140, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(79, 140, 255, 0); }
+    }
+    .cell-pulse { animation: pulseRing 0.9s ease-out infinite; }
+    .inspector-head, .inspector-row {
+      display: grid;
+      grid-template-columns: 2fr 2.4fr 4.4fr 2.6fr;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .inspector-head { padding-bottom: 6px; border-bottom: 1px solid var(--border); color: var(--muted); }
+    .inspector-row { padding: 3px 4px; border-radius: 6px; }
+    .bar-track {
+      flex: 1;
+      height: 11px;
+      border-radius: 999px;
+      background: var(--content);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.35s ease; }
+    canvas { width: 100%; height: 150px; display: block; border-radius: 8px; margin-top: 8px; }
+    .tape {
+      background: var(--content);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      min-height: 48px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .roulette {
+      position: relative;
+      width: 100%;
+      height: 28px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      display: flex;
+      margin-top: 6px;
+    }
+    select {
+      background: var(--content);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    input[type="range"] { accent-color: var(--primary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card row-between">
+      <div>
+        <div class="flex-wrap">
+          <span class="tag mono">Step 01</span>
+          <h1>Bigram 语言模型：建模与训练全过程动画</h1>
+        </div>
+        <div class="xs muted" style="margin-top: 4px;">
+          演示语料：<strong class="mono" style="color:var(--fg)">「床前明月光，举头望明月。」</strong>
+          （12 字，词表 <span class="mono">V = 10</span>；注意 <span class="mono" style="color:var(--fg)">月</span> 后同时出现过 <span class="mono">光</span> 和 <span class="mono">。</span>）
+        </div>
+      </div>
+      <div class="flex-wrap">
+        <button id="btnStepAnim" class="primary">▶ 单步拆解动画</button>
+        <button id="btnTrain1">训练 1 轮</button>
+        <button id="btnTrain50">⚡ 连续训练 50 轮</button>
+        <button id="btnReset">↺ 重置权重</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row-between">
+        <div class="flex-wrap" id="stagePills">
+          <button data-stage="1" class="pill">① Tokenizer 查字典</button>
+          <span class="muted">→</span>
+          <button data-stage="2" class="pill">② 查表得 Logits</button>
+          <span class="muted">→</span>
+          <button data-stage="3" class="pill">③ Softmax 变概率</button>
+          <span class="muted">→</span>
+          <button data-stage="4" class="pill">④ 算交叉熵 Loss</button>
+          <span class="muted">→</span>
+          <button data-stage="5" class="pill">⑤ 反向梯度 &amp; SGD 更新</button>
+        </div>
+        <div class="flex-wrap xs mono">
+          <span class="muted">Epoch: <strong id="statEpoch" style="color:var(--fg)">0</strong></span>
+          <span class="muted">全量 Loss: <strong id="statLoss" style="color:var(--fg)">2.3026</strong></span>
+        </div>
+      </div>
+
+      <div class="divider row-between xs">
+        <div class="flex-wrap">
+          <span class="muted">观察训练样本对 (x → y)：</span>
+          <div id="pairButtons" class="flex-wrap"></div>
+        </div>
+        <label class="flex-wrap muted">
+          学习率 lr:
+          <input id="lrSlider" type="range" min="0.5" max="15" step="0.5" value="4.0" />
+          <span id="lrValue" class="mono" style="color:var(--fg); min-width:28px;">4.0</span>
+        </label>
+      </div>
+
+      <div class="narrator xs">
+        <div id="narratorTitle" style="font-weight:600; margin-bottom:4px;">准备就绪</div>
+        <div id="narratorDesc" class="muted"></div>
+      </div>
+    </div>
+
+    <div class="grid-main">
+      <div class="card">
+        <div class="row-between">
+          <div>
+            <h2>模型大脑：V × V 权重矩阵（table[x * V + j]）</h2>
+            <div class="xs muted">行 = 当前字 x，列 = 预测的下一个字 j。点击任意行可切换观察。</div>
+          </div>
+          <div class="flex-wrap xs muted">
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(239,68,68,0.45);margin-right:4px;"></span>负分</span>
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.55);margin-right:4px;"></span>正分</span>
+          </div>
+        </div>
+        <div class="matrix-wrap">
+          <div id="matrixGrid" class="matrix-grid mono"></div>
+        </div>
+        <div class="divider">
+          <div class="xs muted" style="margin-bottom:6px;">Tokenizer 词表映射（BTreeSet 排序编号）：</div>
+          <div id="vocabStrip" class="flex-wrap xs mono"></div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card">
+          <h2 style="margin-bottom:8px;">当前行解剖：<span id="inspectTitle" class="mono" style="color:var(--primary)"></span></h2>
+          <div class="inspector-head mono">
+            <div>候选字</div>
+            <div style="text-align:right">Logit z</div>
+            <div>Softmax 概率 p</div>
+            <div style="text-align:right">梯度 ∂L/∂z</div>
+          </div>
+          <div id="barRows" style="margin-top:6px; display:flex; flex-direction:column; gap:4px;" class="mono"></div>
+          <div class="divider row-between xs mono muted">
+            <span>当前样本 Loss = -ln(p_y)</span>
+            <strong id="sampleLossVal" style="color:var(--fg)">2.3026</strong>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row-between">
+            <h2>训练 Loss 收敛曲线</h2>
+            <span class="xs mono muted">Bigram 理论下界 ≈ 0.1260</span>
+          </div>
+          <canvas id="lossCanvas"></canvas>
+          <div class="xs muted" style="margin-top:6px;">
+            橙色虚线是 Bigram 的数学极限：因为「月」后同时出现过「光」和「。」，只看前 1 个字永远无法把 Loss 降到 0。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row-between">
+        <div>
+          <h2>互动实验：自回归逐字接龙 &amp; Temperature（温度）轮盘采样</h2>
+          <div class="xs muted">建议先点上方「⚡ 连续训练 50 轮」，再调节 Temperature 观察轮盘区间变化与采样结果。</div>
+        </div>
+        <div class="flex-wrap xs">
+          <label class="muted">起始字: <select id="genStartSelect" class="mono"></select></label>
+          <label class="flex-wrap muted">
+            Temperature:
+            <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.8" />
+            <span id="tempValue" class="mono" style="color:var(--fg); min-width:24px;">0.8</span>
+          </label>
+          <button id="btnGenStep" class="primary">🎲 采样下一个字</button>
+          <button id="btnGenAuto">▶ 自动接龙 12 字</button>
+          <button id="btnGenClear">清空</button>
+        </div>
+      </div>
+      <div id="genTape" class="tape"></div>
+      <div class="row-between xs" style="margin-top:10px;">
+        <span id="rouletteLabel" class="muted"></span>
+        <span id="diceReadout" class="mono">等待掷骰子...</span>
+      </div>
+      <div id="rouletteBar" class="roulette"></div>
+    </div>
+  </div>
+
+  <script>
+    const CORPUS = "床前明月光，举头望明月。";
+    const VOCAB = Array.from(new Set(CORPUS.split(""))).sort();
+    const V = VOCAB.length;
+    const STOI = Object.fromEntries(VOCAB.map((ch, i) => [ch, i]));
+    const DATA = CORPUS.split("").map(ch => STOI[ch]);
+    const PAIRS = [];
+    for (let i = 0; i < DATA.length - 1; i++) PAIRS.push([DATA[i], DATA[i + 1]]);
+    const LOSS_FLOOR = (2 / PAIRS.length) * Math.log(2);
+
+    let table = new Float32Array(V * V);
+    let epoch = 0;
+    let lossHistory = [];
+    let selectedPairIdx = 0;
+    let activeStage = 0;
+    let animTimer = null;
+    let genTimer = null;
+    let genIds = [STOI["床"]];
+    let lastDice = null;
+
+    function softmax(logits) {
+      let maxVal = -Infinity;
+      for (let i = 0; i < logits.length; i++) if (logits[i] > maxVal) maxVal = logits[i];
+      const exps = new Float64Array(logits.length);
+      let sum = 0;
+      for (let i = 0; i < logits.length; i++) {
+        exps[i] = Math.exp(logits[i] - maxVal);
+        sum += exps[i];
+      }
+      const probs = new Float64Array(logits.length);
+      for (let i = 0; i < logits.length; i++) probs[i] = exps[i] / sum;
+      return { probs, maxVal };
+    }
+
+    function getRow(x) { return table.slice(x * V, (x + 1) * V); }
+
+    function computeFullLossAndGrads() {
+      const n = PAIRS.length;
+      const grads = new Float32Array(V * V);
+      let totalLoss = 0;
+      for (const [x, y] of PAIRS) {
+        const { probs } = softmax(getRow(x));
+        totalLoss += -Math.log(probs[y] + 1e-12);
+        for (let j = 0; j < V; j++) {
+          grads[x * V + j] += (probs[j] - (j === y ? 1.0 : 0.0)) / n;
+        }
+      }
+      return { loss: totalLoss / n, grads };
+    }
+
+    function trainEpochs(count) {
+      const lr = parseFloat(document.getElementById("lrSlider").value);
+      for (let step = 0; step < count; step++) {
+        const { grads } = computeFullLossAndGrads();
+        for (let i = 0; i < table.length; i++) table[i] -= lr * grads[i];
+        epoch += 1;
+        lossHistory.push({ epoch, loss: computeFullLossAndGrads().loss });
+      }
+    }
+
+    function stopAllAnims() {
+      if (animTimer) { clearTimeout(animTimer); animTimer = null; }
+      if (genTimer) { clearInterval(genTimer); genTimer = null; }
+    }
+
+    function setNarrator(title, desc) {
+      document.getElementById("narratorTitle").textContent = title;
+      document.getElementById("narratorDesc").textContent = desc;
+    }
+
+    function resetModel() {
+      stopAllAnims();
+      table.fill(0);
+      epoch = 0;
+      const initLoss = computeFullLossAndGrads().loss;
+      lossHistory = [{ epoch: 0, loss: initLoss }];
+      activeStage = 0;
+      genIds = [parseInt(document.getElementById("genStartSelect").value, 10) || STOI["床"]];
+      lastDice = null;
+      setNarrator(
+        "权重已全部重置为 0.0",
+        `初始时 10 个字打分全为 0，Softmax 后每个字概率都是 10.0%，初始 Loss = ln(${V}) = ${initLoss.toFixed(4)}。点击「▶ 单步拆解动画」逐步看训练过程！`
+      );
+      renderAll();
+    }
+
+    function getVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+    function renderVocabAndPairs() {
+      const [curX, curY] = PAIRS[selectedPairIdx];
+      const vocabEl = document.getElementById("vocabStrip");
+      vocabEl.innerHTML = "";
+      VOCAB.forEach((ch, id) => {
+        const s = document.createElement("span");
+        s.className = "tag";
+        if (id === curX) { s.style.background = "var(--primary)"; s.style.color = "var(--primary-fg)"; s.style.borderColor = "var(--primary)"; }
+        else if (id === curY) { s.style.borderColor = "var(--success)"; s.style.color = "var(--success)"; }
+        s.textContent = `${ch}:${id}`;
+        vocabEl.appendChild(s);
+      });
+
+      const pairEl = document.getElementById("pairButtons");
+      pairEl.innerHTML = "";
+      PAIRS.forEach(([x, y], idx) => {
+        const b = document.createElement("button");
+        b.className = "mono";
+        b.style.padding = "2px 8px";
+        if (idx === selectedPairIdx) b.classList.add("primary");
+        b.textContent = `${VOCAB[x]}→${VOCAB[y]}`;
+        b.onclick = () => { stopAllAnims(); selectedPairIdx = idx; renderAll(); };
+        pairEl.appendChild(b);
+      });
+    }
+
+    function renderMatrix() {
+      const grid = document.getElementById("matrixGrid");
+      grid.style.gridTemplateColumns = `34px repeat(${V}, minmax(42px, 1fr))`;
+      grid.innerHTML = "";
+      const [curX, curY] = PAIRS[selectedPairIdx];
+
+      const corner = document.createElement("div");
+      corner.className = "muted";
+      corner.style.textAlign = "center";
+      corner.textContent = "x\\j";
+      grid.appendChild(corner);
+
+      VOCAB.forEach((ch, j) => {
+        const h = document.createElement("div");
+        h.style.textAlign = "center";
+        h.style.fontWeight = "600";
+        h.style.color = j === curY ? "var(--success)" : "var(--muted)";
+        h.textContent = ch;
+        grid.appendChild(h);
+      });
+
+      for (let x = 0; x < V; x++) {
+        const rh = document.createElement("button");
+        rh.style.padding = "4px 0";
+        rh.style.fontWeight = "600";
+        if (x === curX) rh.classList.add("primary");
+        rh.textContent = VOCAB[x];
+        rh.onclick = () => {
+          const found = PAIRS.findIndex(([px]) => px === x);
+          if (found !== -1) { stopAllAnims(); selectedPairIdx = found; renderAll(); }
+        };
+        grid.appendChild(rh);
+
+        for (let j = 0; j < V; j++) {
+          const val = table[x * V + j];
+          const cell = document.createElement("div");
+          cell.className = "matrix-cell";
+          const alpha = Math.min(Math.abs(val) / 3.5, 1.0) * 0.55;
+          if (val > 0.01) cell.style.background = `rgba(34, 197, 94, ${alpha.toFixed(2)})`;
+          else if (val < -0.01) cell.style.background = `rgba(239, 68, 68, ${alpha.toFixed(2)})`;
+          else cell.style.background = "var(--content)";
+
+          if (x === curX && j === curY) {
+            cell.style.borderColor = "var(--primary)";
+            cell.style.borderWidth = "2px";
+            if (activeStage === 4 || activeStage === 5) cell.classList.add("cell-pulse");
+          } else if (x === curX) {
+            cell.style.borderColor = "var(--primary)";
+          }
+          cell.textContent = val.toFixed(1);
+          cell.title = `table[${VOCAB[x]}][${VOCAB[j]}] = ${val.toFixed(4)}`;
+          cell.onclick = () => {
+            const exact = PAIRS.findIndex(([px, py]) => px === x && py === j);
+            const fb = PAIRS.findIndex(([px]) => px === x);
+            const idx = exact !== -1 ? exact : fb;
+            if (idx !== -1) { stopAllAnims(); selectedPairIdx = idx; renderAll(); }
+          };
+          grid.appendChild(cell);
+        }
+      }
+    }
+
+    function renderRowInspector() {
+      const [x, y] = PAIRS[selectedPairIdx];
+      const logits = getRow(x);
+      const { probs } = softmax(logits);
+      const sampleLoss = -Math.log(probs[y] + 1e-12);
+      document.getElementById("inspectTitle").textContent = `x =「${VOCAB[x]}」(${x}) → y =「${VOCAB[y]}」(${y})`;
+      document.getElementById("sampleLossVal").textContent = sampleLoss.toFixed(4);
+
+      const container = document.getElementById("barRows");
+      container.innerHTML = "";
+      for (let j = 0; j < V; j++) {
+        const isTarget = j === y;
+        const p = probs[j];
+        const grad = p - (isTarget ? 1.0 : 0.0);
+
+        const row = document.createElement("div");
+        row.className = "inspector-row";
+        if (isTarget) row.style.background = "rgba(34, 197, 94, 0.14)";
+
+        const c1 = document.createElement("div");
+        c1.innerHTML = `${VOCAB[j]}${isTarget ? ' <span style="color:var(--success);font-weight:700">✓</span>' : ''}`;
+
+        const c2 = document.createElement("div");
+        c2.style.textAlign = "right";
+        c2.style.color = activeStage === 2 ? "var(--primary)" : "var(--fg)";
+        c2.textContent = (logits[j] >= 0 ? "+" : "") + logits[j].toFixed(2);
+
+        const c3 = document.createElement("div");
+        c3.style.display = "flex";
+        c3.style.alignItems = "center";
+        c3.style.gap = "6px";
+        const track = document.createElement("div");
+        track.className = "bar-track";
+        const fill = document.createElement("div");
+        fill.className = "bar-fill";
+        fill.style.width = `${Math.max(p * 100, 1.5).toFixed(1)}%`;
+        fill.style.background = isTarget ? "var(--success)" : "var(--primary)";
+        track.appendChild(fill);
+        const pct = document.createElement("span");
+        pct.style.minWidth = "34px";
+        pct.style.textAlign = "right";
+        pct.textContent = `${(p * 100).toFixed(0)}%`;
+        c3.append(track, pct);
+
+        const c4 = document.createElement("div");
+        c4.style.textAlign = "right";
+        if (grad < 0) { c4.style.color = "var(--success)"; c4.textContent = `${grad.toFixed(2)} ↑`; }
+        else { c4.style.color = "var(--error)"; c4.textContent = `+${grad.toFixed(2)} ↓`; }
+
+        row.append(c1, c2, c3, c4);
+        container.appendChild(row);
+      }
+    }
+
+    function drawLossChart() {
+      const canvas = document.getElementById("lossCanvas");
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      const W = rect.width, H = rect.height;
+
+      ctx.fillStyle = getVar("--content");
+      ctx.fillRect(0, 0, W, H);
+      const pad = { l: 38, r: 12, t: 12, b: 22 };
+      const plotW = W - pad.l - pad.r, plotH = H - pad.t - pad.b;
+      const maxLoss = Math.max(Math.log(V) * 1.05, ...lossHistory.map(d => d.loss));
+      const maxEp = Math.max(10, lossHistory[lossHistory.length - 1].epoch);
+      const xOf = ep => pad.l + (ep / maxEp) * plotW;
+      const yOf = val => pad.t + (1 - val / maxLoss) * plotH;
+
+      ctx.strokeStyle = getVar("--border");
+      ctx.lineWidth = 1;
+      for (const tick of [0, 1.0, 2.0]) {
+        const y = yOf(tick);
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+        ctx.fillStyle = getVar("--muted");
+        ctx.font = "11px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText(tick.toFixed(1), pad.l - 5, y + 4);
+      }
+
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = getVar("--warning");
+      ctx.beginPath(); ctx.moveTo(pad.l, yOf(LOSS_FLOOR)); ctx.lineTo(W - pad.r, yOf(LOSS_FLOOR)); ctx.stroke();
+      ctx.restore();
+
+      ctx.strokeStyle = getVar("--primary");
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      lossHistory.forEach((pt, idx) => {
+        if (idx === 0) ctx.moveTo(xOf(pt.epoch), yOf(pt.loss));
+        else ctx.lineTo(xOf(pt.epoch), yOf(pt.loss));
+      });
+      ctx.stroke();
+
+      const last = lossHistory[lossHistory.length - 1];
+      ctx.fillStyle = getVar("--primary");
+      ctx.beginPath(); ctx.arc(xOf(last.epoch), yOf(last.loss), 3.5, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = getVar("--muted");
+      ctx.font = "11px monospace";
+      ctx.textAlign = "right";
+      ctx.fillText(`Epoch ${last.epoch}`, W - pad.r, H - 5);
+      ctx.textAlign = "left";
+      ctx.fillText("0", pad.l, H - 5);
+    }
+
+    function renderGenerationLab() {
+      const tape = document.getElementById("genTape");
+      tape.innerHTML = "";
+      genIds.forEach((id, i) => {
+        const chip = document.createElement("span");
+        chip.className = "tag mono";
+        chip.style.fontSize = "14px";
+        if (i === genIds.length - 1) {
+          chip.style.background = "var(--primary)";
+          chip.style.color = "var(--primary-fg)";
+          chip.style.borderColor = "var(--primary)";
+        }
+        chip.textContent = VOCAB[id];
+        tape.appendChild(chip);
+      });
+
+      const currId = genIds[genIds.length - 1];
+      const temp = parseFloat(document.getElementById("tempSlider").value);
+      const { probs } = softmax(Array.from(getRow(currId), z => z / temp));
+      document.getElementById("rouletteLabel").textContent =
+        `当前末尾字「${VOCAB[currId]}」经 Softmax(logits / ${temp.toFixed(1)}) 的轮盘概率区间：`;
+
+      const bar = document.getElementById("rouletteBar");
+      bar.innerHTML = "";
+      const colors = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)"];
+      probs.forEach((p, j) => {
+        const seg = document.createElement("div");
+        seg.style.width = `${p * 100}%`;
+        seg.style.background = colors[j % colors.length];
+        seg.style.color = "#fff";
+        seg.style.display = "flex";
+        seg.style.alignItems = "center";
+        seg.style.justifyContent = "center";
+        seg.style.fontSize = "11px";
+        seg.style.overflow = "hidden";
+        seg.className = "mono";
+        seg.title = `「${VOCAB[j]}」: ${(p * 100).toFixed(1)}%`;
+        if (p >= 0.07) seg.textContent = `${VOCAB[j]} ${(p * 100).toFixed(0)}%`;
+        bar.appendChild(seg);
+      });
+      if (lastDice !== null) {
+        const mk = document.createElement("div");
+        mk.style.position = "absolute";
+        mk.style.top = "0"; mk.style.bottom = "0"; mk.style.width = "2px";
+        mk.style.left = `${lastDice * 100}%`;
+        mk.style.background = "var(--fg)";
+        bar.appendChild(mk);
+      }
+    }
+
+    function sampleOneToken() {
+      const currId = genIds[genIds.length - 1];
+      const temp = parseFloat(document.getElementById("tempSlider").value);
+      const { probs } = softmax(Array.from(getRow(currId), z => z / temp));
+      const r = Math.random();
+      let cdf = 0, nextId = V - 1;
+      for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
+      lastDice = r;
+      document.getElementById("diceReadout").textContent =
+        `骰子 r = ${r.toFixed(3)} → 抽中「${VOCAB[nextId]}」(p = ${(probs[nextId] * 100).toFixed(1)}%)`;
+      genIds.push(nextId);
+      if (genIds.length > 26) genIds.shift();
+      renderGenerationLab();
+    }
+
+    function renderAll() {
+      document.getElementById("statEpoch").textContent = epoch;
+      document.getElementById("statLoss").textContent = computeFullLossAndGrads().loss.toFixed(4);
+      document.querySelectorAll("#stagePills .pill").forEach(b => {
+        b.classList.toggle("active", parseInt(b.dataset.stage, 10) === activeStage);
+      });
+      renderVocabAndPairs();
+      renderMatrix();
+      renderRowInspector();
+      drawLossChart();
+      renderGenerationLab();
+    }
+
+    function showStage(stageNum, doUpdate = false) {
+      activeStage = stageNum;
+      const [x, y] = PAIRS[selectedPairIdx];
+      const logits = getRow(x);
+      const { probs, maxVal } = softmax(logits);
+      const loss = -Math.log(probs[y] + 1e-12);
+      const lr = parseFloat(document.getElementById("lrSlider").value);
+
+      if (stageNum === 1) {
+        setNarrator(`① Tokenizer 查字典：「${VOCAB[x]}」→ ID ${x}，「${VOCAB[y]}」→ ID ${y}`,
+          `计算机不认识汉字，先通过 stoi 映射把训练样本对「${VOCAB[x]} → ${VOCAB[y]}」转成整数对 (${x}, ${y})。`);
+      } else if (stageNum === 2) {
+        setNarrator(`② Forward 查表：取出 V×V 矩阵的第 ${x} 行`,
+          `这 ${V} 个浮点数叫 logits，代表模型当前认为「${VOCAB[x]}」后接每个字的原始打分。目标字「${VOCAB[y]}」当前打分为 ${logits[y].toFixed(2)}。`);
+      } else if (stageNum === 3) {
+        setNarrator(`③ Softmax（减最大值 m = ${maxVal.toFixed(2)} 防溢出）：把打分转成概率分布`,
+          `经 exp(z - m) / sum 后，模型目前给正确答案「${VOCAB[y]}」分配的概率为 ${(probs[y] * 100).toFixed(1)}%。`);
+      } else if (stageNum === 4) {
+        setNarrator(`④ 交叉熵损失：L = -ln(${probs[y].toFixed(4)}) = ${loss.toFixed(4)}`,
+          `给正确答案的概率越接近 1，Loss 越接近 0；如果概率很小，-ln(p) 会给出严厉惩罚。`);
+      } else if (stageNum === 5) {
+        if (doUpdate) trainEpochs(1);
+        setNarrator(`⑤ 反向传播梯度 + SGD 更新（lr = ${lr.toFixed(1)}）`,
+          `正确答案「${VOCAB[y]}」梯度为 p_y - 1 = ${(probs[y] - 1).toFixed(3)}（负梯度 → 权重拉高 ↑）；其余 9 个字为正梯度（权重压低 ↓）。观察左侧矩阵第 ${x} 行颜色变化！`);
+      }
+      renderAll();
+    }
+
+    const startSelect = document.getElementById("genStartSelect");
+    VOCAB.forEach((ch, id) => {
+      const opt = document.createElement("option");
+      opt.value = id; opt.textContent = `${ch} (ID ${id})`;
+      if (ch === "床") opt.selected = true;
+      startSelect.appendChild(opt);
+    });
+    startSelect.onchange = () => {
+      stopAllAnims();
+      genIds = [parseInt(startSelect.value, 10)];
+      lastDice = null;
+      document.getElementById("diceReadout").textContent = "等待掷骰子...";
+      renderGenerationLab();
+    };
+    document.getElementById("lrSlider").oninput = e => {
+      document.getElementById("lrValue").textContent = parseFloat(e.target.value).toFixed(1);
+    };
+    document.getElementById("tempSlider").oninput = e => {
+      document.getElementById("tempValue").textContent = parseFloat(e.target.value).toFixed(1);
+      renderGenerationLab();
+    };
+    document.querySelectorAll("#stagePills .pill").forEach(b => {
+      b.onclick = () => { stopAllAnims(); showStage(parseInt(b.dataset.stage, 10), false); };
+    });
+    document.getElementById("btnStepAnim").onclick = () => {
+      stopAllAnims();
+      let st = 1;
+      function next() {
+        showStage(st, st === 5);
+        if (st < 5) { st += 1; animTimer = setTimeout(next, 1450); } else animTimer = null;
+      }
+      next();
+    };
+    document.getElementById("btnTrain1").onclick = () => { stopAllAnims(); showStage(5, true); };
+    document.getElementById("btnTrain50").onclick = () => {
+      stopAllAnims();
+      let left = 50; activeStage = 5;
+      function tick() {
+        const batch = Math.min(2, left);
+        trainEpochs(batch); left -= batch;
+        setNarrator(`正在快速训练中... Epoch ${epoch}（全量 Loss = ${computeFullLossAndGrads().loss.toFixed(4)}）`,
+          `观察 V×V 矩阵：真正的古诗相邻字（床→前、前→明、明→月、月→光/。、举→头、头→望、望→明）正在逐格亮起绿色！`);
+        renderAll();
+        if (left > 0) animTimer = setTimeout(tick, 45); else animTimer = null;
+      }
+      tick();
+    };
+    document.getElementById("btnReset").onclick = resetModel;
+    document.getElementById("btnGenStep").onclick = () => { if (genTimer) { clearInterval(genTimer); genTimer = null; } sampleOneToken(); };
+    document.getElementById("btnGenAuto").onclick = () => {
+      if (genTimer) { clearInterval(genTimer); genTimer = null; }
+      let left = 12; sampleOneToken(); left -= 1;
+      genTimer = setInterval(() => {
+        if (left <= 0) { clearInterval(genTimer); genTimer = null; return; }
+        sampleOneToken(); left -= 1;
+      }, 420);
+    };
+    document.getElementById("btnGenClear").onclick = () => {
+      if (genTimer) { clearInterval(genTimer); genTimer = null; }
+      genIds = [parseInt(startSelect.value, 10)];
+      lastDice = null;
+      document.getElementById("diceReadout").textContent = "等待掷骰子...";
+      renderGenerationLab();
+    };
+    window.addEventListener("resize", drawLossChart);
+    resetModel();
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 # Step 01：从零用纯 Rust 写一个最简语言模型（Bigram）
 
 > **本关代码**：`crates/step01-bigram/src/main.rs`  
+> **互动动画演示**：`notes/01-bigram-visualizer.html`（直接用浏览器打开，可单步拆解 Tokenizer → 查表 → Softmax → Loss → 梯度更新 → 温度轮盘采样全过程）  
 > **运行命令**：
 > ```bash
 > cargo test -p step01-bigram
