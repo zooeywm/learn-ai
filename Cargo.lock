@@ -3,9 +3,19 @@
 version = 4
 
 [[package]]
+name = "mini-core"
+version = "0.1.0"
+
+[[package]]
 name = "step01-bigram"
 version = "0.1.0"
+dependencies = [
+ "mini-core",
+]
 
 [[package]]
 name = "step02-autograd"
 version = "0.1.0"
+dependencies = [
+ "mini-core",
+]

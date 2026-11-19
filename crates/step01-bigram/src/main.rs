@@ -1,104 +1,14 @@
 //! Step 01: 最简语言模型 (Bigram) —— 纯 Rust 零依赖跑通 LLM 训练完整闭环
 //!
-//! 这一关故意不引入 Attention 和多层神经网络，而是用最简单的 V×V 查表权重，
-//! 亲手跑通所有大语言模型共有的 5 个底层步骤：
-//!   1. Tokenizer（字 <-> 整数 ID）
-//!   2. 前向传播（查表得到 logits，经 Softmax 变成概率分布）
-//!   3. 交叉熵 Loss（衡量预测与真实下一个字的差距）
-//!   4. 反向传播 + SGD（求梯度并更新参数）
-//!   5. 温度采样生成（自回归逐字接龙）
+//! 通用基础组件（Rng / Tokenizer / softmax / sample_from_logits）已抽离到 `mini-core`，
+//! 本文件聚焦于 Bigram 模型本身的前向查表、交叉熵 Loss、手推梯度与 SGD 训练循环。
 
-use std::collections::{BTreeSet, HashMap};
-use std::fs;
-use std::path::Path;
 use std::time::Instant;
 
-// ============================================================================
-// 0. 极简伪随机数生成器 (xorshift64)
-//    为了做到零依赖、结果可复现，自己写 10 行确定性 RNG，用于温度采样。
-// ============================================================================
-struct Rng {
-    state: u64,
-}
-
-impl Rng {
-    fn new(seed: u64) -> Self {
-        assert!(seed != 0, "xorshift64 种子不能为 0");
-        // 用 SplitMix64 混合一次种子，避免小种子（如 42）高位全 0 导致首个随机数接近 0
-        let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^= z >> 31;
-        Self {
-            state: if z == 0 { 1 } else { z },
-        }
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        let mut x = self.state;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.state = x;
-        x
-    }
-
-    /// 返回 [0.0, 1.0) 均匀分布的浮点数
-    fn next_f32(&mut self) -> f32 {
-        // 取高 24 位除以 2^24，保证精度均匀落在 [0, 1)
-        ((self.next_u64() >> 40) as f32) / ((1u64 << 24) as f32)
-    }
-}
+use mini_core::{load_poems, sample_from_logits, softmax, Rng, Tokenizer};
 
 // ============================================================================
-// 1. 字符级 Tokenizer（分词器）
-// ============================================================================
-struct Tokenizer {
-    stoi: HashMap<char, usize>, // char -> token_id
-    itos: Vec<char>,            // token_id -> char
-}
-
-impl Tokenizer {
-    fn from_text(text: &str) -> Self {
-        // 用 BTreeSet 自动去重且按 Unicode 排序，保证每次运行的词表编号完全一致
-        let unique_chars: BTreeSet<char> = text.chars().collect();
-        let itos: Vec<char> = unique_chars.into_iter().collect();
-        let stoi: HashMap<char, usize> =
-            itos.iter().enumerate().map(|(id, &ch)| (ch, id)).collect();
-        Self { stoi, itos }
-    }
-
-    fn vocab_size(&self) -> usize {
-        self.itos.len()
-    }
-
-    fn encode(&self, text: &str) -> Vec<usize> {
-        text.chars()
-            .map(|ch| *self.stoi.get(&ch).expect("遇到了词表外的未知字符"))
-            .collect()
-    }
-
-    fn decode(&self, ids: &[usize]) -> String {
-        ids.iter().map(|&id| self.itos[id]).collect()
-    }
-}
-
-// ============================================================================
-// 2. Softmax：把任意实数打分 (logits) 转换成和为 1 的概率分布
-// ============================================================================
-fn softmax(logits: &[f32]) -> Vec<f32> {
-    // 数值稳定关键：先减去最大值，防止 exp() 溢出成 inf / NaN
-    let max_val = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let mut probs: Vec<f32> = logits.iter().map(|&z| (z - max_val).exp()).collect();
-    let sum: f32 = probs.iter().sum();
-    for p in &mut probs {
-        *p /= sum;
-    }
-    probs
-}
-
-// ============================================================================
-// 3. Bigram 语言模型
+// 1. Bigram 语言模型
 //    唯一的可训练参数是一张 V × V 的权重表：
 //    第 x 行第 j 列 table[x * V + j] 表示：看到字 x 时，预测下一个字是 j 的打分。
 // ============================================================================
@@ -136,11 +46,9 @@ impl BigramModel {
             let probs = softmax(logits);
 
             // 2) 交叉熵损失：L = -ln(p_y)
-            //    加上 1e-12 防止极端情况下 ln(0) 得到 -inf
             total_loss += -(probs[y] + 1e-12).ln();
 
             // 3) 反向传播：dL / d(logits_j) = probs[j] - (1 if j == y else 0)
-            //    因为总 Loss 除以了样本数 N，梯度也相应除以 N
             let row_start = x * v;
             for j in 0..v {
                 let target = if j == y { 1.0 } else { 0.0 };
@@ -168,50 +76,23 @@ impl BigramModel {
         temperature: f32,
         rng: &mut Rng,
     ) -> Vec<usize> {
-        let temp = temperature.max(1e-5);
         let mut ids = vec![start_id];
         let mut curr = start_id;
-
         for _ in 0..max_new_tokens {
-            let scaled_logits: Vec<f32> = self
-                .forward_logits(curr)
-                .iter()
-                .map(|&z| z / temp)
-                .collect();
-            let probs = softmax(&scaled_logits);
-
-            // 轮盘赌采样：在 [0, 1) 掷骰子，累加概率直到超过骰子值
-            let r = rng.next_f32();
-            let mut cdf = 0.0f32;
-            let mut next_id = self.vocab_size - 1;
-            for (id, &p) in probs.iter().enumerate() {
-                cdf += p;
-                if r < cdf {
-                    next_id = id;
-                    break;
-                }
-            }
-
+            let next_id = sample_from_logits(self.forward_logits(curr), temperature, rng);
             ids.push(next_id);
             curr = next_id;
         }
-
         ids
     }
 }
 
 fn main() {
-    // 1. 读取唐诗语料（相对本 crate 目录向上两级找到 data/poems.txt）
-    let data_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/poems.txt");
-    let text = fs::read_to_string(&data_path)
-        .unwrap_or_else(|e| panic!("读取语料失败 {:?}: {}", data_path, e));
-
-    // 2. 构建字符级 Tokenizer，并把整篇文本编码为 token IDs
+    let text = load_poems();
     let tokenizer = Tokenizer::from_text(&text);
     let data = tokenizer.encode(&text);
     let v = tokenizer.vocab_size();
 
-    // 3. 构造所有相邻字符对 (x, y)：看到 data[i]，目标是预测 data[i + 1]
     let pairs: Vec<(usize, usize)> = data.windows(2).map(|w| (w[0], w[1])).collect();
 
     let mut model = BigramModel::new(v);
@@ -224,10 +105,7 @@ fn main() {
         v,
         v * v
     );
-    println!(
-        "理论初始随机猜测 Loss = ln({}) = {:.4}",
-        v, expected_init_loss
-    );
+    println!("理论初始随机猜测 Loss = ln({}) = {:.4}", v, expected_init_loss);
     println!("================================================================\n");
 
     let start_char = '床';
@@ -238,15 +116,8 @@ fn main() {
         tokenizer.decode(&ids).replace('\n', " / ")
     };
 
-    println!(
-        "[训练前 Step    0] 「{}」-> {}",
-        start_char,
-        preview(&model, 42)
-    );
+    println!("[训练前 Step    0] 「{}」-> {}", start_char, preview(&model, 42));
 
-    // 4. 训练循环（纯 SGD，全量样本每步更新一次）
-    //    注意：对 Bigram 这种极简线性查表，因为全量 869 个样本分摊到 373 行，
-    //    单行每步实际只出现 2~3 次，梯度除以 N=869 后很小，所以学习率可以设大一些（如 80.0）。
     let steps = 1500;
     let lr = 80.0;
     let t0 = Instant::now();
@@ -266,7 +137,6 @@ fn main() {
         }
     }
 
-    // 5. 观察温度 (temperature) 对生成结果的影响
     println!("\n================================================================");
     println!("训练完成！对比不同 temperature 的生成效果（起始字「明」）：");
     println!("================================================================");
@@ -281,42 +151,20 @@ fn main() {
 }
 
 // ============================================================================
-// 4. 单元测试（极其重要！从第一关就养成用数值梯度验证数学公式的习惯）
+// 2. 单元测试：数值梯度验算
 // ============================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_tokenizer_roundtrip() {
-        let sample = "床前明月光，疑是地上霜。\n";
-        let tok = Tokenizer::from_text(sample);
-        let encoded = tok.encode(sample);
-        assert_eq!(tok.decode(&encoded), sample);
-    }
-
-    #[test]
-    fn test_softmax_sums_to_one_and_numerically_stable() {
-        // 即使 logits 高达 1000.0，也不应出现 NaN 或 inf
-        let probs = softmax(&[1000.0, 1001.0, 1002.0]);
-        let sum: f32 = probs.iter().sum();
-        assert!((sum - 1.0).abs() < 1e-6);
-        assert!(probs.iter().all(|p| p.is_finite() && *p > 0.0));
-        assert!(probs[2] > probs[1] && probs[1] > probs[0]);
-    }
-
-    #[test]
     fn test_gradient_check() {
-        // 用有限差分法 (L(w + eps) - L(w - eps)) / (2 * eps)
-        // 验证我们手推的梯度公式 (probs[j] - target) / N 是否完全正确！
         let v = 4;
         let mut model = BigramModel::new(v);
-        // 随便给点非零权重，避免特殊对称点掩盖 Bug
         for (i, w) in model.table.iter_mut().enumerate() {
             *w = ((i as f32) * 0.37).sin();
         }
         let pairs = vec![(0, 1), (1, 2), (0, 3), (2, 0)];
-
         let (_, analytical_grads) = model.loss_and_grads(&pairs);
 
         let eps = 1e-3f32;

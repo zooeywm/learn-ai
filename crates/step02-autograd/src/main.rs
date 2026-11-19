@@ -15,99 +15,12 @@
 //!   用这个纯 Rust 自动求导引擎训练一个「看前 3 个字猜第 4 个字」的 2 层神经语言模型（MLP LM），
 //!   彻底打破 Step 01 Bigram 停在 Loss=1.25 的单字记忆天花板！
 
-use std::collections::{BTreeSet, HashMap};
-use std::fs;
-use std::path::Path;
 use std::time::Instant;
 
-// ============================================================================
-// 0. 极简确定性随机数生成器 (SplitMix64 + xorshift64 + Box-Muller 高斯采样)
-// ============================================================================
-struct Rng {
-    state: u64,
-}
-
-impl Rng {
-    fn new(seed: u64) -> Self {
-        assert!(seed != 0);
-        let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^= z >> 31;
-        Self {
-            state: if z == 0 { 1 } else { z },
-        }
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        let mut x = self.state;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.state = x;
-        x
-    }
-
-    fn next_f32(&mut self) -> f32 {
-        ((self.next_u64() >> 40) as f32) / ((1u64 << 24) as f32)
-    }
-
-    fn next_usize(&mut self, upper: usize) -> usize {
-        (self.next_u64() as usize) % upper
-    }
-
-    /// 标准正态分布采样 N(0, std^2)，用于神经网络权重随机初始化（打破对称性）
-    fn normal(&mut self, std: f32) -> f32 {
-        let u1 = self.next_f32().max(1e-7);
-        let u2 = self.next_f32();
-        let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos();
-        z0 * std
-    }
-}
+use mini_core::{load_poems, sample_from_logits, softmax, Rng, Tokenizer};
 
 // ============================================================================
-// 1. 字符级 Tokenizer（沿用 Step 01）
-// ============================================================================
-struct Tokenizer {
-    stoi: HashMap<char, usize>,
-    itos: Vec<char>,
-}
-
-impl Tokenizer {
-    fn from_text(text: &str) -> Self {
-        let unique: BTreeSet<char> = text.chars().collect();
-        let itos: Vec<char> = unique.into_iter().collect();
-        let stoi = itos.iter().enumerate().map(|(i, &c)| (c, i)).collect();
-        Self { stoi, itos }
-    }
-
-    fn vocab_size(&self) -> usize {
-        self.itos.len()
-    }
-
-    fn encode(&self, s: &str) -> Vec<usize> {
-        s.chars()
-            .map(|c| *self.stoi.get(&c).expect("遇到词表外字符"))
-            .collect()
-    }
-
-    fn decode(&self, ids: &[usize]) -> String {
-        ids.iter().map(|&i| self.itos[i]).collect()
-    }
-}
-
-fn softmax(logits: &[f32]) -> Vec<f32> {
-    let max_val = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let mut probs: Vec<f32> = logits.iter().map(|&z| (z - max_val).exp()).collect();
-    let sum: f32 = probs.iter().sum();
-    for p in &mut probs {
-        *p /= sum;
-    }
-    probs
-}
-
-// ============================================================================
-// 2. Arena-Tape 自动求导引擎（本关核心！）
+// 1. Arena-Tape 自动求导引擎（本关核心！）
 // ============================================================================
 
 /// 轻量张量句柄：只是一个指向 Tape.nodes 数组的下标，可以随意 Copy，零借用冲突。
@@ -469,7 +382,6 @@ impl Param {
 //    对比 Step 01（只能看前 1 个字，Loss 卡在 1.25），现在能看前 3 个字！
 // ============================================================================
 struct MlpLanguageModel {
-    vocab_size: usize,
     ctx_len: usize,
     emb: Param, // (V, D)
     w1: Param,  // (ctx_len * D, H)
@@ -485,7 +397,6 @@ impl MlpLanguageModel {
         let std1 = (2.0 / in_dim as f32).sqrt();
         let std2 = (1.0 / hidden_dim as f32).sqrt();
         Self {
-            vocab_size,
             ctx_len,
             emb: Param::randn(vocab_size, emb_dim, 0.2, rng, true),
             w1: Param::randn(in_dim, hidden_dim, std1, rng, true),
@@ -553,7 +464,6 @@ impl MlpLanguageModel {
             "提示词长度至少需要 {} 个字",
             self.ctx_len
         );
-        let temp = temperature.max(1e-5);
         let mut ids = prompt_ids.to_vec();
 
         for _ in 0..max_new {
@@ -572,19 +482,7 @@ impl MlpLanguageModel {
             let z2 = tape.matmul(h, w2);
             let logits_id = tape.add(z2, b2);
 
-            let scaled: Vec<f32> = tape.data(logits_id).iter().map(|&z| z / temp).collect();
-            let probs = softmax(&scaled);
-
-            let r = rng.next_f32();
-            let mut cdf = 0.0f32;
-            let mut next_id = self.vocab_size - 1;
-            for (id, &p) in probs.iter().enumerate() {
-                cdf += p;
-                if r < cdf {
-                    next_id = id;
-                    break;
-                }
-            }
+            let next_id = sample_from_logits(tape.data(logits_id), temperature, rng);
             ids.push(next_id);
         }
         ids
@@ -592,9 +490,7 @@ impl MlpLanguageModel {
 }
 
 fn main() {
-    let data_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/poems.txt");
-    let text = fs::read_to_string(&data_path)
-        .unwrap_or_else(|e| panic!("读取语料失败 {:?}: {}", data_path, e));
+    let text = load_poems();
 
     let tok = Tokenizer::from_text(&text);
     let data = tok.encode(&text);

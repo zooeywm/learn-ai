@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/mini-core",
     "crates/step01-bigram",
     "crates/step02-autograd",
 ]

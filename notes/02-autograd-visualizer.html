@@ -4,96 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Step 02：Arena-Tape 自动求导与链式法则 3D 建模动画（离线版）</title>
-  <style>
-    :root {
-      --background: #0d1017;
-      --card: #151924;
-      --content: #1a1f2e;
-      --border: #2a3245;
-      --foreground: #e8edf7;
-      --muted-foreground: #94a3b8;
-      --primary: #4f8cff;
-      --primary-foreground: #ffffff;
-      --secondary: #22293a;
-      --secondary-foreground: #cbd5e1;
-      --success: #22c55e;
-      --warning: #f59e0b;
-      --error: #ef4444;
-    }
-    @media (prefers-color-scheme: light) {
-      :root {
-        --background: #f4f6fb;
-        --card: #ffffff;
-        --content: #edf1f8;
-        --border: #d4dce9;
-        --foreground: #141c2c;
-        --muted-foreground: #5c6b82;
-        --primary: #2563eb;
-        --primary-foreground: #ffffff;
-        --secondary: #e5ebf6;
-        --secondary-foreground: #1e293b;
-        --success: #16a34a;
-        --warning: #d97706;
-        --error: #dc2626;
-      }
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 16px;
-      background: var(--background); color: var(--foreground);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
-      font-size: 13px; line-height: 1.45;
-    }
-    .wrap { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
-    .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-    .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .muted { color: var(--muted-foreground); }
-    .xs { font-size: 12px; }
-    h1 { margin: 0; font-size: 17px; }
-    .badge { padding: 2px 8px; border-radius: 6px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; }
-    button {
-      font-family: inherit; font-size: 12px; padding: 6px 10px; border-radius: 8px;
-      border: 1px solid var(--border); background: var(--content); color: var(--foreground);
-      cursor: pointer; transition: all 0.18s ease;
-    }
-    button:hover { border-color: var(--primary); }
-    button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); font-weight: 600; }
-    button.primary:hover { opacity: 0.92; }
-    .stage-pill {
-      border-radius: 999px; padding: 3px 9px; border: 1px solid var(--border);
-      background: var(--content); user-select: none; transition: all 0.2s ease;
-    }
-    .stage-pill.active { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); font-weight: 600; }
-    .stage-pill.done { border-color: var(--success); color: var(--success); }
-    .viewport { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--content); margin-top: 10px; }
-    canvas { width: 100%; height: 510px; display: block; cursor: grab; touch-action: none; }
-    canvas:active { cursor: grabbing; }
-    .hud {
-      position: absolute; pointer-events: none; border-radius: 8px;
-      border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 90%, transparent);
-      backdrop-filter: blur(6px); padding: 8px 12px; font-size: 12px;
-    }
-    .hud-tl { top: 12px; left: 12px; }
-    .hud-tr { top: 12px; right: 12px; display: flex; gap: 12px; align-items: center; }
-    .hud-bottom { bottom: 12px; left: 12px; right: 12px; }
-    .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
-    .prog-track { width: 112px; height: 6px; border-radius: 999px; overflow: hidden; background: var(--content); border: 1px solid var(--border); }
-    .prog-fill { height: 100%; background: var(--primary); width: 0%; }
-    .hidden { display: none; }
-    select {
-      background: var(--content); color: var(--foreground); border: 1px solid var(--border);
-      border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer;
-    }
-    .sliders { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
-    @media (max-width: 860px) { .sliders { grid-template-columns: repeat(2, 1fr); } }
-    .slider-box {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      background: var(--content); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
-    }
-    input[type="range"] { accent-color: var(--primary); flex: 1; min-width: 60px; }
-  </style>
+  <link rel="stylesheet" href="./assets/visualizer.css" />
 </head>
 <body>
   <div class="wrap">
@@ -187,7 +98,10 @@
     </div>
   </div>
 
+  <script src="./assets/engine3d.js"></script>
   <script>
+    const M = window.Mini3D;
+
     const X_VAL = 2.0, TARGET = 2.0;
     let w1 = 0.60, b1 = -0.40, w2 = 0.80, lr = 0.05, epoch = 0;
 
@@ -230,6 +144,59 @@
       if (currentStage === 7 && !stage7Applied) { applySgd(false); stage7Applied = true; }
     }
 
+    const canvas = document.getElementById("scene3d");
+    const ctx = canvas.getContext("2d");
+    const cam = M.createCamera(canvas, { yaw: -0.35, pitch: 0.44, dist: 23.5, tx: 0.0, ty: 1.0, tz: 0.5, minPitch: 0.12, maxPitch: 1.38, maxDist: 36 });
+
+    const NODES_META = [
+      { id: 0, name: "x (输入)", short: "x", x: -7.5, z: -2.2, kind: "input" },
+      { id: 1, name: "w1 (权重)", short: "w1", x: -7.5, z: 1.4, kind: "param" },
+      { id: 2, name: "b1 (偏置)", short: "b1", x: -3.6, z: 2.2, kind: "param" },
+      { id: 3, name: "Mul (×)", short: "m", x: -4.4, z: -0.8, kind: "op" },
+      { id: 4, name: "Add (+)", short: "z", x: -1.4, z: 0.0, kind: "op" },
+      { id: 5, name: "w2 (权重)", short: "w2", x: 3.6, z: 2.2, kind: "param" },
+      { id: 6, name: "ReLU 门", short: "h", x: 1.6, z: 0.0, kind: "relu" },
+      { id: 7, name: "Mul (×)", short: "pred", x: 4.6, z: 0.0, kind: "op" },
+      { id: 8, name: "Loss", short: "L", x: 7.8, z: 0.0, kind: "loss" },
+    ];
+    const EDGES = [[0, 3], [1, 3], [3, 4], [2, 4], [4, 6], [6, 7], [5, 7], [7, 8]];
+
+    function setNarrator(title, desc) {
+      document.getElementById("narratorTitle").textContent = title;
+      document.getElementById("narratorDesc").textContent = desc;
+    }
+
+    function syncSliders() {
+      const clamp = v => Math.max(-2, Math.min(2, v));
+      document.getElementById("slW1").value = clamp(w1).toFixed(2); document.getElementById("valW1").textContent = w1.toFixed(2);
+      document.getElementById("slB1").value = clamp(b1).toFixed(2); document.getElementById("valB1").textContent = b1.toFixed(2);
+      document.getElementById("slW2").value = clamp(w2).toFixed(2); document.getElementById("valW2").textContent = w2.toFixed(2);
+      document.getElementById("slLr").value = lr.toFixed(2); document.getElementById("valLr").textContent = lr.toFixed(2);
+    }
+
+    function updateHud() {
+      document.getElementById("hudEpoch").textContent = epoch;
+      if (nodeVals[8] === null) document.getElementById("hudLoss").textContent = "未计算 (0)";
+      else if (forwardStale) document.getElementById("hudLoss").textContent = `${nodeVals[8].toFixed(4)} (旧值，待下轮重算)`;
+      else document.getElementById("hudLoss").textContent = nodeVals[8].toFixed(4);
+      document.getElementById("hudPred").textContent = nodeVals[7] === null ? "--" : `${nodeVals[7].toFixed(2)}${forwardStale ? " (旧)" : ""}`;
+
+      let dir = "等待前向写入 Vec[0..8]";
+      if (currentStage >= 1 && currentStage <= 3) dir = "前向正序压栈 0 → 8 (构建计算图)";
+      else if (currentStage >= 4 && currentStage <= 6) dir = "反向逆序回放 8 → 0 (链式法则)";
+      else if (currentStage === 7) dir = "叶子参数 SGD 更新 (w -= lr·grad)";
+      document.getElementById("hudTapeDir").textContent = dir;
+
+      document.querySelectorAll("#stagePills .stage-pill").forEach(el => {
+        const st = parseInt(el.dataset.stage, 10);
+        el.classList.toggle("active", st === currentStage);
+        el.classList.toggle("done", currentStage > 0 && st < currentStage);
+      });
+      const nextSt = currentStage >= 7 ? 1 : currentStage + 1;
+      document.getElementById("btnNextStep").textContent = `${currentStage >= 7 ? "⏭ 下一轮：" : "⏭ 下一步："}${STAGE_NAMES[nextSt - 1]} (${nextSt}/7)`;
+      document.getElementById("btnAutoPlay").textContent = mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
+    }
+
     function enterStage(stageNum, nowMs) {
       flushPendingStage7();
       currentStage = stageNum; stageStartMs = nowMs; stage7Applied = false;
@@ -268,164 +235,8 @@
       updateHud();
     }
 
-    const canvas = document.getElementById("scene3d");
-    const ctx = canvas.getContext("2d");
-    const cam = { yaw: -0.35, pitch: 0.44, dist: 23.5, targetYaw: -0.35, targetPitch: 0.44, targetDist: 23.5, tx: 0.0, ty: 1.0, tz: 0.5, autoOrbit: false };
-    let dragging = false, lastMX = 0, lastMY = 0;
-    canvas.addEventListener("pointerdown", e => { dragging = true; cam.autoOrbit = false; lastMX = e.clientX; lastMY = e.clientY; canvas.setPointerCapture(e.pointerId); });
-    canvas.addEventListener("pointermove", e => {
-      if (!dragging) return;
-      cam.targetYaw -= (e.clientX - lastMX) * 0.008;
-      cam.targetPitch = Math.max(0.12, Math.min(1.38, cam.targetPitch + (e.clientY - lastMY) * 0.007));
-      lastMX = e.clientX; lastMY = e.clientY;
-    });
-    canvas.addEventListener("pointerup", () => { dragging = false; });
-    canvas.addEventListener("wheel", e => { e.preventDefault(); cam.targetDist = Math.max(14, Math.min(36, cam.targetDist + e.deltaY * 0.015)); }, { passive: false });
-
-    const NODES_META = [
-      { id: 0, name: "x (输入)", short: "x", x: -7.5, z: -2.2, kind: "input" },
-      { id: 1, name: "w1 (权重)", short: "w1", x: -7.5, z: 1.4, kind: "param" },
-      { id: 2, name: "b1 (偏置)", short: "b1", x: -3.6, z: 2.2, kind: "param" },
-      { id: 3, name: "Mul (×)", short: "m", x: -4.4, z: -0.8, kind: "op" },
-      { id: 4, name: "Add (+)", short: "z", x: -1.4, z: 0.0, kind: "op" },
-      { id: 5, name: "w2 (权重)", short: "w2", x: 3.6, z: 2.2, kind: "param" },
-      { id: 6, name: "ReLU 门", short: "h", x: 1.6, z: 0.0, kind: "relu" },
-      { id: 7, name: "Mul (×)", short: "pred", x: 4.6, z: 0.0, kind: "op" },
-      { id: 8, name: "Loss", short: "L", x: 7.8, z: 0.0, kind: "loss" },
-    ];
-    const EDGES = [[0, 3], [1, 3], [3, 4], [2, 4], [4, 6], [6, 7], [5, 7], [7, 8]];
-
-    function getThemeColors() {
-      const s = getComputedStyle(document.documentElement);
-      const get = (k, fb) => s.getPropertyValue(k).trim() || fb;
-      return {
-        bg: get("--content", "#1a1f2e"), fg: get("--foreground", "#e8edf7"), muted: get("--muted-foreground", "#94a3b8"),
-        border: get("--border", "#2a3245"), primary: get("--primary", "#4f8cff"), success: get("--success", "#22c55e"),
-        error: get("--error", "#ef4444"), warning: get("--warning", "#f59e0b"), card: get("--card", "#151924"),
-      };
-    }
-
-    const colorCache = new Map();
-    function parseRgb(c) {
-      if (colorCache.has(c)) return colorCache.get(c);
-      const t = document.createElement("canvas").getContext("2d"); t.fillStyle = c; t.fillRect(0, 0, 1, 1);
-      const d = t.getImageData(0, 0, 1, 1).data; const res = [d[0], d[1], d[2]]; colorCache.set(c, res); return res;
-    }
-    function shade(rgb, f, a = 1) { return `rgba(${Math.min(255, Math.max(0, Math.round(rgb[0] * f)))},${Math.min(255, Math.max(0, Math.round(rgb[1] * f)))},${Math.min(255, Math.max(0, Math.round(rgb[2] * f)))},${a})`; }
-    function lerpRgb(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
-
-    function makeProjector(W, H) {
-      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-      const focal = Math.min(W, H) * 1.2;
-      const eye = { x: cam.tx + cam.dist * cp * sy, y: cam.ty + cam.dist * sp, z: cam.tz + cam.dist * cp * cy };
-      function project(wx, wy, wz) {
-        const dx = wx - cam.tx, dy = wy - cam.ty, dz = wz - cam.tz;
-        const x1 = dx * cy - dz * sy, z1 = dx * sy + dz * cy;
-        const y2 = dy * cp - z1 * sp, z2 = dy * sp + z1 * cp;
-        const depth = cam.dist - z2; if (depth < 0.5) return null;
-        const sc = focal / depth;
-        return { x: W * 0.5 + x1 * sc, y: H * 0.52 - y2 * sc, depth, sc };
-      }
-      return { project, eye };
-    }
-
-    function pushBox(dl, proj, eye, x0, y0, z0, x1, y1, z1, rgb, a = 1, stroke = null) {
-      const cs = [proj(x0, y0, z0), proj(x1, y0, z0), proj(x1, y0, z1), proj(x0, y0, z1), proj(x0, y1, z0), proj(x1, y1, z0), proj(x1, y1, z1), proj(x0, y1, z1)];
-      if (cs.some(c => !c)) return;
-      const cp = proj((x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5); if (!cp) return;
-      const faces = [];
-      if (eye.y > y1) faces.push({ i: [4, 5, 6, 7], l: 1.12 }); if (eye.y < y0) faces.push({ i: [0, 3, 2, 1], l: 0.55 });
-      if (eye.x > x1) faces.push({ i: [1, 2, 6, 5], l: 0.88 }); if (eye.x < x0) faces.push({ i: [0, 4, 7, 3], l: 0.72 });
-      if (eye.z > z1) faces.push({ i: [3, 7, 6, 2], l: 0.96 }); if (eye.z < z0) faces.push({ i: [0, 1, 5, 4], l: 0.66 });
-      dl.push({
-        depth: cp.depth,
-        draw: () => {
-          for (const f of faces) {
-            ctx.beginPath(); ctx.moveTo(cs[f.i[0]].x, cs[f.i[0]].y); ctx.lineTo(cs[f.i[1]].x, cs[f.i[1]].y);
-            ctx.lineTo(cs[f.i[2]].x, cs[f.i[2]].y); ctx.lineTo(cs[f.i[3]].x, cs[f.i[3]].y); ctx.closePath();
-            ctx.fillStyle = shade(rgb, f.l, a); ctx.fill();
-            if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 0.9; ctx.stroke(); }
-          }
-        },
-      });
-    }
-
-    function pushOrb(dl, proj, wx, wy, wz, rw, col, glow = null, lbl = null, fg = "#fff") {
-      const p = proj(wx, wy, wz); if (!p) return;
-      const r = Math.max(3, rw * p.sc);
-      dl.push({
-        depth: p.depth - 0.2,
-        draw: () => {
-          ctx.save(); if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 14; }
-          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); ctx.restore();
-          if (lbl) { ctx.fillStyle = fg; ctx.font = `bold ${Math.max(10, Math.round(r * 0.9))}px monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(lbl, p.x, p.y + 0.5); }
-        },
-      });
-    }
-
-    function pushArrow3D(dl, proj, wx, y0, y1, wz, col, lw = 3) {
-      const p0 = proj(wx, y0, wz), p1 = proj(wx, y1, wz); if (!p0 || !p1) return;
-      dl.push({
-        depth: (p0.depth + p1.depth) * 0.5 - 0.3,
-        draw: () => {
-          ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = lw; ctx.shadowColor = col; ctx.shadowBlur = 8;
-          ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-          const a = Math.atan2(p1.y - p0.y, p1.x - p0.x), h = 7 + lw * 0.5;
-          ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p1.x - h * Math.cos(a - 0.5), p1.y - h * Math.sin(a - 0.5));
-          ctx.lineTo(p1.x - h * Math.cos(a + 0.5), p1.y - h * Math.sin(a + 0.5)); ctx.closePath(); ctx.fill(); ctx.restore();
-        },
-      });
-    }
-
-    function pushLabel3D(dl, proj, wx, wy, wz, txt, col, font = "11px monospace", bias = -0.2) {
-      const p = proj(wx, wy, wz); if (!p) return;
-      dl.push({ depth: p.depth + bias, draw: () => { ctx.fillStyle = col; ctx.font = font; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, p.x, p.y); } });
-    }
-
-    function drawPipe3D(proj, a, b, col, lw = 2) {
-      const p0 = proj(a.x, a.y, a.z), p1 = proj(b.x, b.y, b.z); if (!p0 || !p1) return;
-      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); ctx.restore();
-    }
-
-    function evalArc(a, b, h, u) { return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u + Math.sin(u * Math.PI) * h, z: a.z + (b.z - a.z) * u }; }
-
-    function setNarrator(title, desc) { document.getElementById("narratorTitle").textContent = title; document.getElementById("narratorDesc").textContent = desc; }
-
-    function syncSliders() {
-      const clamp = v => Math.max(-2, Math.min(2, v));
-      document.getElementById("slW1").value = clamp(w1).toFixed(2); document.getElementById("valW1").textContent = w1.toFixed(2);
-      document.getElementById("slB1").value = clamp(b1).toFixed(2); document.getElementById("valB1").textContent = b1.toFixed(2);
-      document.getElementById("slW2").value = clamp(w2).toFixed(2); document.getElementById("valW2").textContent = w2.toFixed(2);
-      document.getElementById("slLr").value = lr.toFixed(2); document.getElementById("valLr").textContent = lr.toFixed(2);
-    }
-
-    function updateHud() {
-      document.getElementById("hudEpoch").textContent = epoch;
-      if (nodeVals[8] === null) document.getElementById("hudLoss").textContent = "未计算 (0)";
-      else if (forwardStale) document.getElementById("hudLoss").textContent = `${nodeVals[8].toFixed(4)} (旧值，待下轮重算)`;
-      else document.getElementById("hudLoss").textContent = nodeVals[8].toFixed(4);
-      document.getElementById("hudPred").textContent = nodeVals[7] === null ? "--" : `${nodeVals[7].toFixed(2)}${forwardStale ? " (旧)" : ""}`;
-
-      let dir = "等待前向写入 Vec[0..8]";
-      if (currentStage >= 1 && currentStage <= 3) dir = "前向正序压栈 0 → 8 (构建计算图)";
-      else if (currentStage >= 4 && currentStage <= 6) dir = "反向逆序回放 8 → 0 (链式法则)";
-      else if (currentStage === 7) dir = "叶子参数 SGD 更新 (w -= lr·grad)";
-      document.getElementById("hudTapeDir").textContent = dir;
-
-      document.querySelectorAll("#stagePills .stage-pill").forEach(el => {
-        const st = parseInt(el.dataset.stage, 10);
-        el.classList.toggle("active", st === currentStage);
-        el.classList.toggle("done", currentStage > 0 && st < currentStage);
-      });
-      const nextSt = currentStage >= 7 ? 1 : currentStage + 1;
-      document.getElementById("btnNextStep").textContent = `${currentStage >= 7 ? "⏭ 下一轮：" : "⏭ 下一步："}${STAGE_NAMES[nextSt - 1]} (${nextSt}/7)`;
-      document.getElementById("btnAutoPlay").textContent = mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
-    }
-
     function renderFrame(nowMs) {
-      if (cam.autoOrbit) cam.targetYaw += 0.005;
-      cam.yaw += (cam.targetYaw - cam.yaw) * 0.12; cam.pitch += (cam.targetPitch - cam.pitch) * 0.12; cam.dist += (cam.targetDist - cam.dist) * 0.12;
-
+      cam.step();
       const curStepMs = stepAnimMs(), curHoldMs = autoHoldMs();
       let stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / curStepMs) : 0;
       const progWrap = document.getElementById("stageProgressWrap"), progBar = document.getElementById("stageProgressBar");
@@ -464,25 +275,14 @@
       visualW.w1 += (w1 - visualW.w1) * lerpRate; visualW.b1 += (b1 - visualW.b1) * lerpRate; visualW.w2 += (w2 - visualW.w2) * lerpRate;
       visualLoss += ((nodeVals[8] === null ? 0.0 : nodeVals[8]) - visualLoss) * lerpRate;
 
-      const dpr = window.devicePixelRatio || 1, rect = canvas.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        const tw = Math.round(rect.width * dpr), th = Math.round(rect.height * dpr);
-        if (canvas.width !== tw || canvas.height !== th) { canvas.width = tw; canvas.height = th; }
-      }
-      const W = rect.width, H = rect.height;
-      ctx.save(); ctx.scale(dpr, dpr);
+      const theme = M.getThemeColors();
+      const { W, H } = M.beginFrame(canvas, ctx, theme);
+      const { project, eye } = M.makeProjector(W, H, cam, 1.2, 0.52);
 
-      const theme = getThemeColors();
-      const rgbCard = parseRgb(theme.card), rgbBorder = parseRgb(theme.border), rgbPrimary = parseRgb(theme.primary);
-      const rgbSuccess = parseRgb(theme.success), rgbError = parseRgb(theme.error), rgbWarning = parseRgb(theme.warning);
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border), rgbPrimary = M.parseRgb(theme.primary);
+      const rgbSuccess = M.parseRgb(theme.success), rgbError = M.parseRgb(theme.error), rgbWarning = M.parseRgb(theme.warning);
 
-      const bgGrad = ctx.createRadialGradient(W * 0.5, H * 0.42, 40, W * 0.5, H * 0.5, Math.max(W, H) * 0.72);
-      bgGrad.addColorStop(0, theme.card); bgGrad.addColorStop(1, theme.bg);
-      ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
-
-      const { project, eye } = makeProjector(W, H);
-
-      ctx.strokeStyle = shade(rgbBorder, 1, 0.28); ctx.lineWidth = 1;
+      ctx.strokeStyle = M.shade(rgbBorder, 1, 0.28); ctx.lineWidth = 1;
       for (let gx = -9; gx <= 9; gx += 1.5) {
         const a = project(gx, 0, -3.5), b = project(gx, 0, 6.2);
         if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
@@ -493,7 +293,7 @@
       }
 
       for (const [u, v] of EDGES) {
-        drawPipe3D(project, { x: NODES_META[u].x, y: 0.7, z: NODES_META[u].z }, { x: NODES_META[v].x, y: 0.7, z: NODES_META[v].z }, shade(rgbBorder, 1.1, 0.8), 2.2);
+        M.drawPipe3D(ctx, project, { x: NODES_META[u].x, y: 0.7, z: NODES_META[u].z }, { x: NODES_META[v].x, y: 0.7, z: NODES_META[v].z }, M.shade(rgbBorder, 1.1, 0.8), 2.2);
       }
 
       const dl = [];
@@ -505,99 +305,98 @@
         const val = nodeVals[n.id], grd = nodeGrads[n.id];
         if (n.kind === "loss") {
           if (visualLoss < 0.005 && nodeVals[8] === null) {
-            pushBox(dl, project, eye, n.x - 0.75, 0, n.z - 0.75, n.x + 0.75, 0.08, n.z + 0.75, rgbBorder, 0.55, theme.border);
-            pushLabel3D(dl, project, n.x, 0.65, n.z, "Loss: 0 (未计算)", theme.muted, "bold 11px monospace");
+            M.pushBox(dl, ctx, project, eye, n.x - 0.75, 0, n.z - 0.75, n.x + 0.75, 0.08, n.z + 0.75, rgbBorder, 0.55, theme.border);
+            M.pushLabel3D(dl, ctx, project, n.x, 0.65, n.z, "Loss: 0 (未计算)", theme.muted, "bold 11px monospace");
           } else {
             const lh = Math.max(0.16, Math.min(4.6, visualLoss * 1.1 + 0.14));
-            pushBox(dl, project, eye, n.x - 0.75, 0, n.z - 0.75, n.x + 0.75, lh, n.z + 0.75, rgbWarning, 0.92, theme.fg);
-            pushLabel3D(dl, project, n.x, lh + 0.55, n.z, `Loss ${visualLoss.toFixed(3)}`, theme.warning, "bold 12px monospace");
+            M.pushBox(dl, ctx, project, eye, n.x - 0.75, 0, n.z - 0.75, n.x + 0.75, lh, n.z + 0.75, rgbWarning, 0.92, theme.fg);
+            M.pushLabel3D(dl, ctx, project, n.x, lh + 0.55, n.z, `Loss ${visualLoss.toFixed(3)}`, theme.warning, "bold 12px monospace");
           }
         } else if (n.kind === "relu") {
           const gateRgb = reluOpen ? rgbSuccess : rgbError;
-          pushBox(dl, project, eye, n.x - 0.28, 0, n.z - 0.95, n.x + 0.28, 2.5, n.z - 0.65, rgbBorder, 0.95, theme.fg);
-          pushBox(dl, project, eye, n.x - 0.28, 0, n.z + 0.65, n.x + 0.28, 2.5, n.z + 0.95, rgbBorder, 0.95, theme.fg);
-          pushBox(dl, project, eye, n.x - 0.28, 2.2, n.z - 0.95, n.x + 0.28, 2.55, n.z + 0.95, gateRgb, 0.95, theme.fg);
-          if (!reluOpen) pushBox(dl, project, eye, n.x - 0.14, 0.05, n.z - 0.64, n.x + 0.14, 2.18, n.z + 0.64, rgbError, 0.72, theme.error);
-          else pushBox(dl, project, eye, n.x - 0.08, 0.05, n.z - 0.64, n.x + 0.08, 2.18, n.z + 0.64, rgbSuccess, 0.18, theme.success);
-          pushLabel3D(dl, project, n.x, 3.05, n.z, reluOpen ? "ReLU 门 (通 ×1)" : "ReLU 门 (断 ×0!)", reluOpen ? theme.success : theme.error, "bold 11px sans-serif");
-          if (val !== null) pushLabel3D(dl, project, n.x, 1.35, n.z + 1.25, `h=${val.toFixed(2)}`, theme.fg, "bold 11px monospace");
-          if (grd !== null) pushLabel3D(dl, project, n.x, 0.55, n.z + 1.25, `dH=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
+          M.pushBox(dl, ctx, project, eye, n.x - 0.28, 0, n.z - 0.95, n.x + 0.28, 2.5, n.z - 0.65, rgbBorder, 0.95, theme.fg);
+          M.pushBox(dl, ctx, project, eye, n.x - 0.28, 0, n.z + 0.65, n.x + 0.28, 2.5, n.z + 0.95, rgbBorder, 0.95, theme.fg);
+          M.pushBox(dl, ctx, project, eye, n.x - 0.28, 2.2, n.z - 0.95, n.x + 0.28, 2.55, n.z + 0.95, gateRgb, 0.95, theme.fg);
+          if (!reluOpen) M.pushBox(dl, ctx, project, eye, n.x - 0.14, 0.05, n.z - 0.64, n.x + 0.14, 2.18, n.z + 0.64, rgbError, 0.72, theme.error);
+          else M.pushBox(dl, ctx, project, eye, n.x - 0.08, 0.05, n.z - 0.64, n.x + 0.08, 2.18, n.z + 0.64, rgbSuccess, 0.18, theme.success);
+          M.pushLabel3D(dl, ctx, project, n.x, 3.05, n.z, reluOpen ? "ReLU 门 (通 ×1)" : "ReLU 门 (断 ×0!)", reluOpen ? theme.success : theme.error, "bold 11px sans-serif");
+          if (val !== null) M.pushLabel3D(dl, ctx, project, n.x, 1.35, n.z + 1.25, `h=${val.toFixed(2)}`, theme.fg, "bold 11px monospace");
+          if (grd !== null) M.pushLabel3D(dl, ctx, project, n.x, 0.55, n.z + 1.25, `dH=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
         } else if (n.kind === "param") {
           const curV = n.id === 1 ? visualW.w1 : (n.id === 2 ? visualW.b1 : visualW.w2);
           const h = Math.max(0.25, Math.min(3.4, Math.abs(curV) * 1.2 + 0.35));
-          const col = curV >= 0 ? lerpRgb(rgbCard, rgbSuccess, 0.55) : lerpRgb(rgbCard, rgbError, 0.55);
-          pushBox(dl, project, eye, n.x - 0.65, 0, n.z - 0.65, n.x + 0.65, h, n.z + 0.65, col, 0.94, theme.fg);
-          pushLabel3D(dl, project, n.x, h + 0.55, n.z, `${n.short}=${curV.toFixed(2)}`, theme.fg, "bold 12px monospace");
-          if (grd !== null) pushLabel3D(dl, project, n.x, h + 1.05, n.z, `grad=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
+          const col = curV >= 0 ? M.lerpRgb(rgbCard, rgbSuccess, 0.55) : M.lerpRgb(rgbCard, rgbError, 0.55);
+          M.pushBox(dl, ctx, project, eye, n.x - 0.65, 0, n.z - 0.65, n.x + 0.65, h, n.z + 0.65, col, 0.94, theme.fg);
+          M.pushLabel3D(dl, ctx, project, n.x, h + 0.55, n.z, `${n.short}=${curV.toFixed(2)}`, theme.fg, "bold 12px monospace");
+          if (grd !== null) M.pushLabel3D(dl, ctx, project, n.x, h + 1.05, n.z, `grad=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
           if (currentStage === 7) {
             const delta = -lr * exCur.grads[n.id], pulse = Math.sin(nowMs * 0.012) * 0.14;
             if (Math.abs(delta) > 0.002) {
               const len = Math.min(1.9, 0.45 + Math.abs(delta) * 4.2);
               if (delta > 0) {
-                pushArrow3D(dl, project, n.x, h + 1.3 + pulse, h + 1.3 + len + pulse, n.z, theme.success, 3.2);
-                pushLabel3D(dl, project, n.x, h + 1.6 + len + pulse, n.z, `↑ +${delta.toFixed(3)}`, theme.success, "bold 11px monospace");
+                M.pushArrow3D(dl, ctx, project, n.x, h + 1.3 + pulse, h + 1.3 + len + pulse, n.z, theme.success, 3.2);
+                M.pushLabel3D(dl, ctx, project, n.x, h + 1.6 + len + pulse, n.z, `↑ +${delta.toFixed(3)}`, theme.success, "bold 11px monospace");
               } else {
-                pushArrow3D(dl, project, n.x, h + 1.3 + len - pulse, h + 1.3 - pulse, n.z, theme.error, 3.2);
-                pushLabel3D(dl, project, n.x, h + 1.6 + len - pulse, n.z, `↓ ${delta.toFixed(3)}`, theme.error, "bold 11px monospace");
+                M.pushArrow3D(dl, ctx, project, n.x, h + 1.3 + len - pulse, h + 1.3 - pulse, n.z, theme.error, 3.2);
+                M.pushLabel3D(dl, ctx, project, n.x, h + 1.6 + len - pulse, n.z, `↓ ${delta.toFixed(3)}`, theme.error, "bold 11px monospace");
               }
-            } else pushLabel3D(dl, project, n.x, h + 1.45, n.z, "Δw=0 (冻结)", theme.muted, "10px monospace");
+            } else M.pushLabel3D(dl, ctx, project, n.x, h + 1.45, n.z, "Δw=0 (冻结)", theme.muted, "10px monospace");
           }
         } else {
           const isLit = val !== null;
           const col = n.kind === "input" ? rgbBorder : (isLit ? rgbPrimary : rgbCard);
-          pushBox(dl, project, eye, n.x - 0.65, 0, n.z - 0.65, n.x + 0.65, 1.25, n.z + 0.65, col, 0.92, isLit ? theme.fg : theme.border);
-          pushLabel3D(dl, project, n.x, 1.7, n.z, n.name, theme.fg, "bold 11px sans-serif");
-          if (val !== null) pushLabel3D(dl, project, n.x, 2.2, n.z, `${n.short}=${val.toFixed(2)}`, theme.primary, "bold 11px monospace");
-          if (grd !== null) pushLabel3D(dl, project, n.x, 2.7, n.z, `d${n.short}=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
+          M.pushBox(dl, ctx, project, eye, n.x - 0.65, 0, n.z - 0.65, n.x + 0.65, 1.25, n.z + 0.65, col, 0.92, isLit ? theme.fg : theme.border);
+          M.pushLabel3D(dl, ctx, project, n.x, 1.7, n.z, n.name, theme.fg, "bold 11px sans-serif");
+          if (val !== null) M.pushLabel3D(dl, ctx, project, n.x, 2.2, n.z, `${n.short}=${val.toFixed(2)}`, theme.primary, "bold 11px monospace");
+          if (grd !== null) M.pushLabel3D(dl, ctx, project, n.x, 2.7, n.z, `d${n.short}=${grd.toFixed(2)}`, theme.warning, "bold 11px monospace");
         }
       }
 
       const tapeZ = 4.9;
-      pushLabel3D(dl, project, -8.4, 0.25, tapeZ, "Tape:", theme.muted, "bold 12px monospace");
+      M.pushLabel3D(dl, ctx, project, -8.4, 0.25, tapeZ, "Tape:", theme.muted, "bold 12px monospace");
       for (let i = 0; i < 9; i++) {
         const tx = -6.4 + i * 1.6, hv = nodeVals[i] !== null, hg = nodeGrads[i] !== null;
         const slotRgb = hg ? rgbWarning : (hv ? rgbPrimary : rgbCard);
         const slotH = hg ? 0.62 : (hv ? 0.45 : 0.22);
-        pushBox(dl, project, eye, tx - 0.58, 0, tapeZ - 0.52, tx + 0.58, slotH, tapeZ + 0.52, slotRgb, 0.9, hv || hg ? theme.fg : theme.border);
-        pushLabel3D(dl, project, tx, slotH + 0.32, tapeZ, `[${i}] ${NODES_META[i].short}`, hg ? theme.warning : (hv ? theme.primary : theme.muted), "bold 10px monospace");
+        M.pushBox(dl, ctx, project, eye, tx - 0.58, 0, tapeZ - 0.52, tx + 0.58, slotH, tapeZ + 0.52, slotRgb, 0.9, hv || hg ? theme.fg : theme.border);
+        M.pushLabel3D(dl, ctx, project, tx, slotH + 0.32, tapeZ, `[${i}] ${NODES_META[i].short}`, hg ? theme.warning : (hv ? theme.primary : theme.muted), "bold 10px monospace");
       }
 
       if (currentStage >= 1 && currentStage <= 3) {
         const [a, b] = [[0, 4], [4, 6], [6, 8]][currentStage - 1];
-        pushOrb(dl, project, -6.4 + (a + (b - a) * stageT) * 1.6, 1.1, tapeZ, 0.22, theme.primary, theme.primary, "→", "#fff");
+        M.pushOrb(dl, ctx, project, -6.4 + (a + (b - a) * stageT) * 1.6, 1.1, tapeZ, 0.22, theme.primary, theme.primary, "→", "#fff");
       } else if (currentStage >= 4 && currentStage <= 6) {
         const [a, b] = [[8, 5], [6, 4], [4, 0]][currentStage - 4];
-        pushOrb(dl, project, -6.4 + (a + (b - a) * stageT) * 1.6, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
+        M.pushOrb(dl, ctx, project, -6.4 + (a + (b - a) * stageT) * 1.6, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
       }
 
       const pOf = id => ({ x: NODES_META[id].x, y: 1.0, z: NODES_META[id].z });
       if (currentStage === 1) {
-        if (stageT <= 0.55) { const u = Math.min(1, stageT / 0.55); for (const s of [0, 1]) { const pt = evalArc(pOf(s), pOf(3), 1.3, u); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
-        else { const u = Math.min(1, (stageT - 0.5) / 0.5); for (const s of [3, 2]) { const pt = evalArc(pOf(s), pOf(4), 1.3, u); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
+        if (stageT <= 0.55) { const u = Math.min(1, stageT / 0.55); for (const s of [0, 1]) { const pt = M.evalArc(pOf(s), pOf(3), 1.3, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
+        else { const u = Math.min(1, (stageT - 0.5) / 0.5); for (const s of [3, 2]) { const pt = M.evalArc(pOf(s), pOf(4), 1.3, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
       } else if (currentStage === 2) {
-        const pt = evalArc(pOf(4), pOf(6), 1.2, stageT);
-        pushOrb(dl, project, pt.x, pt.y, pt.z, 0.25, reluOpen ? theme.success : theme.error, reluOpen ? theme.success : theme.error, reluOpen ? "通" : "0");
+        const pt = M.evalArc(pOf(4), pOf(6), 1.2, stageT);
+        M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.25, reluOpen ? theme.success : theme.error, reluOpen ? theme.success : theme.error, reluOpen ? "通" : "0");
       } else if (currentStage === 3) {
-        if (stageT <= 0.52) { const u = Math.min(1, stageT / 0.52); for (const s of [6, 5]) { const pt = evalArc(pOf(s), pOf(7), 1.3, u); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
-        else { const pt = evalArc(pOf(7), pOf(8), 1.5, Math.min(1, (stageT - 0.5) / 0.5)); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.26, theme.warning, theme.warning, "L", "#000"); }
+        if (stageT <= 0.52) { const u = Math.min(1, stageT / 0.52); for (const s of [6, 5]) { const pt = M.evalArc(pOf(s), pOf(7), 1.3, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, theme.primary, theme.primary); } }
+        else { const pt = M.evalArc(pOf(7), pOf(8), 1.5, Math.min(1, (stageT - 0.5) / 0.5)); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.26, theme.warning, theme.warning, "L", "#000"); }
       } else if (currentStage === 4) {
-        if (stageT <= 0.5) { const pt = evalArc(pOf(8), pOf(7), 1.6, stageT / 0.5); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.25, theme.warning, theme.warning, "∂", "#000"); }
-        else { const pt = evalArc(pOf(7), pOf(5), 1.5, (stageT - 0.5) / 0.5); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.24, theme.warning, theme.warning, "∂", "#000"); }
+        if (stageT <= 0.5) { const pt = M.evalArc(pOf(8), pOf(7), 1.6, stageT / 0.5); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.25, theme.warning, theme.warning, "∂", "#000"); }
+        else { const pt = M.evalArc(pOf(7), pOf(5), 1.5, (stageT - 0.5) / 0.5); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.24, theme.warning, theme.warning, "∂", "#000"); }
       } else if (currentStage === 5) {
-        if (stageT <= 0.45) { const pt = evalArc(pOf(7), pOf(6), 1.4, stageT / 0.45); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.24, theme.warning, theme.warning, "∂", "#000"); }
+        if (stageT <= 0.45) { const pt = M.evalArc(pOf(7), pOf(6), 1.4, stageT / 0.45); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.24, theme.warning, theme.warning, "∂", "#000"); }
         else {
           const u = (stageT - 0.45) / 0.55;
-          if (reluOpen) { const pt = evalArc(pOf(6), pOf(4), 1.4, u); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.25, theme.success, theme.success, "×1", "#fff"); }
-          else { const pt = evalArc(pOf(6), pOf(4), 0.6, u * 0.28); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.28, theme.error, theme.error, "×0", "#fff"); }
+          if (reluOpen) { const pt = M.evalArc(pOf(6), pOf(4), 1.4, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.25, theme.success, theme.success, "×1", "#fff"); }
+          else { const pt = M.evalArc(pOf(6), pOf(4), 0.6, u * 0.28); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.28, theme.error, theme.error, "×0", "#fff"); }
         }
       } else if (currentStage === 6) {
         const col = reluOpen ? theme.warning : theme.error;
-        if (stageT <= 0.5) { const u = stageT / 0.5; for (const d of [2, 3]) { const pt = evalArc(pOf(4), pOf(d), 1.5, u); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.22, col, col, reluOpen ? "∂" : "0", "#000"); } }
-        else { const u = (stageT - 0.5) / 0.5; for (const d of [1, 0]) { const pt = evalArc(pOf(3), pOf(d), 1.5, u); pushOrb(dl, project, pt.x, pt.y, pt.z, 0.22, col, col, reluOpen ? "∂" : "0", "#000"); } }
+        if (stageT <= 0.5) { const u = stageT / 0.5; for (const d of [2, 3]) { const pt = M.evalArc(pOf(4), pOf(d), 1.5, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, col, col, reluOpen ? "∂" : "0", "#000"); } }
+        else { const u = (stageT - 0.5) / 0.5; for (const d of [1, 0]) { const pt = M.evalArc(pOf(3), pOf(d), 1.5, u); M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.22, col, col, reluOpen ? "∂" : "0", "#000"); } }
       }
 
-      dl.sort((a, b) => b.depth - a.depth);
-      for (const item of dl) item.draw();
+      M.flushDrawList(dl);
       ctx.restore();
       requestAnimationFrame(renderFrame);
     }
@@ -630,9 +429,9 @@
     };
     document.getElementById("btnReset").onclick = () => resetState();
     document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
-    document.getElementById("camIso").onclick = () => { cam.autoOrbit = false; cam.targetYaw = -0.35; cam.targetPitch = 0.44; cam.targetDist = 23.5; };
-    document.getElementById("camFront").onclick = () => { cam.autoOrbit = false; cam.targetYaw = 0.0; cam.targetPitch = 0.22; cam.targetDist = 22.5; };
-    document.getElementById("camTop").onclick = () => { cam.autoOrbit = false; cam.targetYaw = 0.0; cam.targetPitch = 1.32; cam.targetDist = 24.5; };
+    document.getElementById("camIso").onclick = () => cam.setPreset(-0.35, 0.44, 23.5);
+    document.getElementById("camFront").onclick = () => cam.setPreset(0.0, 0.22, 22.5);
+    document.getElementById("camTop").onclick = () => cam.setPreset(0.0, 1.32, 24.5);
     document.getElementById("camOrbit").onclick = () => { cam.autoOrbit = !cam.autoOrbit; };
 
     function onManualParamChange() {

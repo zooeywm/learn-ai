@@ -4,92 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Step 01：Bigram 3D 建模与单步动画（离线版）</title>
+  <link rel="stylesheet" href="./assets/visualizer.css" />
   <style>
-    :root {
-      --background: #0d1017;
-      --card: #151924;
-      --content: #1a1f2e;
-      --border: #2a3245;
-      --foreground: #e8edf7;
-      --muted-foreground: #94a3b8;
-      --primary: #4f8cff;
-      --primary-foreground: #ffffff;
-      --secondary: #22293a;
-      --secondary-foreground: #cbd5e1;
-      --success: #22c55e;
-      --warning: #f59e0b;
-      --error: #ef4444;
-    }
-    @media (prefers-color-scheme: light) {
-      :root {
-        --background: #f4f6fb;
-        --card: #ffffff;
-        --content: #edf1f8;
-        --border: #d4dce9;
-        --foreground: #141c2c;
-        --muted-foreground: #5c6b82;
-        --primary: #2563eb;
-        --primary-foreground: #ffffff;
-        --secondary: #e5ebf6;
-        --secondary-foreground: #1e293b;
-        --success: #16a34a;
-        --warning: #d97706;
-        --error: #dc2626;
-      }
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 16px;
-      background: var(--background); color: var(--foreground);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
-      font-size: 13px; line-height: 1.45;
-    }
-    .wrap { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
-    .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-    .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .muted { color: var(--muted-foreground); }
-    .xs { font-size: 12px; }
-    h1 { margin: 0; font-size: 17px; }
-    .badge { padding: 2px 8px; border-radius: 6px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; }
-    button {
-      font-family: inherit; font-size: 12px; padding: 6px 11px; border-radius: 8px;
-      border: 1px solid var(--border); background: var(--content); color: var(--foreground);
-      cursor: pointer; transition: all 0.18s ease;
-    }
-    button:hover { border-color: var(--primary); }
-    button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); font-weight: 600; }
-    button.primary:hover { opacity: 0.92; }
-    .stage-pill { border-radius: 999px; padding: 4px 10px; border: 1px solid var(--border); background: var(--content); user-select: none; transition: all 0.2s ease; }
-    .stage-pill.active { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); font-weight: 600; }
-    .stage-pill.done { border-color: var(--success); color: var(--success); }
-    .viewport { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--content); margin-top: 10px; }
-    canvas { width: 100%; height: 510px; display: block; cursor: grab; touch-action: none; }
-    canvas:active { cursor: grabbing; }
-    .hud {
-      position: absolute; pointer-events: none; border-radius: 8px;
-      border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 90%, transparent);
-      backdrop-filter: blur(6px); padding: 8px 12px; font-size: 12px;
-    }
-    .hud-tl { top: 12px; left: 12px; }
-    .hud-tr { top: 12px; right: 12px; display: flex; gap: 12px; align-items: center; }
-    .hud-bottom { bottom: 12px; left: 12px; right: 12px; }
-    .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
-    .prog-track { width: 112px; height: 6px; border-radius: 999px; overflow: hidden; background: var(--content); border: 1px solid var(--border); }
-    .prog-fill { height: 100%; background: var(--primary); width: 0%; }
-    .hidden { display: none; }
-    .divider { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
-    input[type="range"] { accent-color: var(--primary); width: 92px; }
-    select {
-      background: var(--content); color: var(--foreground); border: 1px solid var(--border);
-      border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer;
-    }
-    .chip { padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 12px; }
-    .tape-box {
-      background: var(--content); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px 12px; margin-top: 8px;
-    }
+    input[type="range"] { width: 92px; }
   </style>
 </head>
 <body>
@@ -218,7 +135,10 @@
     </div>
   </div>
 
+  <script src="./assets/engine3d.js"></script>
   <script>
+    const M = window.Mini3D;
+
     const CORPUS = "床前明月光，举头望明月。";
     const VOCAB = Array.from(new Set(CORPUS.split(""))).sort();
     const V = VOCAB.length;
@@ -231,18 +151,11 @@
     const visualHeights = new Float32Array(V * V);
     const visualProbs = new Float32Array(V);
     const displayedProbs = new Float32Array(V);
-    let displayedLoss = 0.0;
-    let visualLoss = 0.0;
+    let displayedLoss = 0.0, visualLoss = 0.0;
 
-    let epoch = 0;
-    let hasComputedSoftmax = false;
-    let hasComputedLoss = false;
-    let probsStale = false;
-    let lossStale = false;
-    let selectedPairIdx = 0;
-    let lr = 6.0;
-    let temperature = 0.7;
-    let softmaxMode = "train";
+    let epoch = 0, hasComputedSoftmax = false, hasComputedLoss = false;
+    let probsStale = false, lossStale = false;
+    let selectedPairIdx = 0, lr = 6.0, temperature = 0.7, softmaxMode = "train";
 
     function softmax(logits, temp = 1.0) {
       const invT = 1.0 / Math.max(temp, 0.05);
@@ -259,8 +172,7 @@
     function getRow(x) { return table.slice(x * V, (x + 1) * V); }
 
     function fullLossAndGrads() {
-      const n = PAIRS.length;
-      const grads = new Float32Array(V * V);
+      const n = PAIRS.length, grads = new Float32Array(V * V);
       let totalLoss = 0;
       for (const [x, y] of PAIRS) {
         const { probs } = softmax(getRow(x), 1.0);
@@ -293,58 +205,25 @@
       }
     }
 
-    function flushPendingStage5() {
-      if (currentStage === 5 && !stage5Applied) {
-        trainOneEpoch(false);
-        stage5Applied = true;
-      }
-    }
-
-    let mode = "idle";
-    let currentStage = 0;
-    let stageStartMs = 0;
-    let animSpeed = 1.0;
-    const STEP_ANIM_MS = 1300;
-    const AUTO_HOLD_MS = 850;
+    let mode = "idle", currentStage = 0, stageStartMs = 0, stage5Applied = false, animSpeed = 1.0;
+    const STEP_ANIM_MS = 1300, AUTO_HOLD_MS = 850, HOP_DURATION = 720;
     const stepAnimMs = () => STEP_ANIM_MS / animSpeed;
     const autoHoldMs = () => AUTO_HOLD_MS / animSpeed;
     const hopDurationMs = () => HOP_DURATION / animSpeed;
     const growTickMs = () => 50 / animSpeed;
-    let stage5Applied = false;
     const STAGE_NAMES = ["① 词典编码", "② 扫描矩阵行", "③ Softmax 概率塔", "④ Loss 能量柱", "⑤ 反向梯度推拉"];
 
     let growRemaining = 0, lastGrowTick = 0;
-    let genStartId = STOI["床"];
-    let genIds = [genStartId];
+    let genStartId = STOI["床"], genIds = [genStartId];
     let hopFrom = null, hopTo = null, hopStartMs = 0, hopLanded = true, hopTrail = [];
-    const HOP_DURATION = 720;
+
+    function flushPendingStage5() {
+      if (currentStage === 5 && !stage5Applied) { trainOneEpoch(false); stage5Applied = true; }
+    }
 
     const canvas = document.getElementById("scene3d");
     const ctx = canvas.getContext("2d");
-
-    const cam = {
-      yaw: -0.62, pitch: 0.56, dist: 24.5,
-      targetYaw: -0.62, targetPitch: 0.56, targetDist: 24.5,
-      tx: 1.5, ty: 0.6, tz: 0.0, autoOrbit: false,
-    };
-
-    let dragging = false, lastMouseX = 0, lastMouseY = 0;
-    canvas.addEventListener("pointerdown", e => {
-      dragging = true; cam.autoOrbit = false;
-      lastMouseX = e.clientX; lastMouseY = e.clientY;
-      canvas.setPointerCapture(e.pointerId);
-    });
-    canvas.addEventListener("pointermove", e => {
-      if (!dragging) return;
-      cam.targetYaw -= (e.clientX - lastMouseX) * 0.008;
-      cam.targetPitch = Math.max(0.18, Math.min(1.42, cam.targetPitch + (e.clientY - lastMouseY) * 0.007));
-      lastMouseX = e.clientX; lastMouseY = e.clientY;
-    });
-    canvas.addEventListener("pointerup", () => { dragging = false; });
-    canvas.addEventListener("wheel", e => {
-      e.preventDefault();
-      cam.targetDist = Math.max(14, Math.min(38, cam.targetDist + e.deltaY * 0.015));
-    }, { passive: false });
+    const cam = M.createCamera(canvas, { yaw: -0.62, pitch: 0.56, dist: 24.5, tx: 1.5, ty: 0.6, tz: 0.0 });
 
     const CELL = 1.05;
     const MAT_ORIGIN_X = -1.5 - (V - 1) * CELL * 0.5;
@@ -352,143 +231,7 @@
     const TOK_POS = { x: MAT_ORIGIN_X - 3.6, y: 0.9, z: 0 };
     const SOFTMAX_X = MAT_ORIGIN_X + (V - 1) * CELL + 3.4;
     const LOSS_POS = { x: SOFTMAX_X + 3.2, y: 0, z: 0 };
-    function cellWorld(row, col) { return { x: MAT_ORIGIN_X + col * CELL, z: MAT_ORIGIN_Z + row * CELL }; }
-
-    function getThemeColors() {
-      const s = getComputedStyle(document.documentElement);
-      const get = (k, fb) => s.getPropertyValue(k).trim() || fb;
-      return {
-        bg: get("--content", "#1a1f2e"), fg: get("--foreground", "#e8edf7"),
-        muted: get("--muted-foreground", "#94a3b8"), border: get("--border", "#2a3245"),
-        primary: get("--primary", "#4f8cff"), success: get("--success", "#22c55e"),
-        error: get("--error", "#ef4444"), warning: get("--warning", "#f59e0b"), card: get("--card", "#151924"),
-      };
-    }
-
-    const colorCache = new Map();
-    function parseRgb(cssColor) {
-      if (colorCache.has(cssColor)) return colorCache.get(cssColor);
-      const tmp = document.createElement("canvas").getContext("2d");
-      tmp.fillStyle = cssColor; tmp.fillRect(0, 0, 1, 1);
-      const d = tmp.getImageData(0, 0, 1, 1).data;
-      const res = [d[0], d[1], d[2]]; colorCache.set(cssColor, res); return res;
-    }
-    function shade(rgb, factor, alpha = 1) {
-      return `rgba(${Math.min(255, Math.max(0, Math.round(rgb[0] * factor)))},${Math.min(255, Math.max(0, Math.round(rgb[1] * factor)))},${Math.min(255, Math.max(0, Math.round(rgb[2] * factor)))},${alpha})`;
-    }
-    function lerpRgb(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
-
-    function makeProjector(W, H) {
-      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
-      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-      const focal = Math.min(W, H) * 1.18;
-      const eye = { x: cam.tx + cam.dist * cp * sy, y: cam.ty + cam.dist * sp, z: cam.tz + cam.dist * cp * cy };
-      function project(wx, wy, wz) {
-        const dx = wx - cam.tx, dy = wy - cam.ty, dz = wz - cam.tz;
-        const x1 = dx * cy - dz * sy, z1 = dx * sy + dz * cy;
-        const y2 = dy * cp - z1 * sp, z2 = dy * sp + z1 * cp;
-        const depth = cam.dist - z2;
-        if (depth < 0.5) return null;
-        const sc = focal / depth;
-        return { x: W * 0.5 + x1 * sc, y: H * 0.53 - y2 * sc, depth, sc };
-      }
-      return { project, eye };
-    }
-
-    function pushBox(drawList, proj, eye, x0, y0, z0, x1, y1, z1, baseRgb, alpha = 1, strokeCss = null) {
-      const corners = [
-        proj(x0, y0, z0), proj(x1, y0, z0), proj(x1, y0, z1), proj(x0, y0, z1),
-        proj(x0, y1, z0), proj(x1, y1, z0), proj(x1, y1, z1), proj(x0, y1, z1),
-      ];
-      if (corners.some(c => !c)) return;
-      const centerP = proj((x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5);
-      if (!centerP) return;
-      const faces = [];
-      if (eye.y > y1) faces.push({ idx: [4, 5, 6, 7], light: 1.12 });
-      if (eye.y < y0) faces.push({ idx: [0, 3, 2, 1], light: 0.55 });
-      if (eye.x > x1) faces.push({ idx: [1, 2, 6, 5], light: 0.88 });
-      if (eye.x < x0) faces.push({ idx: [0, 4, 7, 3], light: 0.72 });
-      if (eye.z > z1) faces.push({ idx: [3, 7, 6, 2], light: 0.96 });
-      if (eye.z < z0) faces.push({ idx: [0, 1, 5, 4], light: 0.66 });
-      drawList.push({
-        depth: centerP.depth,
-        draw: () => {
-          for (const f of faces) {
-            ctx.beginPath();
-            ctx.moveTo(corners[f.idx[0]].x, corners[f.idx[0]].y);
-            ctx.lineTo(corners[f.idx[1]].x, corners[f.idx[1]].y);
-            ctx.lineTo(corners[f.idx[2]].x, corners[f.idx[2]].y);
-            ctx.lineTo(corners[f.idx[3]].x, corners[f.idx[3]].y);
-            ctx.closePath();
-            ctx.fillStyle = shade(baseRgb, f.light, alpha); ctx.fill();
-            if (strokeCss) { ctx.strokeStyle = strokeCss; ctx.lineWidth = 0.8; ctx.stroke(); }
-          }
-        },
-      });
-    }
-
-    function pushOrb(drawList, proj, wx, wy, wz, radiusWorld, colorCss, glowCss = null, label = null, fgCss = "#fff") {
-      const p = proj(wx, wy, wz); if (!p) return;
-      const r = Math.max(3, radiusWorld * p.sc);
-      drawList.push({
-        depth: p.depth - 0.15,
-        draw: () => {
-          ctx.save();
-          if (glowCss) { ctx.shadowColor = glowCss; ctx.shadowBlur = 16; }
-          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fillStyle = colorCss; ctx.fill(); ctx.restore();
-          if (label) {
-            ctx.fillStyle = fgCss; ctx.font = `bold ${Math.max(10, Math.round(r * 0.95))}px sans-serif`;
-            ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, p.x, p.y + 0.5);
-          }
-        },
-      });
-    }
-
-    function pushArrow3D(drawList, proj, wx, yStart, yEnd, wz, colorCss, lineWidth = 3) {
-      const p0 = proj(wx, yStart, wz), p1 = proj(wx, yEnd, wz);
-      if (!p0 || !p1) return;
-      drawList.push({
-        depth: (p0.depth + p1.depth) * 0.5 - 0.25,
-        draw: () => {
-          ctx.save(); ctx.strokeStyle = colorCss; ctx.fillStyle = colorCss;
-          ctx.lineWidth = lineWidth; ctx.shadowColor = colorCss; ctx.shadowBlur = 8;
-          ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-          const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x), head = 7 + lineWidth * 0.6;
-          ctx.beginPath(); ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p1.x - head * Math.cos(angle - 0.5), p1.y - head * Math.sin(angle - 0.5));
-          ctx.lineTo(p1.x - head * Math.cos(angle + 0.5), p1.y - head * Math.sin(angle + 0.5));
-          ctx.closePath(); ctx.fill(); ctx.restore();
-        },
-      });
-    }
-
-    function pushLabel3D(drawList, proj, wx, wy, wz, text, colorCss, font = "12px monospace", bias = -0.1) {
-      const p = proj(wx, wy, wz); if (!p) return;
-      drawList.push({
-        depth: p.depth + bias,
-        draw: () => {
-          ctx.fillStyle = colorCss; ctx.font = font;
-          ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, p.x, p.y);
-        },
-      });
-    }
-
-    function drawBezierArc3D(proj, a, b, arcH, tProg, colorCss, width = 2, dashed = false) {
-      ctx.save(); ctx.strokeStyle = colorCss; ctx.lineWidth = width;
-      if (dashed) ctx.setLineDash([4, 4]);
-      ctx.beginPath(); let started = false;
-      for (let i = 0; i <= 20; i++) {
-        const u = (i / 20) * tProg;
-        const p = proj(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + Math.sin(u * Math.PI) * arcH, a.z + (b.z - a.z) * u);
-        if (!p) continue;
-        if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
-      }
-      ctx.stroke(); ctx.restore();
-    }
-
-    function evalBezier3D(a, b, arcH, u) {
-      return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u + Math.sin(u * Math.PI) * arcH, z: a.z + (b.z - a.z) * u };
-    }
+    const cellWorld = (row, col) => ({ x: MAT_ORIGIN_X + col * CELL, z: MAT_ORIGIN_Z + row * CELL });
 
     function setNarrator(title, desc) {
       document.getElementById("narratorTitle").textContent = title;
@@ -561,11 +304,7 @@
 
     function enterStage(stageNum, nowMs) {
       flushPendingStage5();
-      softmaxMode = "train";
-      currentStage = stageNum;
-      stageStartMs = nowMs;
-      stage5Applied = false;
-
+      softmaxMode = "train"; currentStage = stageNum; stageStartMs = nowMs; stage5Applied = false;
       const [x, y] = PAIRS[selectedPairIdx];
       const delta = getTargetDeltaForCurrentPair();
 
@@ -604,32 +343,19 @@
     }
 
     function renderFrame(nowMs) {
-      if (cam.autoOrbit) cam.targetYaw += 0.005;
-      cam.yaw += (cam.targetYaw - cam.yaw) * 0.12;
-      cam.pitch += (cam.targetPitch - cam.pitch) * 0.12;
-      cam.dist += (cam.targetDist - cam.dist) * 0.12;
-
+      cam.step();
       const [curX, curY] = PAIRS[selectedPairIdx];
-
       const curStepMs = stepAnimMs(), curHoldMs = autoHoldMs(), curHopMs = hopDurationMs();
       let stageT = currentStage > 0 ? Math.min(1, (nowMs - stageStartMs) / curStepMs) : 0;
-      const progWrap = document.getElementById("stageProgressWrap");
-      const progBar = document.getElementById("stageProgressBar");
+      const progWrap = document.getElementById("stageProgressWrap"), progBar = document.getElementById("stageProgressBar");
 
       if (mode === "step") {
-        progWrap.classList.remove("hidden");
-        progBar.style.width = `${(currentStage / 5) * 100}%`;
-        if (currentStage === 5 && stageT >= 0.42 && !stage5Applied) {
-          trainOneEpoch(false); stage5Applied = true; updateHud();
-        }
+        progWrap.classList.remove("hidden"); progBar.style.width = `${(currentStage / 5) * 100}%`;
+        if (currentStage === 5 && stageT >= 0.42 && !stage5Applied) { trainOneEpoch(false); stage5Applied = true; updateHud(); }
       } else if (mode === "autoplay") {
-        progWrap.classList.remove("hidden");
-        const elapsed = nowMs - stageStartMs;
-        stageT = Math.min(1, elapsed / curStepMs);
-        progBar.style.width = `${((currentStage - 1 + stageT) / 5) * 100}%`;
-        if (currentStage === 5 && stageT >= 0.42 && !stage5Applied) {
-          trainOneEpoch(false); stage5Applied = true; updateHud();
-        }
+        progWrap.classList.remove("hidden"); const elapsed = nowMs - stageStartMs;
+        stageT = Math.min(1, elapsed / curStepMs); progBar.style.width = `${((currentStage - 1 + stageT) / 5) * 100}%`;
+        if (currentStage === 5 && stageT >= 0.42 && !stage5Applied) { trainOneEpoch(false); stage5Applied = true; updateHud(); }
         if (elapsed >= curStepMs + curHoldMs) {
           if (currentStage < 5) enterStage(currentStage + 1, nowMs);
           else {
@@ -642,8 +368,7 @@
         progWrap.classList.remove("hidden");
         if (nowMs - lastGrowTick >= growTickMs() && growRemaining > 0) {
           trainOneEpoch(true); growRemaining -= 1; lastGrowTick = nowMs;
-          progBar.style.width = `${((50 - growRemaining) / 50) * 100}%`;
-          updateHud();
+          progBar.style.width = `${((50 - growRemaining) / 50) * 100}%`; updateHud();
           setNarrator(`⚡ 3D 矩阵生长中... Epoch ${epoch}（lr = ${lr.toFixed(1)}，全量 Loss = ${displayedLoss.toFixed(4)}）`,
             `观察右端橙色 Loss 柱如何越变越矮，同时中央 11 对真实古诗相邻字长成绿色摩天楼！`);
         }
@@ -654,8 +379,7 @@
         }
       } else if (mode === "hop") {
         progWrap.classList.add("hidden");
-        const u = Math.min(1, (nowMs - hopStartMs) / curHopMs);
-        if (u >= 1 && !hopLanded && hopTo) {
+        if (Math.min(1, (nowMs - hopStartMs) / curHopMs) >= 1 && !hopLanded && hopTo) {
           hopLanded = true;
           genIds.push(hopTo[1]); if (genIds.length > 20) genIds.shift();
           refreshDisplayedSoftmax(genIds[genIds.length - 1], temperature);
@@ -664,40 +388,21 @@
           hopTrail.push({ x: c.x, y: Math.max(0.2, visualHeights[hopTo[0] * V + hopTo[1]] * 0.88 + 0.14) + 0.35, z: c.z });
           if (hopTrail.length > 12) hopTrail.shift();
         }
-      } else {
-        progWrap.classList.add("hidden");
-      }
+      } else progWrap.classList.add("hidden");
 
       const lerpRate = Math.min(0.45, 0.16 * Math.sqrt(animSpeed));
       for (let i = 0; i < V * V; i++) visualHeights[i] += (table[i] - visualHeights[i]) * lerpRate;
-      for (let j = 0; j < V; j++) {
-        const targetP = hasComputedSoftmax ? displayedProbs[j] : 0.0;
-        visualProbs[j] += (targetP - visualProbs[j]) * Math.min(0.48, lerpRate * 1.15);
-      }
-      const targetLossVal = hasComputedLoss ? displayedLoss : 0.0;
-      visualLoss += (targetLossVal - visualLoss) * lerpRate;
+      for (let j = 0; j < V; j++) visualProbs[j] += ((hasComputedSoftmax ? displayedProbs[j] : 0.0) - visualProbs[j]) * Math.min(0.48, lerpRate * 1.15);
+      visualLoss += ((hasComputedLoss ? displayedLoss : 0.0) - visualLoss) * lerpRate;
 
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        const tw = Math.round(rect.width * dpr), th = Math.round(rect.height * dpr);
-        if (canvas.width !== tw || canvas.height !== th) { canvas.width = tw; canvas.height = th; }
-      }
-      const W = rect.width, H = rect.height;
-      ctx.save(); ctx.scale(dpr, dpr);
+      const theme = M.getThemeColors();
+      const { W, H } = M.beginFrame(canvas, ctx, theme);
+      const { project, eye } = M.makeProjector(W, H, cam, 1.18, 0.53);
 
-      const theme = getThemeColors();
-      const rgbNeutral = parseRgb(theme.card), rgbBorder = parseRgb(theme.border);
-      const rgbPrimary = parseRgb(theme.primary), rgbSuccess = parseRgb(theme.success);
-      const rgbError = parseRgb(theme.error), rgbWarning = parseRgb(theme.warning);
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border), rgbPrimary = M.parseRgb(theme.primary);
+      const rgbSuccess = M.parseRgb(theme.success), rgbError = M.parseRgb(theme.error), rgbWarning = M.parseRgb(theme.warning);
 
-      const bgGrad = ctx.createRadialGradient(W * 0.5, H * 0.42, 40, W * 0.5, H * 0.5, Math.max(W, H) * 0.72);
-      bgGrad.addColorStop(0, theme.card); bgGrad.addColorStop(1, theme.bg);
-      ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
-
-      const { project, eye } = makeProjector(W, H);
-
-      ctx.strokeStyle = shade(rgbBorder, 1.0, 0.35); ctx.lineWidth = 1;
+      ctx.strokeStyle = M.shade(rgbBorder, 1.0, 0.35); ctx.lineWidth = 1;
       const gx0 = MAT_ORIGIN_X - 0.6, gx1 = MAT_ORIGIN_X + (V - 1) * CELL + 0.6;
       const gz0 = MAT_ORIGIN_Z - 0.6, gz1 = MAT_ORIGIN_Z + (V - 1) * CELL + 0.6;
       for (let i = 0; i <= V; i++) {
@@ -715,73 +420,64 @@
       const rC = project(gx1, 0.02, activeZ + CELL * 0.48), rD = project(gx0, 0.02, activeZ + CELL * 0.48);
       if (rA && rB && rC && rD) {
         ctx.beginPath(); ctx.moveTo(rA.x, rA.y); ctx.lineTo(rB.x, rB.y); ctx.lineTo(rC.x, rC.y); ctx.lineTo(rD.x, rD.y); ctx.closePath();
-        ctx.fillStyle = shade(rgbPrimary, 1.0, 0.16); ctx.fill();
-        ctx.strokeStyle = shade(rgbPrimary, 1.0, 0.65); ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = M.shade(rgbPrimary, 1.0, 0.16); ctx.fill();
+        ctx.strokeStyle = M.shade(rgbPrimary, 1.0, 0.65); ctx.lineWidth = 1.5; ctx.stroke();
       }
 
-      const floorLabels = [
+      ctx.fillStyle = theme.muted; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
+      for (const [lx, lz, txt] of [
         [-1.5, gz1 + 1.4, "② V×V 权重矩阵地形 (table[x][j])"],
         [TOK_POS.x, 1.8, "① Tokenizer"],
         [SOFTMAX_X, gz1 + 1.4, softmaxMode === "sample" ? `③ Softmax(z / T=${temperature.toFixed(1)})` : "③ Softmax 概率塔"],
         [LOSS_POS.x, 1.8, "④ Loss 能量柱"],
-      ];
-      ctx.fillStyle = theme.muted; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
-      for (const [lx, lz, txt] of floorLabels) {
-        const p = project(lx, 0.05, lz); if (p) ctx.fillText(txt, p.x, p.y);
-      }
+      ]) { const p = project(lx, 0.05, lz); if (p) ctx.fillText(txt, p.x, p.y); }
 
-      const drawList = [];
-
-      pushBox(drawList, project, eye, TOK_POS.x - 0.8, 0, -0.8, TOK_POS.x + 0.8, 0.28, 0.8, rgbBorder, 0.9, theme.border);
+      const dl = [];
+      M.pushBox(dl, ctx, project, eye, TOK_POS.x - 0.8, 0, -0.8, TOK_POS.x + 0.8, 0.28, 0.8, rgbBorder, 0.9, theme.border);
       const bobY = Math.sin(nowMs * 0.004) * 0.15;
       let tokCubePos = { x: TOK_POS.x, y: 1.25 + bobY, z: 0 };
       if (currentStage === 1) {
         const targetRowStart = { x: MAT_ORIGIN_X - 0.7, y: 0.75, z: MAT_ORIGIN_Z + curX * CELL };
         const u = Math.min(1, stageT * 1.15);
-        tokCubePos = evalBezier3D({ x: TOK_POS.x, y: 1.25, z: 0 }, targetRowStart, 2.4, u);
+        tokCubePos = M.evalArc({ x: TOK_POS.x, y: 1.25, z: 0 }, targetRowStart, 2.4, u);
         if (u >= 1) tokCubePos.y += bobY * 0.6;
-        drawBezierArc3D(project, { x: TOK_POS.x, y: 1.25, z: 0 }, targetRowStart, 2.4, u, theme.primary, 2.5, true);
+        M.drawBezierArc3D(ctx, project, { x: TOK_POS.x, y: 1.25, z: 0 }, targetRowStart, 2.4, u, theme.primary, 2.5, true);
       }
-      pushBox(drawList, project, eye, tokCubePos.x - 0.52, tokCubePos.y - 0.52, tokCubePos.z - 0.52, tokCubePos.x + 0.52, tokCubePos.y + 0.52, tokCubePos.z + 0.52, rgbPrimary, 0.95, theme.fg);
-      pushLabel3D(drawList, project, tokCubePos.x, tokCubePos.y + 0.85, tokCubePos.z, `「${VOCAB[curX]}」→ ID:${curX}`, theme.fg, "bold 12px monospace", -0.4);
+      M.pushBox(dl, ctx, project, eye, tokCubePos.x - 0.52, tokCubePos.y - 0.52, tokCubePos.z - 0.52, tokCubePos.x + 0.52, tokCubePos.y + 0.52, tokCubePos.z + 0.52, rgbPrimary, 0.95, theme.fg);
+      M.pushLabel3D(dl, ctx, project, tokCubePos.x, tokCubePos.y + 0.85, tokCubePos.z, `「${VOCAB[curX]}」→ ID:${curX}`, theme.fg, "bold 12px monospace", -0.4);
 
       const half = CELL * 0.38;
-      const lrScale = 0.55 + (lr / 25.0) * 1.85;
-      const lrStrokeW = 2.2 + (lr / 25.0) * 3.0;
+      const lrScale = 0.55 + (lr / 25.0) * 1.85, lrStrokeW = 2.2 + (lr / 25.0) * 3.0;
       const deltaPreview = getTargetDeltaForCurrentPair();
 
       for (let r = 0; r < V; r++) {
         const rl = cellWorld(r, -1);
-        pushLabel3D(drawList, project, rl.x + 0.15, 0.12, rl.z, VOCAB[r], r === highlightRow ? theme.primary : theme.muted, r === highlightRow ? "bold 13px sans-serif" : "11px sans-serif");
+        M.pushLabel3D(dl, ctx, project, rl.x + 0.15, 0.12, rl.z, VOCAB[r], r === highlightRow ? theme.primary : theme.muted, r === highlightRow ? "bold 13px sans-serif" : "11px sans-serif");
         const cl = cellWorld(V, r);
-        pushLabel3D(drawList, project, cl.x, 0.12, cl.z - 0.1, VOCAB[r], r === curY && softmaxMode === "train" ? theme.success : theme.muted, r === curY && softmaxMode === "train" ? "bold 13px sans-serif" : "11px sans-serif");
+        M.pushLabel3D(dl, ctx, project, cl.x, 0.12, cl.z - 0.1, VOCAB[r], r === curY && softmaxMode === "train" ? theme.success : theme.muted, r === curY && softmaxMode === "train" ? "bold 13px sans-serif" : "11px sans-serif");
 
         for (let c = 0; c < V; c++) {
-          const w = visualHeights[r * V + c];
-          const pos = cellWorld(r, c);
-          const isActiveRow = r === highlightRow;
-          const isTargetCell = softmaxMode === "train" && r === curX && c === curY;
-          const h = w >= 0 ? Math.max(0.14, w * 0.88 + 0.14) : 0.14;
+          const w = visualHeights[r * V + c], pos = cellWorld(r, c);
+          const isActiveRow = r === highlightRow, isTargetCell = softmaxMode === "train" && r === curX && c === curY;
           const y0 = w < -0.05 ? Math.max(-1.0, w * 0.35) : 0;
-          const y1 = w >= -0.05 ? h : 0.06;
+          const y1 = w >= -0.05 ? Math.max(0.14, w * 0.88 + 0.14) : 0.06;
           const mag = Math.min(1, Math.abs(w) / 3.2);
-          let colRgb = rgbNeutral;
-          if (w > 0.03) colRgb = lerpRgb(rgbNeutral, rgbSuccess, 0.25 + mag * 0.75);
-          else if (w < -0.03) colRgb = lerpRgb(rgbNeutral, rgbError, 0.25 + mag * 0.75);
-          if (isActiveRow && (currentStage >= 1 || softmaxMode === "sample") && Math.abs(w) < 0.05) colRgb = lerpRgb(rgbNeutral, rgbPrimary, 0.35);
+          let colRgb = rgbCard;
+          if (w > 0.03) colRgb = M.lerpRgb(rgbCard, rgbSuccess, 0.25 + mag * 0.75);
+          else if (w < -0.03) colRgb = M.lerpRgb(rgbCard, rgbError, 0.25 + mag * 0.75);
+          if (isActiveRow && (currentStage >= 1 || softmaxMode === "sample") && Math.abs(w) < 0.05) colRgb = M.lerpRgb(rgbCard, rgbPrimary, 0.35);
 
-          const stroke = isTargetCell ? theme.fg : (isActiveRow ? theme.primary : shade(rgbBorder, 1, 0.55));
-          pushBox(drawList, project, eye, pos.x - half, y0, pos.z - half, pos.x + half, y1, pos.z + half, colRgb, isActiveRow || Math.abs(w) > 0.12 ? 0.96 : 0.78, stroke);
+          const stroke = isTargetCell ? theme.fg : (isActiveRow ? theme.primary : M.shade(rgbBorder, 1, 0.55));
+          M.pushBox(dl, ctx, project, eye, pos.x - half, y0, pos.z - half, pos.x + half, y1, pos.z + half, colRgb, isActiveRow || Math.abs(w) > 0.12 ? 0.96 : 0.78, stroke);
 
           if (currentStage === 5 && r === curX) {
             const pulse = Math.sin(nowMs * 0.012) * 0.18;
             if (c === curY) {
               const tipY = y1 + 0.3 + lrScale * 1.05 + pulse;
-              pushArrow3D(drawList, project, pos.x, y1 + 0.22 + pulse, tipY, pos.z, theme.success, lrStrokeW);
-              pushLabel3D(drawList, project, pos.x, tipY + 0.42, pos.z, `↑ +${Math.abs(deltaPreview).toFixed(2)} (lr=${lr.toFixed(1)})`, theme.success, "bold 11px monospace", -0.5);
+              M.pushArrow3D(dl, ctx, project, pos.x, y1 + 0.22 + pulse, tipY, pos.z, theme.success, lrStrokeW);
+              M.pushLabel3D(dl, ctx, project, pos.x, tipY + 0.42, pos.z, `↑ +${Math.abs(deltaPreview).toFixed(2)} (lr=${lr.toFixed(1)})`, theme.success, "bold 11px monospace", -0.5);
             } else {
-              const tailY = y1 + 0.25 + lrScale * 0.62 - pulse * 0.4;
-              pushArrow3D(drawList, project, pos.x, tailY, y1 + 0.18 - pulse * 0.4, pos.z, theme.error, Math.max(1.8, lrStrokeW * 0.7));
+              M.pushArrow3D(dl, ctx, project, pos.x, y1 + 0.25 + lrScale * 0.62 - pulse * 0.4, y1 + 0.18 - pulse * 0.4, pos.z, theme.error, Math.max(1.8, lrStrokeW * 0.7));
             }
           }
         }
@@ -791,40 +487,39 @@
         const z = MAT_ORIGIN_Z + j * CELL, p = visualProbs[j], isY = softmaxMode === "train" && j === curY;
         const fillH = Math.max(0.06, p * 4.8);
         const towerRgb = p < 0.005 ? rgbBorder : (isY ? rgbSuccess : rgbPrimary);
-        pushBox(drawList, project, eye, SOFTMAX_X - 0.36, 0, z - 0.36, SOFTMAX_X + 0.36, fillH, z + 0.36, towerRgb, p < 0.005 ? 0.45 : 0.92, isY ? theme.fg : theme.border);
+        M.pushBox(dl, ctx, project, eye, SOFTMAX_X - 0.36, 0, z - 0.36, SOFTMAX_X + 0.36, fillH, z + 0.36, towerRgb, p < 0.005 ? 0.45 : 0.92, isY ? theme.fg : theme.border);
         const pctLabel = hasComputedSoftmax || softmaxMode === "sample" ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`;
-        pushLabel3D(drawList, project, SOFTMAX_X + 0.98, 0.15, z, pctLabel, isY ? theme.success : theme.muted, isY ? "bold 11px monospace" : "10px monospace");
+        M.pushLabel3D(dl, ctx, project, SOFTMAX_X + 0.98, 0.15, z, pctLabel, isY ? theme.success : theme.muted, isY ? "bold 11px monospace" : "10px monospace");
       }
 
       if (currentStage === 3) {
         const ringY = 0.25 + stageT * 2.6;
         const zMin = MAT_ORIGIN_Z - 0.58, zMax = MAT_ORIGIN_Z + (V - 1) * CELL + 0.58;
-        const xMin = SOFTMAX_X - 0.58, xMax = SOFTMAX_X + 0.58;
-        const corners = [project(xMin, ringY, zMin), project(xMax, ringY, zMin), project(xMax, ringY, zMax), project(xMin, ringY, zMax)];
+        const corners = [project(SOFTMAX_X - 0.58, ringY, zMin), project(SOFTMAX_X + 0.58, ringY, zMin), project(SOFTMAX_X + 0.58, ringY, zMax), project(SOFTMAX_X - 0.58, ringY, zMax)];
         if (corners.every(Boolean)) {
           const midP = project(SOFTMAX_X, ringY, 0);
-          drawList.push({
+          dl.push({
             depth: midP ? midP.depth - 0.3 : 10,
             draw: () => {
-              ctx.save();
-              ctx.beginPath(); ctx.moveTo(corners[0].x, corners[0].y); ctx.lineTo(corners[1].x, corners[1].y);
+              ctx.save(); ctx.beginPath();
+              ctx.moveTo(corners[0].x, corners[0].y); ctx.lineTo(corners[1].x, corners[1].y);
               ctx.lineTo(corners[2].x, corners[2].y); ctx.lineTo(corners[3].x, corners[3].y); ctx.closePath();
-              ctx.fillStyle = shade(rgbPrimary, 1.15, 0.16); ctx.fill();
+              ctx.fillStyle = M.shade(rgbPrimary, 1.15, 0.16); ctx.fill();
               ctx.strokeStyle = theme.primary; ctx.lineWidth = 2.4; ctx.shadowColor = theme.primary; ctx.shadowBlur = 12; ctx.stroke();
               ctx.restore();
             },
           });
         }
-        pushLabel3D(drawList, project, SOFTMAX_X, ringY + 0.6, 0, "全部 10 塔并行归一：Σ p_j = 100%", theme.primary, "bold 12px sans-serif", -0.5);
+        M.pushLabel3D(dl, ctx, project, SOFTMAX_X, ringY + 0.6, 0, "全部 10 塔并行归一：Σ p_j = 100%", theme.primary, "bold 12px sans-serif", -0.5);
       }
 
       if (visualLoss < 0.015) {
-        pushBox(drawList, project, eye, LOSS_POS.x - 0.65, 0, -0.65, LOSS_POS.x + 0.65, 0.07, 0.65, rgbBorder, 0.55, theme.border);
-        pushLabel3D(drawList, project, LOSS_POS.x, 0.55, 0, "Loss: 0 (未计算)", theme.muted, "bold 11px monospace", -0.4);
+        M.pushBox(dl, ctx, project, eye, LOSS_POS.x - 0.65, 0, -0.65, LOSS_POS.x + 0.65, 0.07, 0.65, rgbBorder, 0.55, theme.border);
+        M.pushLabel3D(dl, ctx, project, LOSS_POS.x, 0.55, 0, "Loss: 0 (未计算)", theme.muted, "bold 11px monospace", -0.4);
       } else {
         const lossH = Math.max(0.14, visualLoss * 1.85);
-        pushBox(drawList, project, eye, LOSS_POS.x - 0.65, 0, -0.65, LOSS_POS.x + 0.65, lossH, 0.65, rgbWarning, 0.92, theme.fg);
-        pushLabel3D(drawList, project, LOSS_POS.x, lossH + 0.55, 0, `Loss ${visualLoss.toFixed(2)}`, theme.warning, "bold 12px monospace", -0.4);
+        M.pushBox(dl, ctx, project, eye, LOSS_POS.x - 0.65, 0, -0.65, LOSS_POS.x + 0.65, lossH, 0.65, rgbWarning, 0.92, theme.fg);
+        M.pushLabel3D(dl, ctx, project, LOSS_POS.x, lossH + 0.55, 0, `Loss ${visualLoss.toFixed(2)}`, theme.warning, "bold 12px monospace", -0.4);
       }
 
       if (currentStage === 2) {
@@ -833,19 +528,19 @@
           const fromP = { x: fromC.x, y: Math.max(0.25, visualHeights[curX * V + j] * 0.88 + 0.3), z: fromC.z };
           const toP = { x: SOFTMAX_X, y: Math.max(0.25, visualProbs[j] * 4.8), z: MAT_ORIGIN_Z + j * CELL };
           const u = Math.max(0, Math.min(1, (stageT - j * 0.04) / 0.6));
-          drawBezierArc3D(project, fromP, toP, 1.8 + (j % 3) * 0.3, u, j === curY ? theme.success : shade(rgbPrimary, 1.1, 0.7), j === curY ? 2.6 : 1.4);
+          M.drawBezierArc3D(ctx, project, fromP, toP, 1.8 + (j % 3) * 0.3, u, j === curY ? theme.success : M.shade(rgbPrimary, 1.1, 0.7), j === curY ? 2.6 : 1.4);
           if (u > 0.01) {
-            const pt = evalBezier3D(fromP, toP, 1.8 + (j % 3) * 0.3, u);
-            pushOrb(drawList, project, pt.x, pt.y, pt.z, u < 0.99 ? 0.21 : 0.14, j === curY ? theme.success : theme.primary, j === curY ? theme.success : theme.primary);
+            const pt = M.evalArc(fromP, toP, 1.8 + (j % 3) * 0.3, u);
+            M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, u < 0.99 ? 0.21 : 0.14, j === curY ? theme.success : theme.primary, j === curY ? theme.success : theme.primary);
           }
         }
       }
       if (currentStage === 4) {
         const fromSm = { x: SOFTMAX_X, y: Math.max(0.4, visualProbs[curY] * 4.8), z: MAT_ORIGIN_Z + curY * CELL };
         const toLoss = { x: LOSS_POS.x, y: Math.max(0.4, visualLoss * 1.85), z: 0 };
-        drawBezierArc3D(project, fromSm, toLoss, 1.8, stageT, theme.warning, 3.0);
-        const pt = evalBezier3D(fromSm, toLoss, 1.8, stageT);
-        pushOrb(drawList, project, pt.x, pt.y, pt.z, 0.27, theme.warning, theme.warning, "L", "#000");
+        M.drawBezierArc3D(ctx, project, fromSm, toLoss, 1.8, stageT, theme.warning, 3.0);
+        const pt = M.evalArc(fromSm, toLoss, 1.8, stageT);
+        M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.27, theme.warning, theme.warning, "L", "#000");
       }
       if (currentStage === 5) {
         const u = Math.min(1, stageT * 1.4);
@@ -854,10 +549,10 @@
           const toCell = cellWorld(curX, j);
           const toP = { x: toCell.x, y: Math.max(0.3, visualHeights[curX * V + j] * 0.88 + 0.4), z: toCell.z };
           const col = j === curY ? theme.success : theme.error;
-          drawBezierArc3D(project, fromSm, toP, 2.5, u, shade(j === curY ? rgbSuccess : rgbError, 1, 0.78), j === curY ? 2.8 : 1.3, true);
+          M.drawBezierArc3D(ctx, project, fromSm, toP, 2.5, u, M.shade(j === curY ? rgbSuccess : rgbError, 1, 0.78), j === curY ? 2.8 : 1.3, true);
           if (u < 0.98) {
-            const pt = evalBezier3D(fromSm, toP, 2.5, u);
-            pushOrb(drawList, project, pt.x, pt.y, pt.z, j === curY ? 0.24 : 0.15, col, col);
+            const pt = M.evalArc(fromSm, toP, 2.5, u);
+            M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, j === curY ? 0.24 : 0.15, col, col);
           }
         }
       }
@@ -876,14 +571,12 @@
         const aC = cellWorld(hopFrom[0], hopFrom[1]), bC = cellWorld(hopTo[0], hopTo[1]);
         const a = { x: aC.x, y: Math.max(0.3, visualHeights[hopFrom[0] * V + hopFrom[1]] * 0.88 + 0.4), z: aC.z };
         const b = { x: bC.x, y: Math.max(0.3, visualHeights[hopTo[0] * V + hopTo[1]] * 0.88 + 0.4), z: bC.z };
-        drawBezierArc3D(project, a, b, 2.3, u, theme.warning, 2.6);
-        const pt = evalBezier3D(a, b, 2.3, u);
-        pushOrb(drawList, project, pt.x, pt.y, pt.z, 0.34, theme.warning, theme.warning, VOCAB[hopTo[1]], "#000");
+        M.drawBezierArc3D(ctx, project, a, b, 2.3, u, theme.warning, 2.6);
+        const pt = M.evalArc(a, b, 2.3, u);
+        M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.34, theme.warning, theme.warning, VOCAB[hopTo[1]], "#000");
       }
 
-      drawList.sort((a, b) => b.depth - a.depth);
-      for (const item of drawList) item.draw();
-
+      M.flushDrawList(dl);
       ctx.restore();
       requestAnimationFrame(renderFrame);
     }
@@ -896,16 +589,11 @@
       startSelect.appendChild(opt);
     });
     startSelect.onchange = () => {
-      genStartId = parseInt(startSelect.value, 10);
-      softmaxMode = "sample";
-      refreshDisplayedSoftmax(genStartId, temperature);
-      resetGenerationOnly();
+      genStartId = parseInt(startSelect.value, 10); softmaxMode = "sample";
+      refreshDisplayedSoftmax(genStartId, temperature); resetGenerationOnly();
     };
 
-    document.getElementById("btnNextStep").onclick = () => {
-      flushPendingStage5(); mode = "step";
-      enterStage(currentStage >= 5 ? 1 : currentStage + 1, performance.now());
-    };
+    document.getElementById("btnNextStep").onclick = () => { flushPendingStage5(); mode = "step"; enterStage(currentStage >= 5 ? 1 : currentStage + 1, performance.now()); };
     document.getElementById("btnAutoPlay").onclick = () => {
       flushPendingStage5();
       if (mode === "autoplay") { mode = "step"; updateHud(); }
@@ -923,54 +611,36 @@
     };
     document.getElementById("btnHopOne").onclick = () => {
       flushPendingStage5();
-      if (mode === "hop" && !hopLanded && hopTo) {
-        genIds.push(hopTo[1]); if (genIds.length > 20) genIds.shift(); renderGenTape();
-      }
+      if (mode === "hop" && !hopLanded && hopTo) { genIds.push(hopTo[1]); if (genIds.length > 20) genIds.shift(); renderGenTape(); }
       mode = "hop"; softmaxMode = "sample"; currentStage = 0;
       const curr = genIds[genIds.length - 1];
       refreshDisplayedSoftmax(curr, temperature);
       const { nextId, prob, dice } = sampleNextFrom(curr);
-      hopFrom = hopTo || [curr, curr]; hopTo = [curr, nextId];
-      hopStartMs = performance.now(); hopLanded = false;
-      document.getElementById("hopReadout").textContent =
-        `从「${VOCAB[curr]}」(T=${temperature.toFixed(1)}) 掷骰 r=${dice.toFixed(2)} → 抽中「${VOCAB[nextId]}」(p=${(prob * 100).toFixed(0)}%)`;
+      hopFrom = hopTo || [curr, curr]; hopTo = [curr, nextId]; hopStartMs = performance.now(); hopLanded = false;
+      document.getElementById("hopReadout").textContent = `从「${VOCAB[curr]}」(T=${temperature.toFixed(1)}) 掷骰 r=${dice.toFixed(2)} → 抽中「${VOCAB[nextId]}」(p=${(prob * 100).toFixed(0)}%)`;
       setNarrator(`🎲 单步 3D 接龙：当前字「${VOCAB[curr]}」经温度 T=${temperature.toFixed(1)} 采样 → 跳向「${VOCAB[nextId]}」`,
         `右侧 3D 概率塔现在显示的就是「${VOCAB[curr]}」除以温度 T=${temperature.toFixed(1)} 后的概率分布！`);
       updateHud();
     };
-    document.getElementById("btnGenReset").onclick = () => {
-      softmaxMode = "sample";
-      refreshDisplayedSoftmax(genStartId, temperature);
-      resetGenerationOnly();
-    };
+    document.getElementById("btnGenReset").onclick = () => { softmaxMode = "sample"; refreshDisplayedSoftmax(genStartId, temperature); resetGenerationOnly(); };
     document.getElementById("btnReset").onclick = () => {
       mode = "idle"; currentStage = 0; stage5Applied = false;
-      hasComputedSoftmax = false; hasComputedLoss = false;
-      probsStale = false; lossStale = false;
-      displayedProbs.fill(0); displayedLoss = 0.0;
-      softmaxMode = "train";
-      table.fill(0); epoch = 0; genIds = [genStartId];
-      hopFrom = null; hopTo = null; hopLanded = true; hopTrail = [];
+      hasComputedSoftmax = false; hasComputedLoss = false; probsStale = false; lossStale = false;
+      displayedProbs.fill(0); displayedLoss = 0.0; softmaxMode = "train";
+      table.fill(0); epoch = 0; genIds = [genStartId]; hopFrom = null; hopTo = null; hopLanded = true; hopTrail = [];
       renderGenTape(); updateHud();
-      setNarrator("已重置所有权重为 0.0（Loss 与概率塔归零，等待首次前向计算）",
-        "点击「⏭ 下一步」严格按 ①→②→③→④→⑤ 单向推进，或点「+1 推进 1 轮」！");
+      setNarrator("已重置所有权重为 0.0（Loss 与概率塔归零，等待首次前向计算）", "点击「⏭ 下一步」严格按 ①→②→③→④→⑤ 单向推进，或点「+1 推进 1 轮」！");
     };
     document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
-    document.getElementById("camIso").onclick = () => { cam.autoOrbit = false; cam.targetYaw = -0.62; cam.targetPitch = 0.56; cam.targetDist = 24.5; };
-    document.getElementById("camTop").onclick = () => { cam.autoOrbit = false; cam.targetYaw = 0.0; cam.targetPitch = 1.38; cam.targetDist = 24.0; };
-    document.getElementById("camSide").onclick = () => { cam.autoOrbit = false; cam.targetYaw = -0.25; cam.targetPitch = 0.24; cam.targetDist = 24.0; };
+    document.getElementById("camIso").onclick = () => cam.setPreset(-0.62, 0.56, 24.5);
+    document.getElementById("camTop").onclick = () => cam.setPreset(0.0, 1.38, 24.0);
+    document.getElementById("camSide").onclick = () => cam.setPreset(-0.25, 0.24, 24.0);
     document.getElementById("camOrbit").onclick = () => { cam.autoOrbit = !cam.autoOrbit; };
-    document.getElementById("lrSlider").oninput = e => {
-      lr = parseFloat(e.target.value); document.getElementById("lrVal").textContent = lr.toFixed(1); updateHud();
-    };
+    document.getElementById("lrSlider").oninput = e => { lr = parseFloat(e.target.value); document.getElementById("lrVal").textContent = lr.toFixed(1); updateHud(); };
     document.getElementById("tempSlider").oninput = e => {
       temperature = parseFloat(e.target.value); document.getElementById("tempVal").textContent = temperature.toFixed(1);
-      softmaxMode = "sample";
-      const curr = genIds[genIds.length - 1];
-      refreshDisplayedSoftmax(curr, temperature);
-      updateHud();
-      const tip = temperature <= 0.3
-        ? "低温：差距被放大，最高概率塔几乎独占 100%（保守贪心）！"
+      softmaxMode = "sample"; const curr = genIds[genIds.length - 1]; refreshDisplayedSoftmax(curr, temperature); updateHud();
+      const tip = temperature <= 0.3 ? "低温：差距被放大，最高概率塔几乎独占 100%（保守贪心）！"
         : (temperature >= 1.6 ? "高温：差距被压平，所有候选字概率趋近平均（更有脑洞/易乱码）！" : "中等温度：兼顾连贯与多样性。");
       setNarrator(`🌡️ 实时温度预览：Softmax(「${VOCAB[curr]}」的 logits / T=${temperature.toFixed(1)})`, tip);
     };
