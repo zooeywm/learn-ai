@@ -18,7 +18,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::f32::consts::PI;
 use std::time::Instant;
 
-use mini_core::{load_poems, sample_from_logits, softmax, Rng};
+use mini_core::{load_poems, load_sft_dataset, sample_from_logits, softmax, Rng};
 
 // ============================================================================
 // 1. 支持特殊控制符与对话模板的 ChatTokenizer
@@ -1342,44 +1342,17 @@ fn cosine_lr(step: usize, total_steps: usize, warmup_steps: usize, max_lr: f32, 
 }
 
 // ============================================================================
-// 4. 精选唐诗指令微调数据集（SFT Q&A Pairs）
-// ============================================================================
-
-fn sft_dataset() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("你好", "你好！我是迷你唐诗助手。"),
-        ("你是谁", "我是纯Rust手搓的迷你GPT助手。"),
-        ("背一首静夜思", "床前明月光，疑是地上霜。举头望明月，低头思故乡。"),
-        ("静夜思前两句是什么", "床前明月光，疑是地上霜。"),
-        ("静夜思后两句是什么", "举头望明月，低头思故乡。"),
-        ("床前明月光的下一句", "疑是地上霜。"),
-        ("背一首春晓", "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。"),
-        ("春晓前两句是什么", "春眠不觉晓，处处闻啼鸟。"),
-        ("背一首登鹳雀楼", "白日依山尽，黄河入海流。欲穷千里目，更上一层楼。"),
-        ("白日依山尽的下一句", "黄河入海流。"),
-        ("背一首相思", "红豆生南国，春来发几枝。愿君多采撷，此物最相思。"),
-        ("红豆生南国的下一句", "春来发几枝。"),
-        ("飞流直下三千尺的下一句", "疑是银河落九天。"),
-        ("锄禾日当午的下一句", "汗滴禾下土。"),
-        ("清明时节雨纷纷的下一句", "路上行人欲断魂。"),
-        ("千山鸟飞绝的下一句", "万径人踪灭。"),
-        ("朝辞白帝彩云间的下一句", "千里江陵一日还。"),
-        ("春风又绿江南岸的下一句", "明月何时照我还。"),
-    ]
-}
-
-// ============================================================================
-// 5. 主程序：Stage 1 预训练（Base） -> Base 翻车实测 -> Stage 2 SFT -> Chat 惊艳蜕变 + KV Cache 测速
+// 4. 主程序：从 data/ 加载预训练与 SFT JSONL 数据 -> 对比 Base vs SFT + KV Cache 测速
 // ============================================================================
 
 fn main() {
     let poems = load_poems();
-    let qa_pairs = sft_dataset();
+    let qa_pairs = load_sft_dataset();
 
     let mut all_texts: Vec<&str> = vec![poems.as_str()];
-    for &(q, a) in &qa_pairs {
-        all_texts.push(q);
-        all_texts.push(a);
+    for (q, a) in &qa_pairs {
+        all_texts.push(q.as_str());
+        all_texts.push(a.as_str());
     }
     let tok = ChatTokenizer::from_texts(&all_texts);
     let pretrain_data = tok.encode_plain(&poems);
@@ -1466,10 +1439,13 @@ fn main() {
     // ------------------------------------------------------------------------
     // Stage 2: SFT 指令微调（Assistant-Only Masked Cross-Entropy Loss）
     // ------------------------------------------------------------------------
-    println!("\n--- Stage 2: SFT 指令微调（18 条唐诗问答，提问区 Loss Mask = 0，只对回答 + <|eos|> 算 Loss）---");
+    println!(
+        "\n--- Stage 2: SFT 指令微调（从 data/sft_poems.jsonl 加载 {} 条问答，提问区 Loss Mask = 0）---",
+        qa_pairs.len()
+    );
     let encoded_samples: Vec<(Vec<usize>, Vec<usize>, Vec<f32>)> = qa_pairs
         .iter()
-        .map(|&(q, a)| tok.encode_chat_sample(q, a))
+        .map(|(q, a)| tok.encode_chat_sample(q, a))
         .collect();
 
     // 打印第 1 条样本的 Loss Mask 直观示意图

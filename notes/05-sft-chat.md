@@ -1,6 +1,7 @@
 # Step 05：SFT 指令微调（把续写机变成迷你 ChatGPT）+ KV Cache（Prefill / Decode 两阶段加速）
 
 > 对应源码：[`crates/step05-sft-chat/src/main.rs`](../crates/step05-sft-chat/src/main.rs)  
+> 指令微调数据集（标准 JSONL）：[`data/sft_poems.jsonl`](../data/sft_poems.jsonl)  
 > 3D 交互演进演示（单文件离线版，支持 Step 00 → Step 05 全景切换）：[`notes/learn-ai-visualizer.html`](learn-ai-visualizer.html)
 
 ## 一、这一关最震撼的真相：网络结构一行不改！
@@ -115,9 +116,10 @@ cargo run --release -p step05-sft-chat
 
 ---
 
-## 六、单元测试验证（全仓库 13/13 通过）
+## 六、单元测试验证（全仓库 14/14 通过）
 
-Step 05 新增 3 个核心单测：
-1. `test_masked_cross_entropy_ignores_prompt`：篡改 `mask=0` 位置的 target，验证 Loss 与有效位置梯度不变，且被屏蔽位置梯度**严格为 0.0**；
-2. `test_kv_cache_matches_full_forward`：验证 `prefill(seq[..4]) + decode_step(seq[4..])` 每一步的 logits 与完整 `forward` 误差 `< 1e-5`；
-3. `test_sft_masked_gradient_check`：在带 0/1 掩码与 padding 的 2 层 Mini-GPT 上完成有限差分数值梯度检验（相对误差 `< 3e-3`）。
+Step 05 与 `mini-core` 新增 4 个核心单测：
+1. `test_load_and_parse_sft_jsonl`（`mini-core`）：校验零依赖 JSONL 解析器（含转义引号/换行）与真实 `data/sft_poems.jsonl` 文件加载；
+2. `test_masked_cross_entropy_ignores_prompt`：篡改 `mask=0` 位置的 target，验证 Loss 与有效位置梯度不变，且被屏蔽位置梯度**严格为 0.0**；
+3. `test_kv_cache_matches_full_forward`：验证 `prefill(seq[..4]) + decode_step(seq[4..])` 每一步的 logits 与完整 `forward` 误差 `< 1e-5`；
+4. `test_sft_masked_gradient_check`：在带 0/1 掩码与 padding 的 2 层 Mini-GPT 上完成有限差分数值梯度检验（相对误差 `< 3e-3`）。
