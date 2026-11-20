@@ -1,4 +1,3 @@
-mod bpe;
 mod lookup;
 #[cfg(feature = "openai")]
 mod openai;
@@ -6,8 +5,8 @@ mod poetry;
 
 use std::{error::Error, ffi::OsString, path::PathBuf};
 
-use bpe::ByteBpe;
 use step06_modern_llm::run_cli;
+use step07_tokenizer::ByteBpe;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args_os()

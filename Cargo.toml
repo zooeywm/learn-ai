@@ -9,4 +9,5 @@ members = [
     "crates/step05-sft-chat",
     "crates/step06-modern-llm",
     "crates/step07-tokenizer",
+    "crates/step08-deepseek-flash",
 ]

@@ -1,6 +1,6 @@
 # learn-ai：用纯 Rust 从零手搓迷你 Transformer LLM
 
-从零基础出发，不依赖外部深度学习框架，用纯 Rust 一步一步实现一个工作原理 100% 正宗的 Decoder-Only Transformer 大语言模型，并同步沉淀每阶段的学习笔记。
+从零基础出发，不依赖外部深度学习框架，用纯 Rust 一步一步实现 Decoder-Only Transformer，再实现 DeepSeek-V4.1-Flash 的小型因果 Encoder–Decoder 文本主干，并同步沉淀每阶段的学习笔记。
 
 ## 闯关路线图
 
@@ -15,6 +15,7 @@
 | **Step 05** | `crates/step05-sft-chat` | `notes/05-sft-chat.md` | SFT 指令微调（`data/sft_poems.jsonl` + Assistant-Only Loss Mask）、Prefill/Decode KV Cache 加速（39x+）、二进制模型权重存档（`.mgpt`）与控制台流式对话交互（REPL） | 已完成 |
 | **Step 06** | `crates/step06-modern-llm` | `notes/06-modern-llm.md` | 现代工业界大模型四大核心升级（**RMSNorm + RoPE 旋转位置编码 + GQA 省 50% KV Cache + SwiGLU 门控前馈**），支持 `.mllm` 存档与 `/debug` 概率透视交互 | 已完成 |
 | **Step 07** | `crates/step07-tokenizer` | `notes/07-tokenizer.md` | 326 首唐诗、1,152 词表的字节级 BPE、约 52.6 万参数的古诗助手，支持续句、背诵、作者问答与 CPU decode 基准 | 已完成 |
+| **Step 08** | `crates/step08-deepseek-flash` | `notes/08-deepseek-flash.md` | 20+20 层因果 Encoder–Decoder、CSA2 共享 KV、mHC、Engram 和 MoE，用普通问答跑通 SFT 与缓存生成 | 文本 CPU 版 |
 
 ## 常用命令
 
@@ -46,4 +47,7 @@ cargo run --release -p step07-tokenizer -- chat --raw
 cargo run --release -p step07-tokenizer -- bench
 # 用 GPT-4o 的 o200k_base 对照分词
 cargo run --release -p step07-tokenizer --features openai -- inspect '床前明月光，hello world 🦀'
+# 第 8 关（普通问答语料：训练、存档、缓存生成）
+cargo run --release -p step08-deepseek-flash -- demo
+cargo run --release -p step08-deepseek-flash -- generate checkpoints/step08.ds08 ping
 ```
