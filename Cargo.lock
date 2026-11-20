@@ -33,3 +33,10 @@ version = "0.1.0"
 dependencies = [
  "mini-core",
 ]
+
+[[package]]
+name = "step05-sft-chat"
+version = "0.1.0"
+dependencies = [
+ "mini-core",
+]
