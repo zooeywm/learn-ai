@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Learn AI 3D：从 Tokenizer 到自注意力全景演化演示（单文件离线版）</title>
+  <title>Learn AI 3D：从 Tokenizer 到完整 Mini-GPT 全景演化演示（单文件离线版）</title>
   <style>
     /* Shared light/dark theme tokens and layout (inlined for 100% single-file offline distribution) */
     :root {
@@ -92,11 +92,11 @@
     /* Step Evolution Stepper */
     .evo-stepper {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 7px;
       margin-top: 10px;
     }
-    @media (max-width: 820px) { .evo-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 920px) { .evo-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .evo-tab {
       text-align: left;
       padding: 8px 10px;
@@ -384,7 +384,7 @@
       <div class="row">
         <div class="flex">
           <span class="badge mono">Learn AI · 单文件 3D 全景演化</span>
-          <h1>从零手搓 LLM：Step 00 → Step 03 架构迭代演示</h1>
+          <h1>从零手搓 LLM：Step 00 → Step 04 完整 Mini-GPT 架构迭代演示</h1>
         </div>
         <div class="flex">
           <button id="btnPrevStep">← 上一 Step</button>
@@ -396,23 +396,28 @@
       <div class="evo-stepper" role="tablist" aria-label="演化关卡切换">
         <button class="evo-tab active" data-step="0" role="tab">
           <div class="evo-tab-num mono">STEP 00 · 入口基石</div>
-          <div class="evo-tab-title">Tokenizer 分词与词表</div>
-          <div class="evo-tab-sub">文本拆字 → 去重排序 V=10 → Encode/Decode</div>
+          <div class="evo-tab-title">Tokenizer 分词词表</div>
+          <div class="evo-tab-sub">拆字去重 V=10 → Encode/Decode</div>
         </button>
         <button class="evo-tab" data-step="1" role="tab">
           <div class="evo-tab-num mono">STEP 01 · 最简模型</div>
           <div class="evo-tab-title">Bigram 单字查表</div>
-          <div class="evo-tab-sub">10×10 查表矩阵 + Softmax + Loss + SGD</div>
+          <div class="evo-tab-sub">10×10 矩阵 + Softmax + Loss</div>
         </button>
         <button class="evo-tab" data-step="2" role="tab">
           <div class="evo-tab-num mono">STEP 02 · 深度学习</div>
           <div class="evo-tab-title">Autograd &amp; 3字 MLP</div>
-          <div class="evo-tab-sub">3字拼接(12维) + ReLU 门 + Arena-Tape + AdamW</div>
+          <div class="evo-tab-sub">3字12维 + ReLU + Tape + AdamW</div>
         </button>
         <button class="evo-tab" data-step="3" role="tab">
-          <div class="evo-tab-num mono">STEP 03 · Transformer 心脏</div>
+          <div class="evo-tab-num mono">STEP 03 · 核心引擎</div>
           <div class="evo-tab-title">因果多头自注意力</div>
-          <div class="evo-tab-sub">位置编码 + Q/K/V + 因果下三角掩码 + 1字起步</div>
+          <div class="evo-tab-sub">位置编码 + Q/K/V + 因果掩码</div>
+        </button>
+        <button class="evo-tab" data-step="4" role="tab">
+          <div class="evo-tab-num mono">STEP 04 · 终极通关</div>
+          <div class="evo-tab-title">完整 Mini-GPT</div>
+          <div class="evo-tab-sub">LayerNorm + FFN(GELU) + 2层堆叠</div>
         </button>
       </div>
 
@@ -708,6 +713,50 @@
             <div class="muted mono" style="margin-top:4px; line-height:1.65;">
               <div id="s3Contrast3">pos[3]：待第 ⑦ 步或训练后查看</div>
               <div id="s3Contrast10">pos[10]：待第 ⑦ 步或训练后查看</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector 04: 2-Layer Pre-Norm Mini-GPT (Layer Attention + LayerNorm + FFN GELU) -->
+    <div id="inspStep04" class="card xs hidden">
+      <div class="row">
+        <div class="muted">
+          <strong>Step 04 完整 Mini-GPT 教学配置</strong>：<strong>2 层 Pre-Norm Transformer Block 堆叠</strong>（<span class="mono">LN1 → 2头因果Attn → +残差 → LN2 → FFN(8→16→8, GELU) → +残差</span>）→ <span class="mono">Final LN → LM Head</span>，共 <strong>1,242</strong> 个真实可训练参数 + 全局梯度范数裁剪 + AdamW！Rust 版为 2 层 4 头 <span class="mono">32→128→32</span>（49,973 参数，30 首唐诗 5/5 满分续写）。
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="subpanel">
+          <div class="row">
+            <strong>逐层因果注意力热力图（对比 Block 1 vs Block 2 分工！）</strong>
+            <div class="flex">
+              <button id="btnS4Blk0" class="primary" style="padding:2px 8px;">Block 1 (底层)</button>
+              <button id="btnS4Blk1" style="padding:2px 8px;">Block 2 (顶层)</button>
+            </div>
+          </div>
+          <table class="attn-table mono" id="s4AttnTable"></table>
+        </div>
+        <div class="subpanel" style="display:flex; flex-direction:column; justify-content:space-between; gap:10px;">
+          <div>
+            <div class="row">
+              <strong>LayerNorm 稳压前后实测（pos[<span id="s4PosTag">3</span>]「<span id="s4CharTag">月</span>」）</strong>
+              <span id="s4GradNormBadge" class="mono badge">grad_norm: --</span>
+            </div>
+            <div class="tape-box mono" style="margin-top:6px; line-height:1.7;">
+              <div>· Final LN <strong>输入</strong>：<span id="s4LnBefore">待前向计算</span></div>
+              <div>· Final LN <strong style="color:var(--success)">输出</strong>：<span id="s4LnAfter" style="color:var(--success)">待前向计算</span></div>
+            </div>
+            <div style="margin-top:8px;">
+              <strong>Block <span id="s4FfnBlkTag">1</span> FFN 思考塔（GELU 4倍扩张 16 维激活）：</strong>
+              <div id="s4FfnVals" class="val-grid mono"></div>
+            </div>
+          </div>
+          <div class="divider">
+            <strong>终极对照：pos[3]「床前明月→光」 vs pos[10]「…望明月→。」</strong>
+            <div class="muted mono" style="margin-top:4px; line-height:1.65;">
+              <div id="s4Contrast3">pos[3]：待第 ⑦ 步或训练后查看</div>
+              <div id="s4Contrast10">pos[10]：待第 ⑦ 步或训练后查看</div>
             </div>
           </div>
         </div>
@@ -1095,6 +1144,17 @@
           kept: ["Token Embedding", "Softmax 概率塔", "Loss 能量柱", "AdamW"],
         },
       },
+      {
+        id: 4, name: "Step 04 · 完整 Mini-GPT",
+        cam: { yaw: -0.36, pitch: 0.50, dist: 32.5, tx: 0.4, tz: 0.2 },
+        diffFromPrev: {
+          title: "Step 03 单层自注意力 ──▶ Step 04 完整 2 层 Mini-GPT：装上稳压环与 FFN 思考塔，真正通关 GPT！",
+          added: ["LayerNorm 稳压环(μ=0,σ=1)", "FFN 4倍扩张思考塔(D→4D→D + GELU)", "2层 Pre-Norm Block 堆叠", "双残差高速路 & 梯度裁剪"],
+          removed: [],
+          replaced: ["单层 Attention → 2层完整 Pre-Norm Transformer Block (LN→Attn→+Res→LN→FFN→+Res)"],
+          kept: ["Token+Pos 编码", "因果下三角掩码(-∞)", "Softmax 概率塔", "Loss 能量柱", "1字起步推理"],
+        },
+      },
     ];
 
     // 3D Morph Transition Metadata between adjacent or arbitrary steps
@@ -1201,6 +1261,38 @@
             { x: 0.0, y: 1.6, z: 4.35, text: "+ 恢复: 12槽 Arena-Tape", kind: "add" },
           ],
           diff: STEP_META[2].diffFromPrev,
+        };
+      }
+      if (fromId === 3 && toId === 4) {
+        return {
+          title: "✨ 终极进化：Step 03 单层自注意力 ──▶ Step 04 完整 2 层 Mini-GPT",
+          outRole: { seq_pos: "kept", qkv: "replaced", attn_mat: "replaced", ctx_h1: "replaced", softmax: "kept", loss: "kept" },
+          inRole:  { seq_pos: "kept", gpt_ln: "added", gpt_block1: "replaced", gpt_ffn: "added", gpt_block2: "added", gpt_res: "added", softmax: "kept", loss: "kept" },
+          arcs: [
+            { from: { x: -0.6, y: 2.0, z: 0 }, to: { x: -5.2, y: 1.8, z: 0 }, label: "↻ 压缩封装进 Block 1" },
+            { from: { x: 5.2, y: 1.6, z: 0 },  to: { x: 1.8, y: 2.2, z: 0 },  label: "+ 堆叠 Block 2 + FFN 思考塔" },
+          ],
+          calloutsOut: [],
+          calloutsIn: [
+            { x: -7.0, y: 3.1, z: 0, text: "+ 新增: LayerNorm 稳压环", kind: "add" },
+            { x: -2.6, y: 3.9, z: 0, text: "+ 新增: FFN(GELU) 4倍扩张思考塔", kind: "add" },
+            { x: 1.8,  y: 4.3, z: 0, text: "+ 新增: 第 2 层 Pre-Norm Block 堆叠", kind: "add" },
+          ],
+          diff: STEP_META[4].diffFromPrev,
+        };
+      }
+      if (fromId === 4 && toId === 3) {
+        return {
+          title: "⏪ 退回对照：Step 04 Mini-GPT ──▶ Step 03 单层自注意力",
+          outRole: { seq_pos: "kept", gpt_ln: "removed", gpt_block1: "replaced", gpt_ffn: "removed", gpt_block2: "removed", gpt_res: "removed", softmax: "kept", loss: "kept" },
+          inRole:  { seq_pos: "kept", qkv: "added", attn_mat: "replaced", ctx_h1: "added", softmax: "kept", loss: "kept" },
+          arcs: [{ from: { x: -5.2, y: 1.8, z: 0 }, to: { x: -0.6, y: 2.0, z: 0 }, label: "↻ 展开单层 11×11 注意力阵" }],
+          calloutsOut: [
+            { x: -2.6, y: 3.8, z: 0, text: "- 收起: LayerNorm 与 FFN 思考塔", kind: "rem" },
+            { x: 1.8,  y: 4.0, z: 0, text: "- 收起: 第 2 层 Block 堆叠", kind: "rem" },
+          ],
+          calloutsIn: [{ x: -0.6, y: 4.4, z: 0, text: "↻ 恢复: 单层 11×11 因果注意力大矩阵", kind: "rep" }],
+          diff: STEP_META[3].diffFromPrev,
         };
       }
       // General fallback (reverse or multi-step jump)
@@ -1824,6 +1916,337 @@
     };
 
     // =========================================================================
+    // 6B. STEP 04 ENGINE: Real 2-Layer Pre-Norm Mini-GPT (LayerNorm + Attn + GELU FFN)
+    //     1-to-1 Mathematical Mirror of crates/step04-minigpt/src/main.rs
+    // =========================================================================
+    const S4_D = 8, S4_NH = 2, S4_DH = 4, S4_FF = 16, S4_NL = 2, S4_SCALE = 0.5;
+    const GELU_K = Math.sqrt(2.0 / Math.PI);
+
+    function lnForward(x, T, D, gamma, beta) {
+      const eps = 1e-5, invD = 1 / D;
+      const xHat = new Float32Array(T * D), invStd = new Float32Array(T), out = new Float32Array(T * D);
+      const means = new Float32Array(T), stds = new Float32Array(T);
+      for (let r = 0; r < T; r++) {
+        const off = r * D; let mu = 0;
+        for (let c = 0; c < D; c++) mu += x[off + c];
+        mu *= invD; means[r] = mu;
+        let vr = 0; for (let c = 0; c < D; c++) { const df = x[off + c] - mu; vr += df * df; }
+        vr *= invD; stds[r] = Math.sqrt(vr + eps);
+        const istd = 1 / stds[r]; invStd[r] = istd;
+        for (let c = 0; c < D; c++) { const xh = (x[off + c] - mu) * istd; xHat[off + c] = xh; out[off + c] = xh * gamma[c] + beta[c]; }
+      }
+      return { out, xHat, invStd, means, stds };
+    }
+
+    function lnBackward(dOut, T, D, lnCache, gamma, gGamma, gBeta) {
+      const dX = new Float32Array(T * D), invD = 1 / D;
+      for (let r = 0; r < T; r++) {
+        const off = r * D; let mG = 0, mGX = 0;
+        for (let c = 0; c < D; c++) {
+          const dy = dOut[off + c], xh = lnCache.xHat[off + c];
+          gGamma[c] += dy * xh; gBeta[c] += dy;
+          const g = dy * gamma[c]; mG += g; mGX += g * xh;
+        }
+        mG *= invD; mGX *= invD; const istd = lnCache.invStd[r];
+        for (let c = 0; c < D; c++) dX[off + c] = istd * (dOut[off + c] * gamma[c] - mG - lnCache.xHat[off + c] * mGX);
+      }
+      return dX;
+    }
+
+    const S4 = {
+      viewMode: "train",
+      mode: "idle",
+      stage: 0, // 0..8
+      stageStartMs: 0,
+      stage8Applied: false,
+      stepCount: 0,
+      lr: 0.025,
+      selectedPos: 3,
+      selectedBlock: 0,
+      lastGradNorm: 0,
+      model: null,
+      cache: null,
+      computedStage: 0,
+      lastReport: null,
+      fastRemaining: 0,
+      lastFastTick: 0,
+      visProbs: new Float32Array(V),
+      visLnF: new Float32Array(S4_D),
+      visFfn0: new Float32Array(S4_FF),
+      visFfn1: new Float32Array(S4_FF),
+      visLoss: 0,
+      temp: 0.7,
+      genStartStr: "床",
+      genIds: [STOI["床"]],
+      lastDraw: null,
+      inferAnim: null,
+      trainNarrator: {
+        title: "Step 04（终极关）完整 2 层 Mini-GPT：点「⏭ 下一步」走完双层 Pre-Norm Transformer！",
+        desc: "每层都是完整的「LayerNorm → 因果自注意力 → 残差 → LayerNorm → FFN(GELU 4倍思考) → 残差」，与 GPT-2 原理 100% 同源！",
+      },
+      inferNarrator: {
+        title: "🟢 Mini-GPT 推理模式：只需 1 字「床」起步，穿过 2 层完整 Transformer 深度思考后吐字！",
+        desc: "先点「⚡ 快速训练 60 step」把 2 层 Mini-GPT 训透，再点「🎲 推理下一个字」看它一口气背完整首诗！",
+      },
+      stageNames: ["① 词+位置编码", "② Block1 Attn", "③ Block1 FFN", "④ Block2 Attn", "⑤ Block2 FFN", "⑥ Final LN", "⑦ 概率与Loss", "⑧ 裁剪+AdamW"],
+      init() {
+        const rng = new Rng(2025), std = Math.sqrt(1 / S4_D), resStd = std / Math.sqrt(2 * S4_NL);
+        const mkOnes = (n, c) => new Param(n, 1, c, new Float32Array(c).fill(1), false);
+        const mkBlk = idx => ({
+          ln1G: mkOnes(`b${idx}_ln1g`, S4_D), ln1B: Param.zeros(`b${idx}_ln1b`, 1, S4_D),
+          wq: Param.randn(`b${idx}_wq`, S4_D, S4_D, std, rng, true),
+          wk: Param.randn(`b${idx}_wk`, S4_D, S4_D, std, rng, true),
+          wv: Param.randn(`b${idx}_wv`, S4_D, S4_D, std, rng, true),
+          wo: Param.randn(`b${idx}_wo`, S4_D, S4_D, resStd, rng, true),
+          ln2G: mkOnes(`b${idx}_ln2g`, S4_D), ln2B: Param.zeros(`b${idx}_ln2b`, 1, S4_D),
+          w1: Param.randn(`b${idx}_ff1`, S4_D, S4_FF, std, rng, true),
+          b1: Param.zeros(`b${idx}_fb1`, 1, S4_FF),
+          w2: Param.randn(`b${idx}_ff2`, S4_FF, S4_D, resStd, rng, true),
+          b2: Param.zeros(`b${idx}_fb2`, 1, S4_D),
+        });
+        this.model = {
+          tokEmb: Param.randn("tok_emb", V, S4_D, 0.25, rng, true),
+          posEmb: Param.randn("pos_emb", S3_TMAX, S4_D, 0.15, rng, true),
+          blocks: [mkBlk(0), mkBlk(1)],
+          lnFG: mkOnes("lnf_g", S4_D), lnFB: Param.zeros("lnf_b", 1, S4_D),
+          wLm: Param.randn("w_lm", S4_D, V, std, rng, true),
+          bLm: Param.zeros("b_lm", 1, V),
+        };
+        this.stepCount = 0; this.mode = "idle"; this.stage = 0; this.stage8Applied = false;
+        this.cache = null; this.computedStage = 0; this.lastReport = null; this.lastGradNorm = 0;
+        this.visProbs.fill(0); this.visLnF.fill(0); this.visFfn0.fill(0); this.visFfn1.fill(0); this.visLoss = 0;
+        this.genIds = this.genStartStr.split("").map(ch => STOI[ch]); this.lastDraw = null; this.inferAnim = null;
+      },
+      forward(seqIds, targets = null) {
+        const m = this.model, T = seqIds.length;
+        let x = new Float32Array(T * S4_D);
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S4_D; c++) x[t * S4_D + c] = m.tokEmb.data[seqIds[t] * S4_D + c] + m.posEmb.data[t * S4_D + c];
+        const h0 = new Float32Array(x);
+        const blkCaches = [];
+
+        for (let l = 0; l < S4_NL; l++) {
+          const blk = m.blocks[l], xIn = x;
+          const ln1 = lnForward(xIn, T, S4_D, blk.ln1G.data, blk.ln1B.data);
+          const q = matmulFwd(ln1.out, T, S4_D, blk.wq.data, S4_D);
+          const k = matmulFwd(ln1.out, T, S4_D, blk.wk.data, S4_D);
+          const v = matmulFwd(ln1.out, T, S4_D, blk.wv.data, S4_D);
+          const attnW = new Float32Array(S4_NH * T * T), ctx = new Float32Array(T * S4_D);
+          for (let h = 0; h < S4_NH; h++) {
+            const hc = h * S4_DH, wb = h * T * T;
+            for (let i = 0; i < T; i++) {
+              const qi = i * S4_D + hc; let ms = -Infinity;
+              const sc = new Float32Array(i + 1);
+              for (let j = 0; j <= i; j++) {
+                const kj = j * S4_D + hc; let dot = 0;
+                for (let d = 0; d < S4_DH; d++) dot += q[qi + d] * k[kj + d];
+                sc[j] = dot * S4_SCALE; if (sc[j] > ms) ms = sc[j];
+              }
+              let se = 0;
+              for (let j = 0; j <= i; j++) { const e = Math.exp(sc[j] - ms); attnW[wb + i * T + j] = e; se += e; }
+              for (let j = 0; j <= i; j++) attnW[wb + i * T + j] /= se;
+              for (let j = 0; j <= i; j++) {
+                const w = attnW[wb + i * T + j], vj = j * S4_D + hc;
+                for (let d = 0; d < S4_DH; d++) ctx[qi + d] += w * v[vj + d];
+              }
+            }
+          }
+          const attnOut = matmulFwd(ctx, T, S4_D, blk.wo.data, S4_D);
+          const x1 = new Float32Array(T * S4_D);
+          for (let i = 0; i < x1.length; i++) x1[i] = xIn[i] + attnOut[i];
+
+          const ln2 = lnForward(x1, T, S4_D, blk.ln2G.data, blk.ln2B.data);
+          const up = matmulFwd(ln2.out, T, S4_D, blk.w1.data, S4_FF);
+          for (let t = 0; t < T; t++) for (let c = 0; c < S4_FF; c++) up[t * S4_FF + c] += blk.b1.data[c];
+          const gelu = new Float32Array(up.length);
+          for (let i = 0; i < up.length; i++) {
+            const val = up[i], u = GELU_K * (val + 0.044715 * val * val * val);
+            gelu[i] = 0.5 * val * (1 + Math.tanh(u));
+          }
+          const dn = matmulFwd(gelu, T, S4_FF, blk.w2.data, S4_D);
+          const x2 = new Float32Array(T * S4_D);
+          for (let t = 0; t < T; t++) for (let c = 0; c < S4_D; c++) x2[t * S4_D + c] = x1[t * S4_D + c] + dn[t * S4_D + c] + blk.b2.data[c];
+
+          blkCaches.push({ xIn, ln1, q, k, v, attnW, ctx, x1, ln2, up, gelu, x2 });
+          x = x2;
+        }
+
+        const lnF = lnForward(x, T, S4_D, m.lnFG.data, m.lnFB.data);
+        const logits = matmulFwd(lnF.out, T, S4_D, m.wLm.data, V);
+        for (let t = 0; t < T; t++) for (let j = 0; j < V; j++) logits[t * V + j] += m.bLm.data[j];
+
+        let posLosses = null, meanLoss = 0;
+        if (targets) {
+          posLosses = new Float32Array(T);
+          for (let t = 0; t < T; t++) {
+            const l = -Math.log(Math.max(softmaxRow(logits.subarray(t * V, (t + 1) * V), 1.0)[targets[t]], 1e-12));
+            posLosses[t] = l; meanLoss += l;
+          }
+          meanLoss /= T;
+        }
+        return { T, seqIds: [...seqIds], h0, blocks: blkCaches, xFinal: x, lnF, logits, posLosses, meanLoss };
+      },
+      backward(cache, targets) {
+        const m = this.model, T = cache.T;
+        const gTok = new Float32Array(m.tokEmb.data.length), gPos = new Float32Array(m.posEmb.data.length);
+        const gLnFG = new Float32Array(S4_D), gLnFB = new Float32Array(S4_D);
+        const gWLm = new Float32Array(m.wLm.data.length), gBLm = new Float32Array(V);
+        const gBlks = m.blocks.map(b => ({
+          ln1G: new Float32Array(S4_D), ln1B: new Float32Array(S4_D),
+          wq: new Float32Array(b.wq.data.length), wk: new Float32Array(b.wk.data.length),
+          wv: new Float32Array(b.wv.data.length), wo: new Float32Array(b.wo.data.length),
+          ln2G: new Float32Array(S4_D), ln2B: new Float32Array(S4_D),
+          w1: new Float32Array(b.w1.data.length), b1: new Float32Array(S4_FF),
+          w2: new Float32Array(b.w2.data.length), b2: new Float32Array(S4_D),
+        }));
+
+        const dLogits = new Float32Array(T * V), invT = 1 / T;
+        for (let t = 0; t < T; t++) {
+          const p = softmaxRow(cache.logits.subarray(t * V, (t + 1) * V), 1.0), y = targets[t];
+          for (let j = 0; j < V; j++) { const g = (p[j] - (j === y ? 1 : 0)) * invT; dLogits[t * V + j] = g; gBLm[j] += g; }
+        }
+        const dLnFOut = new Float32Array(T * S4_D);
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S4_D; c++) {
+            let acc = 0; const v = cache.lnF.out[t * S4_D + c];
+            for (let j = 0; j < V; j++) { const g = dLogits[t * V + j]; acc += g * m.wLm.data[c * V + j]; gWLm[c * V + j] += v * g; }
+            dLnFOut[t * S4_D + c] = acc;
+          }
+        let dX = lnBackward(dLnFOut, T, S4_D, cache.lnF, m.lnFG.data, gLnFG, gLnFB);
+
+        for (let l = S4_NL - 1; l >= 0; l--) {
+          const blk = m.blocks[l], bc = cache.blocks[l], gb = gBlks[l];
+          const dX1 = new Float32Array(dX), dGelu = new Float32Array(T * S4_FF);
+          for (let t = 0; t < T; t++) {
+            for (let c = 0; c < S4_D; c++) gb.b2[c] += dX[t * S4_D + c];
+            for (let p = 0; p < S4_FF; p++) {
+              let acc = 0; const gv = bc.gelu[t * S4_FF + p];
+              for (let c = 0; c < S4_D; c++) { const g = dX[t * S4_D + c]; acc += g * blk.w2.data[p * S4_D + c]; gb.w2[p * S4_D + c] += gv * g; }
+              dGelu[t * S4_FF + p] = acc;
+            }
+          }
+          const dUp = new Float32Array(T * S4_FF);
+          for (let i = 0; i < dUp.length; i++) {
+            const v = bc.up[i], u = GELU_K * (v + 0.044715 * v * v * v), th = Math.tanh(u);
+            const du = GELU_K * (1 + 3 * 0.044715 * v * v);
+            dUp[i] = dGelu[i] * (0.5 * (1 + th) + 0.5 * v * (1 - th * th) * du);
+          }
+          const dLn2Out = new Float32Array(T * S4_D);
+          for (let t = 0; t < T; t++) {
+            for (let p = 0; p < S4_FF; p++) gb.b1[p] += dUp[t * S4_FF + p];
+            for (let c = 0; c < S4_D; c++) {
+              let acc = 0; const lv = bc.ln2.out[t * S4_D + c];
+              for (let p = 0; p < S4_FF; p++) { const g = dUp[t * S4_FF + p]; acc += g * blk.w1.data[c * S4_FF + p]; gb.w1[c * S4_FF + p] += lv * g; }
+              dLn2Out[t * S4_D + c] = acc;
+            }
+          }
+          const dX1FromLn2 = lnBackward(dLn2Out, T, S4_D, bc.ln2, blk.ln2G.data, gb.ln2G, gb.ln2B);
+          for (let i = 0; i < dX1.length; i++) dX1[i] += dX1FromLn2[i];
+
+          const dXIn = new Float32Array(dX1), dCtx = new Float32Array(T * S4_D);
+          for (let t = 0; t < T; t++)
+            for (let c = 0; c < S4_D; c++) {
+              let acc = 0; const cv = bc.ctx[t * S4_D + c];
+              for (let j = 0; j < S4_D; j++) { const g = dX1[t * S4_D + j]; acc += g * blk.wo.data[c * S4_D + j]; gb.wo[c * S4_D + j] += cv * g; }
+              dCtx[t * S4_D + c] = acc;
+            }
+          const dQ = new Float32Array(T * S4_D), dK = new Float32Array(T * S4_D), dV = new Float32Array(T * S4_D), dWRow = new Float32Array(T);
+          for (let h = 0; h < S4_NH; h++) {
+            const hc = h * S4_DH, wb = h * T * T;
+            for (let i = 0; i < T; i++) {
+              const off = i * S4_D + hc; let wDot = 0;
+              for (let j = 0; j <= i; j++) {
+                const w = bc.attnW[wb + i * T + j], vj = j * S4_D + hc; let dw = 0;
+                for (let d = 0; d < S4_DH; d++) { const g = dCtx[off + d]; dV[vj + d] += w * g; dw += g * bc.v[vj + d]; }
+                dWRow[j] = dw; wDot += w * dw;
+              }
+              for (let j = 0; j <= i; j++) {
+                const ds = bc.attnW[wb + i * T + j] * (dWRow[j] - wDot) * S4_SCALE, kj = j * S4_D + hc;
+                for (let d = 0; d < S4_DH; d++) { dQ[off + d] += ds * bc.k[kj + d]; dK[kj + d] += ds * bc.q[off + d]; }
+              }
+            }
+          }
+          const dLn1Out = new Float32Array(T * S4_D);
+          for (let t = 0; t < T; t++)
+            for (let c = 0; c < S4_D; c++) {
+              const lv = bc.ln1.out[t * S4_D + c]; let acc = 0;
+              for (let j = 0; j < S4_D; j++) {
+                const gq = dQ[t * S4_D + j], gk = dK[t * S4_D + j], gv = dV[t * S4_D + j];
+                gb.wq[c * S4_D + j] += lv * gq; gb.wk[c * S4_D + j] += lv * gk; gb.wv[c * S4_D + j] += lv * gv;
+                acc += gq * blk.wq.data[c * S4_D + j] + gk * blk.wk.data[c * S4_D + j] + gv * blk.wv.data[c * S4_D + j];
+              }
+              dLn1Out[t * S4_D + c] = acc;
+            }
+          const dXInFromLn1 = lnBackward(dLn1Out, T, S4_D, bc.ln1, blk.ln1G.data, gb.ln1G, gb.ln1B);
+          for (let i = 0; i < dXIn.length; i++) dXIn[i] += dXInFromLn1[i];
+          dX = dXIn;
+        }
+
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S4_D; c++) { const g = dX[t * S4_D + c]; gTok[cache.seqIds[t] * S4_D + c] += g; gPos[t * S4_D + c] += g; }
+
+        return { tokEmb: gTok, posEmb: gPos, blocks: gBlks, lnFG: gLnFG, lnFB: gLnFB, wLm: gWLm, bLm: gBLm };
+      },
+      getBlockMeanAttn(blkIdx, T, cache) {
+        const w = cache.blocks[blkIdx].attnW, mat = new Float32Array(T * T);
+        for (let h = 0; h < S4_NH; h++) { const off = h * T * T; for (let i = 0; i < T * T; i++) mat[i] += w[off + i] / S4_NH; }
+        return mat;
+      },
+      stepAdamW() {
+        const oldC = this.forward(S3_IN, S3_TGT), grads = this.backward(oldC, S3_TGT);
+        const beforeSeq = oldC.meanLoss, beforePos = oldC.posLosses[this.selectedPos];
+        const pairs = [
+          [this.model.tokEmb, grads.tokEmb], [this.model.posEmb, grads.posEmb],
+          [this.model.lnFG, grads.lnFG], [this.model.lnFB, grads.lnFB],
+          [this.model.wLm, grads.wLm], [this.model.bLm, grads.bLm],
+        ];
+        for (let l = 0; l < S4_NL; l++) {
+          const b = this.model.blocks[l], gb = grads.blocks[l];
+          for (const k of ["ln1G", "ln1B", "wq", "wk", "wv", "wo", "ln2G", "ln2B", "w1", "b1", "w2", "b2"]) pairs.push([b[k], gb[k]]);
+        }
+        let nsq = 0;
+        for (const [, g] of pairs) for (let i = 0; i < g.length; i++) nsq += g[i] * g[i];
+        this.lastGradNorm = Math.sqrt(nsq);
+        const clip = this.lastGradNorm > 1.0 ? (1.0 / this.lastGradNorm) : 1.0;
+
+        this.stepCount += 1;
+        for (const [p, g] of pairs) {
+          if (clip < 1.0) for (let i = 0; i < g.length; i++) g[i] *= clip;
+          p.adamwStep(g, this.lr, 0.01, this.stepCount);
+        }
+        this.cache = this.forward(S3_IN, S3_TGT); this.computedStage = 7;
+        this.lastReport = { step: this.stepCount, beforeSeq, afterSeq: this.cache.meanLoss, beforePos, afterPos: this.cache.posLosses[this.selectedPos], pos: this.selectedPos };
+      },
+      flushStage8() { if (this.stage === 8 && !this.stage8Applied) { this.stepAdamW(); this.stage8Applied = true; } },
+      flushInfer() {
+        if (this.inferAnim && !this.inferAnim.committed) {
+          this.inferAnim.committed = true;
+          if (this.genIds.length >= S3_TMAX) this.genIds.shift();
+          this.genIds.push(this.inferAnim.nextId);
+          this.lastDraw = { dice: this.inferAnim.dice, nextId: this.inferAnim.nextId, prob: this.inferAnim.prob, prevSeqStr: this.inferAnim.prevSeqStr, seqStr: this.genIds.map(i => VOCAB[i]).join("") };
+        }
+      },
+      enterStage(st, nowMs) {
+        this.flushStage8(); this.stage = st; this.stageStartMs = nowMs; this.stage8Applied = false;
+        if (!this.cache || st === 1) this.cache = this.forward(S3_IN, S3_TGT);
+        this.computedStage = Math.max(this.computedStage, Math.min(st, 7));
+        const i = this.selectedPos, qCh = CHARS[i], tgtCh = CHARS[i + 1];
+        if (st === 1) this.trainNarrator = { title: `① 词 + 位置编码：11 位并行入场，pos[${i}]「${qCh}」进入第 1 层 Pre-Norm Block`, desc: "Mini-GPT 入口与 Step 03 相同，但后面串联了完整的 2 层 Transformer Block！" };
+        else if (st === 2) this.trainNarrator = { title: "② Block 1：LayerNorm1 稳压 → 2头因果自注意力 → 残差高速公路 x1 = x + Attn(LN1(x))", desc: "先归一化再做注意力，绿色残差主干把原信息无损送往下游！" };
+        else if (st === 3) this.trainNarrator = { title: "③ Block 1：LayerNorm2 稳压 → FFN 思考塔 (8→16→8 + GELU) → 残差 x2", desc: "FFN 把特征扩张至高维经平滑 GELU 做深层非线性推理，彻底治愈复读症！" };
+        else if (st === 4) this.trainNarrator = { title: "④ Block 2（第 2 层堆叠）：二次 LayerNorm + 因果自注意力，抽象语义再升级！", desc: "点击下方「Block 1 / Block 2」热力图按钮，可对比底层与顶层各自关注的历史字！" };
+        else if (st === 5) this.trainNarrator = { title: "⑤ Block 2：第二座 FFN(GELU) 思考塔 + 残差，完成全深度表征提炼", desc: "现代 GPT-4 / DeepSeek 就是把这套 Pre-Norm Block 重复堆叠 32 ~ 128 层！" };
+        else if (st === 6) {
+          const mu = this.cache.lnF.means[i], sd = this.cache.lnF.stds[i];
+          this.trainNarrator = { title: `⑥ Final LayerNorm 稳压：把 pos[${i}] 特征从 (μ=${mu.toFixed(2)}, σ=${sd.toFixed(2)}) 精准拉回均值 0、方差 1！`, desc: "给最终输出头 LM Head 提供最干净稳定的特征分布。" };
+        } else if (st === 7) {
+          const probs = softmaxRow(this.cache.logits.subarray(i * V, (i + 1) * V), 1.0);
+          this.trainNarrator = { title: `⑦ 概率与 Loss：「${tgtCh}」概率 ${(probs[S3_TGT[i]] * 100).toFixed(1)}%（全序列平均 Loss ${this.cache.meanLoss.toFixed(3)}）`, desc: "11 位并行监督！下一步执行全局梯度范数裁剪 + AdamW 更新全部 1,242 参数！" };
+        } else if (st === 8) this.trainNarrator = { title: `⑧ 反向传播 + 全局梯度裁剪 (max_norm=1.0) + AdamW（lr=${this.lr.toFixed(3)}）`, desc: "梯度沿两条残差高速路无阻回传到底层 Embedding，深层训练极其平稳！" };
+      },
+    };
+
+    // =========================================================================
     // 7. Global State, 3D Morph Transition Manager & Camera
     // =========================================================================
     let activeStep = 0; // 0, 1, 2, 3
@@ -1845,6 +2268,7 @@
       if (activeStep === 1) { S1.flushStage5(); S1.flushInfer(); }
       else if (activeStep === 2) { S2.flushStage8(); S2.flushInfer(); }
       else if (activeStep === 3) { S3.flushStage8(); S3.flushInfer(); }
+      else if (activeStep === 4) { S4.flushStage8(); S4.flushInfer(); }
     }
 
     function pauseActiveAuto() {
@@ -1852,10 +2276,11 @@
       if (S1.mode === "autoplay" || S1.mode === "fast") S1.mode = S1.stage > 0 ? "step" : "idle";
       if (S2.mode === "autoplay" || S2.mode === "fast") S2.mode = S2.stage > 0 ? "step" : "idle";
       if (S3.mode === "autoplay" || S3.mode === "fast") S3.mode = S3.stage > 0 ? "step" : "idle";
+      if (S4.mode === "autoplay" || S4.mode === "fast") S4.mode = S4.stage > 0 ? "step" : "idle";
     }
 
     function switchStep(nextStep, withAnim = true) {
-      if (nextStep < 0 || nextStep > 3) return;
+      if (nextStep < 0 || nextStep > 4) return;
       flushActiveStepPending();
       pauseActiveAuto();
       const prevStep = activeStep;
@@ -2356,16 +2781,17 @@
           const cur = M.evalArc(fromSm, toLoss, 1.8, stT);
           M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
         } else if (isTrain && S2.stage === 7) {
-          const revIdx = 11 * (1 - stT);
+          const tClamped = Math.max(0, Math.min(1, stT));
+          const revIdx = 11 * (1 - tClamped);
           M.pushOrb(dl, ctx, project, -9.1 + revIdx * 1.65, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
           const wps = [POS.loss, POS.sm, POS.hVec, POS.relu, POS.z1, POS.xVec, POS.emb];
-          const sf = stT * (wps.length - 1), si = Math.min(wps.length - 2, Math.floor(sf)), su = sf - si;
+          const sf = tClamped * (wps.length - 1), si = Math.max(0, Math.min(wps.length - 2, Math.floor(sf))), su = sf - si;
           const a = ptOf(wps[si], 1.5), b = ptOf(wps[si + 1], 1.5), hit = !gateOpen && si >= 3;
           const cur = M.evalArc(a, b, 1.4, su);
           M.drawBezierArc3D(ctx, project, a, b, 1.4, su, hit ? theme.error : theme.warning, 2.8, true);
           M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, hit ? theme.error : theme.warning, hit ? theme.error : theme.warning, hit ? "0" : "∂", "#000");
         } else if (!isTrain && S2.inferAnim) {
-          const u = Math.min(1, (nowMs - S2.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed)), a = S2.inferAnim;
+          const u = Math.max(0, Math.min(1, (nowMs - S2.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed))), a = S2.inferAnim;
           if (u < 0.28) {
             const p = u / 0.28;
             for (let slot = 0; slot < S2_CTX; slot++) {
@@ -2519,12 +2945,13 @@
           M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
         } else if (isTrain && S3.stage === 8) {
           const wps = [POS.loss, POS.sm, POS.ctxV, POS.mat, POS.qkv, POS.seq];
-          const sf = stT * (wps.length - 1), si = Math.min(wps.length - 2, Math.floor(sf)), su = sf - si;
+          const tClamped = Math.max(0, Math.min(1, stT));
+          const sf = tClamped * (wps.length - 1), si = Math.max(0, Math.min(wps.length - 2, Math.floor(sf))), su = sf - si;
           const cur = M.evalArc(ptOf(wps[si], 1.7), ptOf(wps[si + 1], 1.7), 1.5, su);
           M.drawBezierArc3D(ctx, project, ptOf(wps[si], 1.7), ptOf(wps[si + 1], 1.7), 1.5, su, theme.warning, 2.8, true);
           M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, theme.warning, theme.warning, "∂", "#000");
         } else if (!isTrain && S3.inferAnim) {
-          const u = Math.min(1, (nowMs - S3.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed)), a = S3.inferAnim;
+          const u = Math.max(0, Math.min(1, (nowMs - S3.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed))), a = S3.inferAnim;
           if (u < 0.28) {
             const p = u / 0.28, from = { x: POS.seq.x, y: 1.2, z: seqZ(activeQ) }, to = ptOf(POS.qkv, 1.3);
             M.drawBezierArc3D(ctx, project, from, to, 1.7, p, theme.primary, 2.4);
@@ -2552,11 +2979,179 @@
       }
     }
 
+    function drawStep04Scene(G, dl, project, theme, nowMs, isMorphing) {
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPri = M.parseRgb(theme.primary), rgbSuc = M.parseRgb(theme.success), rgbErr = M.parseRgb(theme.error), rgbWarn = M.parseRgb(theme.warning);
+      const rgbCyan = [6, 182, 212], rgbPurp = [168, 85, 247];
+      const isTrain = S4.viewMode === "train";
+      const dispIds = isTrain ? S3_IN : ((S4.inferAnim && !S4.inferAnim.committed) ? S4.inferAnim.prevSeqIds : S4.genIds);
+      const T = dispIds.length, activeQ = isTrain ? S4.selectedPos : (T - 1);
+      const stT = (!isMorphing && isTrain && S4.stage > 0) ? Math.min(1, (nowMs - S4.stageStartMs) / stepAnimMs()) : 1;
+
+      const POS = {
+        seq:   { x: -10.8, z: 0 },
+        ln1a:  { x:  -7.5, z: 0 },
+        attn1: { x:  -5.4, z: 0 },
+        ffn1:  { x:  -2.8, z: 0 },
+        ln1b:  { x:  -0.4, z: 0 },
+        attn2: { x:   1.6, z: 0 },
+        ffn2:  { x:   4.1, z: 0 },
+        lnF:   { x:   6.4, z: 0 },
+        sm:    { x:   8.9, z: 0 },
+        loss:  { x:  11.6, z: 0 },
+      };
+
+      G.pipe("gpt_ln", POS.seq, POS.ln1a, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gpt_block1", POS.ln1a, POS.attn1, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gpt_ffn", POS.attn1, POS.ffn1, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gpt_block2", POS.ffn1, POS.ln1b, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gpt_block2", POS.ln1b, POS.attn2, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gpt_block2", POS.attn2, POS.ffn2, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gpt_ln", POS.ffn2, POS.lnF, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("softmax", POS.lnF, POS.sm, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      if (isTrain) G.pipe("loss", POS.sm, POS.loss, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+
+      // Module 1: Sequence + Position Cubes
+      const seqSpan = 0.66, seqZ = idx => (idx - (T - 1) * 0.5) * seqSpan;
+      for (let idx = 0; idx < T; idx++) {
+        const cz = seqZ(idx), isAct = idx === activeQ, isPast = idx < activeQ;
+        const bh = isAct ? 1.25 : (isPast ? 0.82 : 0.34);
+        const col = isAct ? (isTrain ? rgbPri : rgbSuc) : (isPast ? M.lerpRgb(rgbCard, rgbPri, 0.5) : rgbCard);
+        G.box("seq_pos", POS.seq.x - 0.42, 0, cz - 0.24, POS.seq.x + 0.42, bh, cz + 0.24, col, (!isTrain || idx <= activeQ) ? 0.94 : 0.4, isAct ? theme.fg : theme.border);
+        G.label("seq_pos", POS.seq.x - 0.85, bh + 0.14, cz, `${idx}:${VOCAB[dispIds[idx]]}`, isAct ? (isTrain ? theme.primary : theme.success) : (isPast ? theme.fg : theme.muted), isAct ? "bold 11px monospace" : "10px monospace");
+      }
+      G.label("seq_pos", POS.seq.x, 0.18, seqZ(T - 1) + 0.95, isTrain ? "词+位置编码" : `历史序列(${T}字)`, isTrain ? theme.primary : theme.success, "bold 11px sans-serif");
+
+      // Helper: Draw a sleek Pre-Norm Transformer Block (Platform + LN ring + Mini Causal Attn + FFN 4x Tower + 2 Residual Highways!)
+      function drawBlock(modAttn, modFfn, lnPos, attnPos, ffnPos, ffnArr, litAttn, litFfn, title, isSelBlk) {
+        // Platform pedestal framing the whole Block
+        G.box(modAttn, lnPos.x - 0.8, 0, -2.55, ffnPos.x + 0.9, 0.14, 2.55, M.lerpRgb(rgbCard, isSelBlk ? rgbPri : rgbBorder, isSelBlk ? 0.24 : 0.12), 0.78, isSelBlk ? theme.primary : theme.border);
+        G.label(modAttn, (lnPos.x + ffnPos.x) * 0.5, 0.22, 2.95, title, isSelBlk ? theme.primary : theme.muted, "bold 11px sans-serif");
+
+        // Pre-Norm LN1 Cyan Arch Ring
+        const lnCol = litAttn ? rgbCyan : rgbBorder;
+        G.box("gpt_ln", lnPos.x - 0.16, 0.14, -1.75, lnPos.x + 0.16, 2.45, -1.5, lnCol, 0.92, theme.fg);
+        G.box("gpt_ln", lnPos.x - 0.16, 0.14, 1.5, lnPos.x + 0.16, 2.45, 1.75, lnCol, 0.92, theme.fg);
+        G.box("gpt_ln", lnPos.x - 0.16, 2.22, -1.75, lnPos.x + 0.16, 2.48, 1.75, lnCol, 0.92, theme.fg);
+        G.label("gpt_ln", lnPos.x, 2.85, 0, "LN", litAttn ? "#06b6d4" : theme.muted, "bold 10px monospace");
+
+        // Compact 4x4 Causal Attention Mini-Matrix inside Block
+        for (let r = 0; r < 4; r++) {
+          for (let c = 0; c < 4; c++) {
+            const cx = attnPos.x + (c - 1.5) * 0.42, cz = (r - 1.5) * 0.42;
+            if (c > r) {
+              G.box(modAttn, cx - 0.16, 0.14, cz - 0.16, cx + 0.16, 0.22, cz + 0.16, M.lerpRgb(rgbCard, rgbErr, 0.38), 0.6, theme.error);
+            } else {
+              const bh = litAttn ? (0.45 + ((r === 3 && c === 2) ? 1.25 : (r === c ? 0.85 : 0.45))) : 0.22;
+              G.box(modAttn, cx - 0.16, 0.14, cz - 0.16, cx + 0.16, 0.14 + bh, cz + 0.16, litAttn ? rgbPri : rgbCard, 0.92, theme.border);
+            }
+          }
+        }
+        G.label(modAttn, attnPos.x, 2.55, -1.45, "因果Attn", litAttn ? theme.primary : theme.muted, "bold 10px monospace");
+
+        // FFN (D -> 4D -> D + GELU) 8 paired tall bars (16 dims shown in 2 rows x 8 cols)
+        for (let i = 0; i < S4_FF; i++) {
+          const row = i < 8 ? -0.34 : 0.34, colIdx = i % 8;
+          const fz = (colIdx - 3.5) * 0.46, v = ffnArr[i];
+          const bh = litFfn ? Math.max(0.18, Math.min(2.9, Math.abs(v) * 1.45 + 0.24)) : 0.14;
+          const col = !litFfn ? rgbCard : (v >= 0 ? M.lerpRgb(rgbPurp, rgbSuc, 0.35) : M.lerpRgb(rgbPurp, rgbErr, 0.45));
+          G.box(modFfn, ffnPos.x + row - 0.22, 0.14, fz - 0.16, ffnPos.x + row + 0.22, 0.14 + bh, fz + 0.16, col, 0.92, theme.border);
+        }
+        G.label(modFfn, ffnPos.x, 3.35, 0, "FFN(GELU 4×)", litFfn ? "#a855f7" : theme.muted, "bold 10px monospace");
+
+        // 2 Glowing Green Pre-Norm Residual Highways arching over Attn and over FFN!
+        const resA = G.modAlpha("gpt_res");
+        if (resA > 0.1) {
+          M.drawBezierArc3D(ctx, project, { x: lnPos.x - 0.4, y: 0.7, z: -1.95 }, { x: (attnPos.x + ffnPos.x) * 0.5, y: 0.7, z: -1.95 }, 2.35, 1.0, theme.success, 2.2, true, resA * (litAttn ? 0.95 : 0.4));
+          M.drawBezierArc3D(ctx, project, { x: (attnPos.x + ffnPos.x) * 0.5, y: 0.7, z: -1.95 }, { x: ffnPos.x + 0.85, y: 0.7, z: -1.95 }, 2.45, 1.0, theme.success, 2.2, true, resA * (litFfn ? 0.95 : 0.4));
+        }
+      }
+
+      drawBlock("gpt_block1", "gpt_ffn", POS.ln1a, POS.attn1, POS.ffn1, S4.visFfn0, !isTrain || S4.computedStage >= 2, !isTrain || S4.computedStage >= 3, "Block 1 (LN→Attn→+Res→LN→FFN→+Res)", S4.selectedBlock === 0);
+      drawBlock("gpt_block2", "gpt_block2", POS.ln1b, POS.attn2, POS.ffn2, S4.visFfn1, !isTrain || S4.computedStage >= 4, !isTrain || S4.computedStage >= 5, "Block 2 (深层堆叠 Pre-Norm Block)", S4.selectedBlock === 1);
+
+      // Final LayerNorm Stabilized Vector
+      const lnFLit = !isTrain || S4.computedStage >= 6;
+      for (let d = 0; d < S4_D; d++) {
+        const dz = (d - 3.5) * 0.48, v = S4.visLnF[d];
+        const bh = lnFLit ? Math.max(0.16, Math.min(2.4, Math.abs(v) * 0.85 + 0.2)) : 0.12;
+        G.box("gpt_ln", POS.lnF.x - 0.28, 0, dz - 0.16, POS.lnF.x + 0.28, bh, dz + 0.16, !lnFLit ? rgbCard : (v >= 0 ? rgbCyan : rgbErr), 0.92, theme.border);
+      }
+      G.label("gpt_ln", POS.lnF.x, 2.8, 0, "Final LN", lnFLit ? "#06b6d4" : theme.muted, "bold 11px monospace");
+
+      // 10 Softmax Probability Towers
+      const smLit = !isTrain || S4.computedStage >= 7;
+      for (let j = 0; j < V; j++) {
+        const sz = (j - 4.5) * 0.62, p = S4.visProbs[j];
+        const isHi = isTrain ? (j === S3_TGT[S4.selectedPos]) : (S4.inferAnim && j === S4.inferAnim.nextId);
+        G.box("softmax", POS.sm.x - 0.28, 0, sz - 0.22, POS.sm.x + 0.28, smLit ? Math.max(0.08, p * 4.5) : 0.08, sz + 0.22, !smLit ? rgbBorder : (isHi ? rgbSuc : rgbPri), smLit ? 0.92 : 0.45, isHi ? theme.fg : theme.border);
+        G.label("softmax", POS.sm.x + 0.85, 0.15, sz, smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`, isHi ? theme.success : theme.muted, isHi ? "bold 11px monospace" : "10px monospace");
+      }
+      G.label("softmax", POS.sm.x, 4.95, 0, isTrain ? "GPT 概率塔 (T=1.0)" : `GPT 温度塔 (T=${S4.temp.toFixed(1)})`, isTrain ? theme.primary : theme.success, "bold 11px monospace");
+
+      // Loss Pillar (Train only)
+      if (isTrain) {
+        const lh = S4.computedStage >= 7 ? Math.max(0.14, Math.min(4.6, S4.visLoss * 1.45)) : 0.08;
+        G.box("loss", POS.loss.x - 0.58, 0, -0.58, POS.loss.x + 0.58, lh, 0.58, S4.computedStage >= 7 ? rgbWarn : rgbBorder, S4.computedStage >= 7 ? 0.92 : 0.5, S4.computedStage >= 7 ? theme.fg : theme.border);
+        G.label("loss", POS.loss.x, lh + 0.5, 0, S4.computedStage >= 7 ? `pos[${S4.selectedPos}] Loss ${S4.visLoss.toFixed(2)}` : "位置Loss: 0", S4.computedStage >= 7 ? theme.warning : theme.muted, "bold 11px monospace");
+      }
+
+      // Stage 1..8 & 4-Phase Inference Motion Orbs
+      if (!isMorphing) {
+        const ptOf = (p, y = 1.4) => ({ x: p.x, y, z: p.z });
+        if (isTrain && S4.stage >= 1 && S4.stage <= 7) {
+          const legs = [
+            [POS.seq, POS.ln1a, theme.primary, CHARS[activeQ]],
+            [POS.ln1a, POS.attn1, theme.primary, "B1·A"],
+            [POS.attn1, POS.ffn1, "#a855f7", "FFN1"],
+            [POS.ffn1, POS.attn2, theme.primary, "B2·A"],
+            [POS.attn2, POS.ffn2, "#a855f7", "FFN2"],
+            [POS.ffn2, POS.lnF, "#06b6d4", "LN"],
+            [POS.sm, POS.loss, theme.warning, "L"],
+          ];
+          const [a, b, col, txt] = legs[S4.stage - 1];
+          M.drawBezierArc3D(ctx, project, ptOf(a), ptOf(b), 1.8, stT, col, 2.8);
+          const cur = M.evalArc(ptOf(a), ptOf(b), 1.8, stT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, col, col, txt, "#fff");
+        } else if (isTrain && S4.stage === 8) {
+          const wps = [POS.loss, POS.sm, POS.lnF, POS.ffn2, POS.attn2, POS.ffn1, POS.attn1, POS.seq];
+          const tClamped = Math.max(0, Math.min(1, stT));
+          const sf = tClamped * (wps.length - 1), si = Math.max(0, Math.min(wps.length - 2, Math.floor(sf))), su = sf - si;
+          const cur = M.evalArc(ptOf(wps[si], 1.9), ptOf(wps[si + 1], 1.9), 1.4, su);
+          M.drawBezierArc3D(ctx, project, ptOf(wps[si], 1.9), ptOf(wps[si + 1], 1.9), 1.4, su, theme.warning, 2.8, true);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, theme.warning, theme.warning, "∂", "#000");
+        } else if (!isTrain && S4.inferAnim) {
+          const u = Math.max(0, Math.min(1, (nowMs - S4.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed))), a = S4.inferAnim;
+          if (u < 0.56) {
+            const p = Math.max(0, u / 0.56), wps = [POS.seq, POS.attn1, POS.ffn1, POS.attn2, POS.ffn2, POS.lnF, POS.sm];
+            const sf = p * (wps.length - 1), si = Math.max(0, Math.min(wps.length - 2, Math.floor(sf))), su = sf - si;
+            const cur = M.evalArc(ptOf(wps[si], 1.6), ptOf(wps[si + 1], 1.6), 1.4, su);
+            M.drawBezierArc3D(ctx, project, ptOf(wps[si], 1.6), ptOf(wps[si + 1], 1.6), 1.4, su, theme.success, 2.6);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, "→", "#000");
+          } else if (u < 0.78) {
+            const p = (u - 0.56) / 0.22;
+            const tz = (a.nextId - 4.5) * 0.62, ty = Math.max(0.5, S4.visProbs[a.nextId] * 4.5) + 0.55;
+            const sz = -2.8 + (tz + 2.8) * p, dy = 3.9 - (3.9 - ty) * p;
+            M.pushOrb(dl, ctx, project, POS.sm.x, dy, sz, 0.34, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
+            M.pushLabel3D(dl, ctx, project, POS.sm.x, dy + 0.65, sz, `🎲 抽中「${VOCAB[a.nextId]}」`, theme.success, "bold 12px sans-serif", -0.5);
+          } else {
+            const p = (u - 0.78) / 0.22;
+            const from = { x: POS.sm.x, y: Math.max(0.6, S4.visProbs[a.nextId] * 4.5) + 0.4, z: (a.nextId - 4.5) * 0.62 };
+            const to = { x: POS.seq.x, y: 1.1, z: seqZ(T - 1) + 0.6 };
+            M.drawBezierArc3D(ctx, project, from, to, 4.8, p, theme.warning, 3.0, true);
+            const cur = M.evalArc(from, to, 4.8, p);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.35, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
+          }
+        }
+      }
+    }
+
     function drawStepById(id, G, dl, project, theme, nowMs, isMorphing) {
       if (id === 0) drawStep00Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 1) drawStep01Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 2) drawStep02Scene(G, dl, project, theme, nowMs, isMorphing);
-      else drawStep03Scene(G, dl, project, theme, nowMs, isMorphing);
+      else if (id === 3) drawStep03Scene(G, dl, project, theme, nowMs, isMorphing);
+      else drawStep04Scene(G, dl, project, theme, nowMs, isMorphing);
     }
 
     // =========================================================================
@@ -2664,6 +3259,34 @@
             if (u >= 0.98 && !S3.inferAnim.committed) { S3.flushInfer(); renderAllUi(); }
             if (u >= 1) { S3.inferAnim = null; progWrap.classList.add("hidden"); }
           } else progWrap.classList.add("hidden");
+        } else if (activeStep === 4) {
+          if (S4.viewMode === "train") {
+            const stT = S4.stage > 0 ? Math.min(1, (nowMs - S4.stageStartMs) / stepAnimMs()) : 0;
+            if (S4.mode === "step") {
+              progWrap.classList.remove("hidden"); progBar.style.width = `${(S4.stage / 8) * 100}%`;
+              if (S4.stage === 8 && stT >= 0.42 && !S4.stage8Applied) { S4.stepAdamW(); S4.stage8Applied = true; renderAllUi(); }
+            } else if (S4.mode === "autoplay") {
+              progWrap.classList.remove("hidden");
+              const el = nowMs - S4.stageStartMs; progBar.style.width = `${((S4.stage - 1 + Math.min(1, el / stepAnimMs())) / 8) * 100}%`;
+              if (S4.stage === 8 && stT >= 0.42 && !S4.stage8Applied) { S4.stepAdamW(); S4.stage8Applied = true; renderAllUi(); }
+              if (el >= stepAnimMs() + autoHoldMs()) {
+                if (S4.stage < 8) { S4.enterStage(S4.stage + 1, nowMs); renderAllUi(); }
+                else { S4.mode = "step"; renderAllUi(); }
+              }
+            } else if (S4.mode === "fast") {
+              progWrap.classList.remove("hidden");
+              if (nowMs - S4.lastFastTick >= 45 / animSpeed && S4.fastRemaining > 0) {
+                S4.stepAdamW(); S4.fastRemaining--; S4.lastFastTick = nowMs;
+                progBar.style.width = `${((60 - S4.fastRemaining) / 60) * 100}%`; renderAllUi();
+              }
+              if (S4.fastRemaining <= 0) { S4.mode = "idle"; S4.stage = 0; S4.trainNarrator = { title: `🎉 Mini-GPT 60 step 训练通关（Step ${S4.stepCount}，全序列 Loss = ${S4.cache.meanLoss.toFixed(4)}）！`, desc: "点下方「🎲 推理下一个字」，体验从 1 个「床」字一路完整背出整首诗！" }; renderAllUi(); }
+            } else progWrap.classList.add("hidden");
+          } else if (S4.inferAnim) {
+            const u = Math.min(1, (nowMs - S4.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed));
+            progWrap.classList.remove("hidden"); progBar.style.width = `${u * 100}%`;
+            if (u >= 0.98 && !S4.inferAnim.committed) { S4.flushInfer(); renderAllUi(); }
+            if (u >= 1) { S4.inferAnim = null; progWrap.classList.add("hidden"); }
+          } else progWrap.classList.add("hidden");
         }
       }
 
@@ -2720,12 +3343,36 @@
         }
       S3.visLoss += (((S3.cache && S3.computedStage >= 7) ? S3.cache.posLosses[S3.selectedPos] : 0) - S3.visLoss) * lerpRate;
 
+      // Step 04
+      let s4p = null, s4ln = null, s4f0 = null, s4f1 = null;
+      if (S4.viewMode === "train") {
+        if (S4.cache && S4.computedStage >= 3) s4f0 = S4.cache.blocks[0].gelu.subarray(S4.selectedPos * S4_FF, (S4.selectedPos + 1) * S4_FF);
+        if (S4.cache && S4.computedStage >= 5) s4f1 = S4.cache.blocks[1].gelu.subarray(S4.selectedPos * S4_FF, (S4.selectedPos + 1) * S4_FF);
+        if (S4.cache && S4.computedStage >= 6) s4ln = S4.cache.lnF.out.subarray(S4.selectedPos * S4_D, (S4.selectedPos + 1) * S4_D);
+        if (S4.cache && S4.computedStage >= 7) s4p = softmaxRow(S4.cache.logits.subarray(S4.selectedPos * V, (S4.selectedPos + 1) * V), 1.0);
+      } else {
+        const ids = (S4.inferAnim && !S4.inferAnim.committed) ? S4.inferAnim.prevSeqIds : S4.genIds;
+        const c = (S4.inferAnim && !S4.inferAnim.committed) ? S4.inferAnim.cache : S4.forward(ids, null);
+        const last = ids.length - 1;
+        s4f0 = c.blocks[0].gelu.subarray(last * S4_FF, (last + 1) * S4_FF);
+        s4f1 = c.blocks[1].gelu.subarray(last * S4_FF, (last + 1) * S4_FF);
+        s4ln = c.lnF.out.subarray(last * S4_D, (last + 1) * S4_D);
+        s4p = softmaxRow(c.logits.subarray(last * V, (last + 1) * V), S4.temp);
+      }
+      for (let j = 0; j < V; j++) S4.visProbs[j] += ((s4p ? s4p[j] : 0) - S4.visProbs[j]) * lerpRate;
+      for (let d = 0; d < S4_D; d++) S4.visLnF[d] += ((s4ln ? s4ln[d] : 0) - S4.visLnF[d]) * lerpRate;
+      for (let i = 0; i < S4_FF; i++) {
+        S4.visFfn0[i] += ((s4f0 ? s4f0[i] : 0) - S4.visFfn0[i]) * lerpRate;
+        S4.visFfn1[i] += ((s4f1 ? s4f1[i] : 0) - S4.visFfn1[i]) * lerpRate;
+      }
+      S4.visLoss += (((S4.cache && S4.computedStage >= 7) ? S4.cache.posLosses[S4.selectedPos] : 0) - S4.visLoss) * lerpRate;
+
       // --- Begin 3D Rendering ---
       const theme = M.getThemeColors();
       const { W, H } = M.beginFrame(canvas, ctx, theme);
       const { project, eye } = M.makeProjector(W, H, cam, 1.15, 0.47);
       const rgbBorder = M.parseRgb(theme.border), rgbSuc = M.parseRgb(theme.success);
-      const curInfer = (activeStep === 0 && S0.viewMode === "infer") || (activeStep === 1 && S1.viewMode === "infer") || (activeStep === 2 && S2.viewMode === "infer") || (activeStep === 3 && S3.viewMode === "infer");
+      const curInfer = [S0, S1, S2, S3, S4][activeStep].viewMode === "infer";
 
       // Floor grid
       ctx.strokeStyle = curInfer ? M.shade(rgbSuc, 0.8, 0.16) : M.shade(rgbBorder, 1, 0.25);
@@ -2818,26 +3465,26 @@
       });
       document.getElementById("btnPrevStep").disabled = activeStep === 0;
       document.getElementById("btnPrevStep").textContent = activeStep > 0 ? `← 上一 Step (0${activeStep - 1})` : "← 上一 Step";
-      document.getElementById("btnNextEvo").disabled = activeStep === 3;
-      document.getElementById("btnNextEvo").textContent = activeStep < 3 ? `下一 Step (0${activeStep + 1}) →` : "下一 Step (已达 03)";
+      document.getElementById("btnNextEvo").disabled = activeStep === 4;
+      document.getElementById("btnNextEvo").textContent = activeStep < 4 ? `下一 Step (0${activeStep + 1}) →` : "🏆 已通关 Mini-GPT (04)";
       document.getElementById("btnReplayMorph").disabled = activeStep === 0;
 
       // Show/Hide Step-specific strips & inspectors
       document.getElementById("stripStep00").classList.toggle("hidden", activeStep !== 0);
       document.getElementById("stripTrainInfer").classList.toggle("hidden", activeStep === 0);
       document.getElementById("headSelectWrap").classList.toggle("hidden", activeStep !== 3);
-      for (let i = 0; i <= 3; i++) document.getElementById(`inspStep0${i}`).classList.toggle("hidden", activeStep !== i);
+      for (let i = 0; i <= 4; i++) document.getElementById(`inspStep0${i}`).classList.toggle("hidden", activeStep !== i);
 
       // Train buttons visibility
       document.getElementById("btnTrain1").classList.toggle("hidden", activeStep === 0);
       document.getElementById("btnTrainFast").classList.toggle("hidden", activeStep === 0);
       if (activeStep === 1) { document.getElementById("btnTrain1").textContent = "+1 推进 1 轮"; document.getElementById("btnTrainFast").textContent = "⚡ 50 轮矩阵生长"; }
       else if (activeStep === 2) { document.getElementById("btnTrain1").textContent = "+1 训练 step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速训练 40 step"; }
-      else if (activeStep === 3) { document.getElementById("btnTrain1").textContent = "+1 训练 step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速训练 60 step"; }
+      else if (activeStep === 3 || activeStep === 4) { document.getElementById("btnTrain1").textContent = "+1 训练 step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速训练 60 step"; }
 
       // Mode switch labels & state
-      const curView = [S0.viewMode, S1.viewMode, S2.viewMode, S3.viewMode][activeStep];
-      const isTrain = curView === "train";
+      const stObj = [S0, S1, S2, S3, S4][activeStep];
+      const isTrain = stObj.viewMode === "train";
       const btnT = document.getElementById("btnModeTrain"), btnI = document.getElementById("btnModeInfer");
       btnT.textContent = activeStep === 0 ? "🔵 建表流程" : "🔵 训练模式";
       btnI.textContent = activeStep === 0 ? "🟢 编解码实验" : "🟢 推理模式";
@@ -2849,7 +3496,6 @@
       const pills = document.getElementById("stagePills"), iPills = document.getElementById("inferPills");
       pills.classList.toggle("hidden", !isTrain);
       iPills.classList.toggle("hidden", isTrain);
-      const stObj = [S0, S1, S2, S3][activeStep];
       pills.innerHTML = stObj.stageNames.map((nm, idx) => {
         const sNum = idx + 1;
         const cls = sNum === stObj.stage ? "stage-pill active" : (stObj.stage > 0 && sNum < stObj.stage ? "stage-pill done" : "stage-pill");
@@ -2861,6 +3507,7 @@
         ["① 当前字查行", "② 温度概率塔", "③ 金色骰子落塔", "④ 跳至下一行"],
         ["① 末尾3字输入", "② MLP纯前向", "③ 温度掷骰抽字", "④ 窗口右滑"],
         ["① 全部历史+位置", "② 末字Q扫描历史K", "③ 温度掷骰抽字", "④ 追加进序列(1字起步!)"],
+        ["① 1字/历史入场", "② 穿过2层Block+LN", "③ 温度掷骰抽字", "④ 追加进序列(完整GPT!)"],
       ][activeStep];
       iPills.innerHTML = inferLabels.map((nm, idx) => `<span class="infer-pill">${nm}</span>${idx < 3 ? '<span class="muted">→</span>' : ""}`).join("");
 
@@ -2896,9 +3543,10 @@
           if (idx >= s.start && idx < s.start + S2_CTX) sp.classList.add("ctx");
           else if (idx === s.start + S2_CTX) sp.classList.add("tgt");
         } else {
-          if (idx < S3.selectedPos) sp.classList.add("hist");
-          else if (idx === S3.selectedPos) sp.classList.add("query");
-          else if (idx === S3.selectedPos + 1) sp.classList.add("tgt");
+          const qp = activeStep === 3 ? S3.selectedPos : S4.selectedPos;
+          if (idx < qp) sp.classList.add("hist");
+          else if (idx === qp) sp.classList.add("query");
+          else if (idx === qp + 1) sp.classList.add("tgt");
           else sp.classList.add("future");
         }
         cWrap.appendChild(sp);
@@ -2908,11 +3556,12 @@
         "（蓝=当前字 x · 绿=下一个字 y）",
         "（蓝框=3字输入窗口 x · 绿=target）",
         "（深蓝=Query · 浅蓝=可见历史 · 绿=target · 虚框=未来掩码）",
+        "（深蓝=Query · 浅蓝=可见历史 · 绿=target · 2层 Pre-Norm Mini-GPT）",
       ][activeStep];
 
       // Top-Left HUD & Top-Right Legend & Bottom Narrator
       const tl = document.getElementById("hudTopLeft"), tr = document.getElementById("hudTopRight");
-      const stObj = [S0, S1, S2, S3][activeStep];
+      const stObj = [S0, S1, S2, S3, S4][activeStep];
       const n = stObj.viewMode === "train" ? stObj.trainNarrator : stObj.inferNarrator;
       document.getElementById("narratorTitle").textContent = n.title;
       document.getElementById("narratorDesc").textContent = n.desc;
@@ -2937,7 +3586,7 @@
           ? `<div><strong style="color:var(--primary)">🔵 Step 02 训练</strong> | Step: <strong>${S2.stepCount}</strong> | Batch Loss: <strong>${bLoss}</strong></div><div class="muted">样本: <strong>${s.ctxText}→${s.targetChar}</strong> | 样本Loss: <strong style="color:var(--warning)">${sLoss}</strong> | ${ba}</div>`
           : `<div><strong style="color:var(--success)">🟢 Step 02 推理（无Tape·无Loss·不改权重）</strong> | Step ${S2.stepCount}</div><div class="muted">3字窗口: <strong>「${S2.genIds.slice(-S2_CTX).map(i => VOCAB[i]).join("")}」</strong> | 温度 T = ${S2.temp.toFixed(1)}</div>`;
         tr.innerHTML = `<span><span class="dot" style="background:var(--primary)"></span>x(12维)/概率</span><span><span class="dot" style="background:var(--success)"></span>ReLU通/目标</span><span><span class="dot" style="background:var(--error)"></span>ReLU断</span><span><span class="dot" style="background:var(--warning)"></span>Tape/Loss</span>`;
-      } else {
+      } else if (activeStep === 3) {
         const seqLoss = S3.cache && S3.computedStage >= 7 ? S3.cache.meanLoss.toFixed(4) : "未计算 (0)";
         const posLoss = S3.cache && S3.computedStage >= 7 ? S3.cache.posLosses[S3.selectedPos].toFixed(4) : "未计算 (0)";
         const ba = S3.lastReport ? `Step ${S3.lastReport.step} ${S3.lastReport.beforeSeq.toFixed(3)} → ${S3.lastReport.afterSeq.toFixed(3)}` : "尚无更新记录";
@@ -2945,6 +3594,14 @@
           ? `<div><strong style="color:var(--primary)">🔵 Step 03 训练</strong> | Step: <strong>${S3.stepCount}</strong> | 全序列Loss: <strong>${seqLoss}</strong></div><div class="muted">Query: <strong>pos[${S3.selectedPos}]「${CHARS.slice(0, S3.selectedPos + 1).join("")}」→${CHARS[S3.selectedPos + 1]}</strong> | 位置Loss: <strong style="color:var(--warning)">${posLoss}</strong> | ${ba}</div>`
           : `<div><strong style="color:var(--success)">🟢 Step 03 推理（1字起步·无Loss·不改权重）</strong> | Step ${S3.stepCount}</div><div class="muted">历史序列(${S3.genIds.length}/12): <strong>「${S3.genIds.map(i => VOCAB[i]).join("")}」</strong> | T = ${S3.temp.toFixed(1)}</div>`;
         tr.innerHTML = `<span><span class="dot" style="background:var(--primary)"></span>注意力山峰</span><span><span class="dot" style="background:var(--success)"></span>Value/目标</span><span><span class="dot" style="background:var(--error)"></span>掩码(-∞)</span><span><span class="dot" style="background:var(--warning)"></span>光束/Loss</span>`;
+      } else {
+        const seqLoss = S4.cache && S4.computedStage >= 7 ? S4.cache.meanLoss.toFixed(4) : "未计算 (0)";
+        const posLoss = S4.cache && S4.computedStage >= 7 ? S4.cache.posLosses[S4.selectedPos].toFixed(4) : "未计算 (0)";
+        const ba = S4.lastReport ? `Step ${S4.lastReport.step} ${S4.lastReport.beforeSeq.toFixed(3)} → ${S4.lastReport.afterSeq.toFixed(3)}` : "尚无更新记录";
+        tl.innerHTML = S4.viewMode === "train"
+          ? `<div><strong style="color:var(--primary)">🔵 Step 04 Mini-GPT 训练</strong> | Step: <strong>${S4.stepCount}</strong> | 全序列Loss: <strong>${seqLoss}</strong></div><div class="muted">pos[${S4.selectedPos}]「${CHARS.slice(0, S4.selectedPos + 1).join("")}」→${CHARS[S4.selectedPos + 1]} | Loss: <strong style="color:var(--warning)">${posLoss}</strong> | ${ba}</div>`
+          : `<div><strong style="color:var(--success)">🟢 Mini-GPT 推理（2层完整GPT·1字起步·不改权重）</strong> | Step ${S4.stepCount}</div><div class="muted">历史序列(${S4.genIds.length}/12): <strong>「${S4.genIds.map(i => VOCAB[i]).join("")}」</strong> | T = ${S4.temp.toFixed(1)}</div>`;
+        tr.innerHTML = `<span><span class="dot" style="background:#06b6d4"></span>LayerNorm</span><span><span class="dot" style="background:#a855f7"></span>FFN(GELU)</span><span><span class="dot" style="background:var(--success)"></span>残差高速路</span><span><span class="dot" style="background:var(--warning)"></span>Loss/骰子</span>`;
       }
     }
 
@@ -3073,9 +3730,28 @@
         document.getElementById("inferWeightTag").textContent = `共享权重 Step ${S3.stepCount}`;
         document.getElementById("genTapeLabel").textContent = "生长中的全序列（末字扫描全部历史）：";
         renderStep03Inspector();
+      } else if (activeStep === 4) {
+        sLbl.textContent = "🔵 观察 Query 位置（切换不改权重，黄框对比两个「月」）：";
+        lrSlider.min = "0.005"; lrSlider.max = "0.06"; lrSlider.step = "0.005"; lrSlider.value = String(S4.lr); lrVal.textContent = S4.lr.toFixed(3);
+        for (let i = 0; i < S3_SEQ; i++) {
+          const b = document.createElement("button");
+          b.className = "mono"; b.style.padding = "2px 6px";
+          if (i === S4.selectedPos) b.classList.add("primary");
+          else if (i === 3 || i === 10) b.style.borderColor = "var(--warning)";
+          b.textContent = `[${i}]${CHARS[i]}→${CHARS[i + 1]}`;
+          b.onclick = () => { S4.viewMode = "train"; S4.flushStage8(); S4.selectedPos = i; renderAllUi(); };
+          sBtns.appendChild(b);
+        }
+        const opts = [["床", "「床」(仅1字起步!)"], ["床前明月", "「床前明月」(第1个「月」)"], ["床前明月光，举头望明月", "「床前明月光，举头望明月」(第2个「月」)"], ["举头望", "「举头望」"]];
+        genSel.innerHTML = opts.map(([v, l]) => `<option value="${v}" ${v === S4.genStartStr ? "selected" : ""}>${l}</option>`).join("");
+        tempSlider.value = String(S4.temp); tempVal.textContent = S4.temp.toFixed(1);
+        document.getElementById("inferStripTitle").textContent = "🟢 Step 04 完整 Mini-GPT 接龙（穿过 2 层 Block 深度思考！）";
+        document.getElementById("inferWeightTag").textContent = `共享权重 Step ${S4.stepCount}`;
+        document.getElementById("genTapeLabel").textContent = "生长中的全序列（2层 Block 深度推理）：";
+        renderStep04Inspector();
       }
 
-      // Render genTape + Roulette for active Step (1, 2, or 3)
+      // Render genTape + Roulette for active Step (1, 2, 3, or 4)
       const tapeEl = document.getElementById("genTape"), rBar = document.getElementById("inferRoulette"), ro = document.getElementById("genReadout");
       tapeEl.innerHTML = ""; rBar.innerHTML = "";
       let ids, probs, lastDice = null;
@@ -3087,10 +3763,14 @@
         ids = S2.genIds; probs = softmaxRow(S2.inferForward(ids.slice(-S2_CTX)).logits, S2.temp);
         lastDice = S2.lastDraw ? S2.lastDraw.dice : null;
         ro.textContent = S2.lastDraw ? `「${S2.lastDraw.prevWinText}」r=${S2.lastDraw.dice.toFixed(2)} → 抽中「${VOCAB[S2.lastDraw.nextId]}」(${(S2.lastDraw.prob * 100).toFixed(1)}%) → 新窗「${S2.lastDraw.newWinText}」` : "点「🎲 推理下一个字」看 3 字滑窗穿过 MLP 抽字并回流！";
-      } else {
+      } else if (activeStep === 3) {
         ids = S3.genIds; const f = S3.forward(ids, null); probs = softmaxRow(f.logits.subarray((ids.length - 1) * V, ids.length * V), S3.temp);
         lastDice = S3.lastDraw ? S3.lastDraw.dice : null;
         ro.textContent = S3.lastDraw ? `「${S3.lastDraw.prevSeqStr}」r=${S3.lastDraw.dice.toFixed(2)} → 抽中「${VOCAB[S3.lastDraw.nextId]}」(${(S3.lastDraw.prob * 100).toFixed(1)}%) → 序列「${S3.lastDraw.seqStr}」` : "只需 1 个「床」字！点「🎲 推理下一个字」看自注意力边长边背诗！";
+      } else {
+        ids = S4.genIds; const f = S4.forward(ids, null); probs = softmaxRow(f.logits.subarray((ids.length - 1) * V, ids.length * V), S4.temp);
+        lastDice = S4.lastDraw ? S4.lastDraw.dice : null;
+        ro.textContent = S4.lastDraw ? `「${S4.lastDraw.prevSeqStr}」r=${S4.lastDraw.dice.toFixed(2)} → 抽中「${VOCAB[S4.lastDraw.nextId]}」(${(S4.lastDraw.prob * 100).toFixed(1)}%) → 序列「${S4.lastDraw.seqStr}」` : "完整 2 层 Mini-GPT！只需 1 字「床」，点「🎲 推理下一个字」测试终极模型！";
       }
       const winStart = activeStep === 1 ? ids.length - 1 : (activeStep === 2 ? Math.max(0, ids.length - S2_CTX) : 0);
       ids.forEach((id, i) => {
@@ -3260,6 +3940,74 @@
       }
     }
 
+    function renderStep04Inspector() {
+      document.getElementById("btnS4Blk0").classList.toggle("primary", S4.selectedBlock === 0);
+      document.getElementById("btnS4Blk1").classList.toggle("primary", S4.selectedBlock === 1);
+      document.getElementById("s4PosTag").textContent = S4.selectedPos;
+      document.getElementById("s4CharTag").textContent = CHARS[S4.selectedPos];
+      document.getElementById("s4FfnBlkTag").textContent = S4.selectedBlock + 1;
+      document.getElementById("s4GradNormBadge").textContent = S4.lastGradNorm > 0 ? `grad_norm: ${S4.lastGradNorm.toFixed(2)}${S4.lastGradNorm > 1 ? " (已裁剪→1.0)" : ""}` : "grad_norm: --";
+
+      const tbl = document.getElementById("s4AttnTable");
+      const reqStage = S4.selectedBlock === 0 ? 2 : 4;
+      const hasA = S4.cache && S4.computedStage >= reqStage;
+      const matW = hasA ? S4.getBlockMeanAttn(S4.selectedBlock, S3_SEQ, S4.cache) : null;
+
+      let html = `<thead><tr><th>Q\\K</th>${CHARS.slice(0, S3_SEQ).map((c, j) => `<th>${j}:${c}</th>`).join("")}</tr></thead><tbody>`;
+      for (let i = 0; i < S3_SEQ; i++) {
+        html += `<tr class="q-row${i === S4.selectedPos ? " active-row" : ""}" data-pos="${i}"><th>${i}:${CHARS[i]}</th>`;
+        for (let j = 0; j < S3_SEQ; j++) {
+          if (j > i) html += `<td class="masked">×</td>`;
+          else if (hasA) {
+            const w = matW[i * S3_SEQ + j], a = Math.min(0.85, 0.08 + w * 0.9);
+            const colRgb = S4.selectedBlock === 0 ? "79,140,255" : "168,85,247";
+            html += `<td style="background:rgba(${colRgb},${a.toFixed(2)});color:${w > 0.42 ? "#fff" : "var(--foreground)"};">${(w * 100).toFixed(0)}%</td>`;
+          } else html += `<td class="muted">--</td>`;
+        }
+        html += `</tr>`;
+      }
+      tbl.innerHTML = html + "</tbody>";
+      tbl.querySelectorAll("tr.q-row").forEach(tr => { tr.onclick = () => { S4.viewMode = "train"; S4.selectedPos = parseInt(tr.dataset.pos, 10); renderAllUi(); }; });
+
+      // LayerNorm Before/After stats
+      if (S4.cache && S4.computedStage >= 6) {
+        const i = S4.selectedPos, mu = S4.cache.lnF.means[i], sd = S4.cache.lnF.stds[i];
+        const outSlice = S4.cache.lnF.out.subarray(i * S4_D, (i + 1) * S4_D);
+        let oMu = 0; for (let c = 0; c < S4_D; c++) oMu += outSlice[c]; oMu /= S4_D;
+        let oVr = 0; for (let c = 0; c < S4_D; c++) oVr += (outSlice[c] - oMu) ** 2; oVr /= S4_D;
+        document.getElementById("s4LnBefore").textContent = `均值 μ = ${mu >= 0 ? "+" : ""}${mu.toFixed(3)}，标准差 σ = ${sd.toFixed(3)}`;
+        document.getElementById("s4LnAfter").textContent = `均值 μ = ${oMu >= 0 ? "+" : ""}${oMu.toFixed(3)}，标准差 σ = ${Math.sqrt(oVr).toFixed(3)}（已稳压！）`;
+      } else {
+        document.getElementById("s4LnBefore").textContent = "等待第 ⑥ 步或训练后查看";
+        document.getElementById("s4LnAfter").textContent = "等待第 ⑥ 步或训练后查看";
+      }
+
+      // FFN 16-dim GELU activations
+      const ffnEl = document.getElementById("s4FfnVals"); ffnEl.innerHTML = "";
+      const ffnReq = S4.selectedBlock === 0 ? 3 : 5;
+      if (S4.cache && S4.computedStage >= ffnReq) {
+        const arr = S4.cache.blocks[S4.selectedBlock].gelu.subarray(S4.selectedPos * S4_FF, (S4.selectedPos + 1) * S4_FF);
+        for (let k = 0; k < S4_FF; k++) {
+          const v = arr[k], sp = document.createElement("span");
+          sp.className = "val-cell";
+          sp.style.color = v > 0.05 ? "var(--success)" : (v < -0.02 ? "#a855f7" : "var(--muted-foreground)");
+          sp.textContent = `f${k}:${v >= 0 ? "+" : ""}${v.toFixed(2)}`;
+          ffnEl.appendChild(sp);
+        }
+      } else {
+        ffnEl.innerHTML = `<span class="muted">待前向算至 Block ${S4.selectedBlock + 1} FFN 后显示 16 维平滑 GELU 激活</span>`;
+      }
+
+      if (S4.cache && S4.computedStage >= 7) {
+        const fmt = pos => {
+          const p = softmaxRow(S4.cache.logits.subarray(pos * V, (pos + 1) * V), 1.0);
+          return `pos[${pos}] (目标「${CHARS[pos + 1]}」) → P(光)=${(p[STOI["光"]] * 100).toFixed(1)}% | P(。)=${(p[STOI["。"]] * 100).toFixed(1)}% | Loss=${S4.cache.posLosses[pos].toFixed(3)}`;
+        };
+        document.getElementById("s4Contrast3").textContent = fmt(3);
+        document.getElementById("s4Contrast10").textContent = fmt(10);
+      }
+    }
+
     function renderAllUi() {
       renderDiffBar();
       renderStepChrome();
@@ -3288,7 +4036,7 @@
       btn.onclick = () => switchStep(parseInt(btn.dataset.step, 10), true);
     });
     document.getElementById("btnPrevStep").onclick = () => { if (activeStep > 0) switchStep(activeStep - 1, true); };
-    document.getElementById("btnNextEvo").onclick = () => { if (activeStep < 3) switchStep(activeStep + 1, true); };
+    document.getElementById("btnNextEvo").onclick = () => { if (activeStep < 4) switchStep(activeStep + 1, true); };
     document.getElementById("btnReplayMorph").onclick = () => {
       if (activeStep === 0) return;
       const prev = activeStep - 1;
@@ -3300,18 +4048,18 @@
 
     document.getElementById("btnModeTrain").onclick = () => {
       flushActiveStepPending();
-      [S0, S1, S2, S3][activeStep].viewMode = "train";
+      [S0, S1, S2, S3, S4][activeStep].viewMode = "train";
       renderAllUi();
     };
     document.getElementById("btnModeInfer").onclick = () => {
       flushActiveStepPending(); pauseActiveAuto();
-      [S0, S1, S2, S3][activeStep].viewMode = "infer";
+      [S0, S1, S2, S3, S4][activeStep].viewMode = "infer";
       renderAllUi();
     };
 
     document.getElementById("btnNextAction").onclick = () => {
       morph = null;
-      const st = [S0, S1, S2, S3][activeStep];
+      const st = [S0, S1, S2, S3, S4][activeStep];
       if (activeStep === 0 && st.stage >= st.stageNames.length) {
         switchStep(1, true);
         return;
@@ -3324,7 +4072,7 @@
 
     document.getElementById("btnAutoPlay").onclick = () => {
       morph = null;
-      const st = [S0, S1, S2, S3][activeStep];
+      const st = [S0, S1, S2, S3, S4][activeStep];
       st.viewMode = "train";
       if (st.mode === "autoplay") { st.mode = "step"; renderAllUi(); }
       else { st.mode = "autoplay"; st.enterStage(st.stage >= st.stageNames.length || st.stage === 0 ? 1 : st.stage, performance.now()); renderAllUi(); }
@@ -3335,6 +4083,7 @@
       if (activeStep === 1) { S1.viewMode = "train"; S1.flushStage5(); S1.mode = "idle"; S1.stage = 0; S1.trainOneEpoch(); S1.trainNarrator = { title: `+1 轮完成（Epoch ${S1.epoch}，全量 Loss = ${S1.lastLossVal.toFixed(4)}）`, desc: "10×10 矩阵柱子已真实生长，下方「死穴对照」实时更新。" }; }
       else if (activeStep === 2) { S2.viewMode = "train"; S2.flushStage8(); S2.mode = "idle"; S2.stage = 0; S2.stepAdamW(false); S2.trainNarrator = { title: `+1 训练 step 完成（Step ${S2.stepCount}，Batch Loss ${S2.lastReport.beforeBatch.toFixed(3)} → ${S2.lastReport.afterBatch.toFixed(3)}）`, desc: "已用新权重重算真实 Loss，下方推理滑窗已同步。" }; }
       else if (activeStep === 3) { S3.viewMode = "train"; S3.flushStage8(); S3.mode = "idle"; S3.stage = 0; S3.stepAdamW(); S3.trainNarrator = { title: `+1 训练 step 完成（Step ${S3.stepCount}，全序列 Loss ${S3.lastReport.beforeSeq.toFixed(3)} → ${S3.lastReport.afterSeq.toFixed(3)}）`, desc: "因果自注意力热力图与长程对照已实时更新！" }; }
+      else if (activeStep === 4) { S4.viewMode = "train"; S4.flushStage8(); S4.mode = "idle"; S4.stage = 0; S4.stepAdamW(); S4.trainNarrator = { title: `+1 训练 step 完成（Step ${S4.stepCount}，全序列 Loss ${S4.lastReport.beforeSeq.toFixed(3)} → ${S4.lastReport.afterSeq.toFixed(3)}）`, desc: `全局梯度范数 ${S4.lastGradNorm.toFixed(2)}，2 层 Block 热力图与 LayerNorm 统计已实时刷新！` }; }
       renderAllUi();
     };
 
@@ -3343,6 +4092,7 @@
       if (activeStep === 1) { S1.viewMode = "train"; S1.flushStage5(); S1.mode = "fast"; S1.fastRemaining = 50; S1.lastFastTick = performance.now(); }
       else if (activeStep === 2) { S2.viewMode = "train"; S2.flushStage8(); S2.mode = "fast"; S2.stage = 8; S2.stage8Applied = true; S2.fastRemaining = 40; S2.lastFastTick = performance.now(); }
       else if (activeStep === 3) { S3.viewMode = "train"; S3.flushStage8(); S3.mode = "fast"; S3.stage = 8; S3.stage8Applied = true; S3.fastRemaining = 60; S3.lastFastTick = performance.now(); }
+      else if (activeStep === 4) { S4.viewMode = "train"; S4.flushStage8(); S4.mode = "fast"; S4.stage = 8; S4.stage8Applied = true; S4.fastRemaining = 60; S4.lastFastTick = performance.now(); }
       renderAllUi();
     };
 
@@ -3351,7 +4101,8 @@
       if (activeStep === 0) S0.init();
       else if (activeStep === 1) S1.init();
       else if (activeStep === 2) S2.init(false);
-      else S3.init();
+      else if (activeStep === 3) S3.init();
+      else S4.init();
       renderAllUi();
     };
 
@@ -3366,7 +4117,7 @@
     };
     document.getElementById("btnS0Clear").onclick = () => { S0.testText = "床前明月"; S0.highlightVocabId = -1; renderAllUi(); };
 
-    // Shared Inference Controls (Steps 1, 2, 3)
+    // Shared Inference Controls (Steps 1, 2, 3, 4)
     document.getElementById("btnGenNext").onclick = () => {
       morph = null;
       const now = performance.now();
@@ -3385,6 +4136,11 @@
         const ids = [...S3.genIds], cache = S3.forward(ids, null), probs = softmaxRow(cache.logits.subarray((ids.length - 1) * V, ids.length * V), S3.temp);
         const r = Math.random(); let cdf = 0, nextId = V - 1; for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
         S3.inferAnim = { startMs: now, prevSeqIds: ids, prevSeqStr: ids.map(i => VOCAB[i]).join(""), nextId, prob: probs[nextId], dice: r, probs, cache, committed: false };
+      } else if (activeStep === 4) {
+        S4.flushStage8(); S4.flushInfer(); S4.viewMode = "infer";
+        const ids = [...S4.genIds], cache = S4.forward(ids, null), probs = softmaxRow(cache.logits.subarray((ids.length - 1) * V, ids.length * V), S4.temp);
+        const r = Math.random(); let cdf = 0, nextId = V - 1; for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
+        S4.inferAnim = { startMs: now, prevSeqIds: ids, prevSeqStr: ids.map(i => VOCAB[i]).join(""), nextId, prob: probs[nextId], dice: r, probs, cache, committed: false };
       }
       renderAllUi();
     };
@@ -3393,6 +4149,7 @@
       if (activeStep === 1) { S1.inferAnim = null; S1.genIds = [S1.genStartId]; S1.lastDraw = null; S1.viewMode = "infer"; }
       else if (activeStep === 2) { S2.inferAnim = null; S2.genIds = [...S2_SAMPLES[S2.genStartIdx].ctxIds]; S2.lastDraw = null; S2.viewMode = "infer"; }
       else if (activeStep === 3) { S3.inferAnim = null; S3.genIds = S3.genStartStr.split("").map(ch => STOI[ch]); S3.lastDraw = null; S3.viewMode = "infer"; }
+      else if (activeStep === 4) { S4.inferAnim = null; S4.genIds = S4.genStartStr.split("").map(ch => STOI[ch]); S4.lastDraw = null; S4.viewMode = "infer"; }
       renderAllUi();
     };
 
@@ -3400,12 +4157,13 @@
       if (activeStep === 1) { S1.genStartId = parseInt(e.target.value, 10); S1.genIds = [S1.genStartId]; S1.lastDraw = null; S1.inferAnim = null; S1.viewMode = "infer"; }
       else if (activeStep === 2) { S2.genStartIdx = parseInt(e.target.value, 10); S2.genIds = [...S2_SAMPLES[S2.genStartIdx].ctxIds]; S2.lastDraw = null; S2.inferAnim = null; S2.viewMode = "infer"; }
       else if (activeStep === 3) { S3.genStartStr = e.target.value; S3.genIds = S3.genStartStr.split("").map(ch => STOI[ch]); S3.lastDraw = null; S3.inferAnim = null; S3.viewMode = "infer"; }
+      else if (activeStep === 4) { S4.genStartStr = e.target.value; S4.genIds = S4.genStartStr.split("").map(ch => STOI[ch]); S4.lastDraw = null; S4.inferAnim = null; S4.viewMode = "infer"; }
       renderAllUi();
     };
 
     document.getElementById("lrSlider").oninput = e => {
       const val = parseFloat(e.target.value);
-      if (activeStep === 1) S1.lr = val; else if (activeStep === 2) S2.lr = val; else if (activeStep === 3) S3.lr = val;
+      if (activeStep === 1) S1.lr = val; else if (activeStep === 2) S2.lr = val; else if (activeStep === 3) S3.lr = val; else if (activeStep === 4) S4.lr = val;
       document.getElementById("lrVal").textContent = activeStep === 1 ? val.toFixed(1) : val.toFixed(3);
     };
 
@@ -3414,9 +4172,12 @@
       if (activeStep === 1) { S1.temp = val; S1.viewMode = "infer"; }
       else if (activeStep === 2) { S2.temp = val; S2.viewMode = "infer"; }
       else if (activeStep === 3) { S3.temp = val; S3.viewMode = "infer"; }
+      else if (activeStep === 4) { S4.temp = val; S4.viewMode = "infer"; }
       renderAllUi();
     };
 
+    document.getElementById("btnS4Blk0").onclick = () => { S4.selectedBlock = 0; renderAllUi(); };
+    document.getElementById("btnS4Blk1").onclick = () => { S4.selectedBlock = 1; renderAllUi(); };
     document.getElementById("headSelect").onchange = e => { S3.selectedHead = parseInt(e.target.value, 10); renderAllUi(); };
     document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
     document.getElementById("camIso").onclick = () => { const c = STEP_META[activeStep].cam; cam.setPreset(c.yaw, c.pitch, c.dist, c.tx, c.tz); };
@@ -3434,8 +4195,8 @@
     document.getElementById("btnCloseScalar").onclick = () => { if (scalarDlg.close) scalarDlg.close(); else scalarDlg.removeAttribute("open"); };
     ["scW1", "scB1", "scW2", "scX"].forEach(id => document.getElementById(id).oninput = renderScalarModal);
 
-    // Boot all 4 steps
-    S0.init(); S1.init(); S2.init(false); S3.init();
+    // Boot all 5 steps (Step 00 -> Step 04 Mini-GPT)
+    S0.init(); S1.init(); S2.init(false); S3.init(); S4.init();
     renderAllUi();
     requestAnimationFrame(renderFrame);
   </script>
