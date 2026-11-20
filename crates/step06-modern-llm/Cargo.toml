@@ -1,0 +1,7 @@
+[package]
+name = "step06-modern-llm"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mini-core = { path = "../mini-core" }

@@ -40,3 +40,10 @@ version = "0.1.0"
 dependencies = [
  "mini-core",
 ]
+
+[[package]]
+name = "step06-modern-llm"
+version = "0.1.0"
+dependencies = [
+ "mini-core",
+]

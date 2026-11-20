@@ -7,4 +7,5 @@ members = [
     "crates/step03-attention",
     "crates/step04-minigpt",
     "crates/step05-sft-chat",
+    "crates/step06-modern-llm",
 ]

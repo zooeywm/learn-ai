@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Learn AI 3D：从 Tokenizer 到迷你 ChatGPT（SFT + KV Cache）全景演化演示（单文件离线版）</title>
+  <title>Learn AI 3D：从 Tokenizer 到现代大模型（RMSNorm + RoPE + GQA + SwiGLU）全景演化演示（单文件离线版）</title>
   <style>
     /* Shared light/dark theme tokens and layout (inlined for 100% single-file offline distribution) */
     :root {
@@ -92,12 +92,12 @@
     /* Step Evolution Stepper */
     .evo-stepper {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 7px;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
       margin-top: 10px;
     }
-    @media (max-width: 1040px) { .evo-stepper { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    @media (max-width: 640px) { .evo-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 1120px) { .evo-stepper { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 680px) { .evo-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .evo-tab {
       text-align: left;
       padding: 8px 10px;
@@ -397,7 +397,7 @@
       <div class="row">
         <div class="flex">
           <span class="badge mono">Learn AI · 单文件 3D 全景演化</span>
-          <h1>从零手搓 LLM：Step 00 → Step 05 迷你 ChatGPT 全景演化演示</h1>
+          <h1>从零手搓 LLM：Step 00 → Step 06 现代大模型全景演化演示</h1>
         </div>
         <div class="flex">
           <button id="btnPrevStep">← 上一 Step</button>
@@ -436,6 +436,11 @@
           <div class="evo-tab-num mono">STEP 05 · 对话实战</div>
           <div class="evo-tab-title">SFT + KV Cache</div>
           <div class="evo-tab-sub">Loss Mask + Prefill/Decode + &lt;|E|&gt;</div>
+        </button>
+        <button class="evo-tab" data-step="6" role="tab">
+          <div class="evo-tab-num mono">STEP 06 · 现代底座</div>
+          <div class="evo-tab-title">LLaMA / DeepSeek</div>
+          <div class="evo-tab-sub">RMSNorm+RoPE+GQA+SwiGLU</div>
         </button>
       </div>
 
@@ -812,6 +817,47 @@
             <strong>🔥 Base 续写机 vs SFT 助手：&lt;|E|&gt; 自动停机信号实测</strong>
             <div class="muted mono" style="margin-top:4px; line-height:1.65;">
               <div id="s5EosReadout">未微调 (Step 0) 时模型不懂 &lt;|E|&gt;；点「⚡ 快速 SFT 微调 60 step」后看句末 P(&lt;|E|&gt;) 飙升至 98%+！</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector 06: Modern LLM (RMSNorm + RoPE + GQA 50% KV Savings + SwiGLU) -->
+    <div id="inspStep06" class="card xs hidden">
+      <div class="row">
+        <div class="muted">
+          <strong>Step 06 现代工业界大模型底座（LLaMA 3 / DeepSeek / Qwen 同款四件套）</strong>：<strong>彻底删掉绝对 pos_emb 与所有偏置 Bias</strong>！2 层 <span class="mono">RMSNorm → RoPE 旋转(Q/K) → GQA(2Q共享1KV, 省50%缓存!) → +Res → RMSNorm → SwiGLU(SiLU(Gate)⊙Up) → +Res</span>（共 <strong>1,048</strong> 参数，比 Step 05 的 1,293 更精炼！Rust 版 48,992 参数，4Q/2KV）。
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="subpanel">
+          <div class="row">
+            <strong>🌀 RoPE 旋转位置编码实时检验（相对距离不变性！）</strong>
+            <span id="s6RopeBadge" class="mono badge" style="color:#06b6d4;">pos_emb = 0 参数</span>
+          </div>
+          <div id="s6RopeProof" class="tape-box mono" style="margin-top:6px; line-height:1.7;"></div>
+          <div style="margin-top:8px;">
+            <strong>⚡ Block 1 SwiGLU 双路门控实测：<span class="mono">SiLU(Gate) ⊙ Up</span>（12 维）</strong>
+            <div id="s6SwigluVals" class="val-grid mono"></div>
+          </div>
+        </div>
+        <div class="subpanel" style="display:flex; flex-direction:column; justify-content:space-between; gap:10px;">
+          <div>
+            <div class="row">
+              <strong>💎 GQA 分组查询注意力 KV Cache（2Q 共享 1KV → 显存减半！）</strong>
+              <span id="s6GqaBadge" class="mono badge" style="color:var(--success);">显存 -50%</span>
+            </div>
+            <div id="s6KvSlots" class="kv-slot-bar mono"></div>
+            <div class="tape-box mono" style="margin-top:8px; line-height:1.7;">
+              <div>· 缓存对比：<strong id="s6KvCompare" style="color:var(--success)">等待 Prefill 推理</strong></div>
+              <div>· 架构对比：<span class="muted">Step 05 (MHA 2Q/2KV + LN + pos_emb + GELU) → Step 06 (GQA 2Q/1KV + RMSNorm + RoPE + SwiGLU)</span></div>
+            </div>
+          </div>
+          <div class="divider">
+            <strong>🔥 现代底座 SFT 收敛实测：3 条唐诗问答句末 P(&lt;|E|&gt;)</strong>
+            <div class="muted mono" style="margin-top:4px; line-height:1.65;">
+              <div id="s6EosReadout">点「⚡ 快速 SFT 微调 60 step」，验证砍掉 pos_emb + 一半 KV 头后依然 100% 满分问答！</div>
             </div>
           </div>
         </div>
@@ -1221,6 +1267,17 @@
           kept: ["2层 Pre-Norm Mini-GPT 骨架(一行不改!)", "LayerNorm + 因果Attn + GELU FFN + 双残差", "Softmax 概率塔"],
         },
       },
+      {
+        id: 6, name: "Step 06 · 现代底座 (LLaMA/DeepSeek)",
+        cam: { yaw: -0.34, pitch: 0.50, dist: 34.0, tx: 0.5, tz: 0.4 },
+        diffFromPrev: {
+          title: "Step 05 GPT-2 骨架 ──▶ Step 06 现代工业界底座（LLaMA 3 / DeepSeek / Qwen 同款四大升级！）",
+          added: ["3D RoPE 旋转位置表盘(Q/K 随位置旋转 θ·m)", "SwiGLU 双路门控 SiLU(Gate)⊙Up"],
+          removed: ["绝对位置编码表 pos_emb (0 参数!)", "LayerNorm 均值减法与全部 Bias", "一半 KV 头投影与缓存"],
+          replaced: ["LayerNorm → RMSNorm", "MHA(2Q/2KV) → GQA(2Q共享1KV, 显存省 50%!)", "GELU FFN → SwiGLU 无偏置门控"],
+          kept: ["对话模板 <|U|>/<|A|>/<|E|>", "Assistant-Only Loss Mask", "Prefill/Decode KV Cache 机制", "Softmax 概率塔"],
+        },
+      },
     ];
 
     // 3D Morph Transition Metadata between adjacent or arbitrary steps
@@ -1392,6 +1449,42 @@
           ],
           calloutsIn: [{ x: 11.6, y: 3.5, z: 0, text: "↻ 恢复: 全位置预训练 Loss 柱", kind: "rep" }],
           diff: STEP_META[4].diffFromPrev,
+        };
+      }
+      if (fromId === 5 && toId === 6) {
+        return {
+          title: "✨ 现代架构大升级：Step 05 GPT-2 骨架 ──▶ Step 06 LLaMA/DeepSeek 现代底座",
+          outRole: { chat_seq: "kept", gpt_ln: "replaced", gpt_block1: "replaced", gpt_ffn: "replaced", gpt_block2: "replaced", gpt_res: "kept", softmax: "kept", loss_mask: "kept", kv_bank: "replaced" },
+          inRole:  { chat_seq: "kept", rms_norm: "replaced", rope_dial: "added", gqa_block: "replaced", swiglu_ffn: "replaced", gpt_res: "kept", softmax: "kept", loss_mask: "kept", gqa_kv_bank: "replaced" },
+          arcs: [
+            { from: { x: -10.8, y: 1.5, z: 0 }, to: { x: -5.4, y: 2.5, z: 0 }, label: "↻ 砍 pos_emb → 装 RoPE 旋转" },
+            { from: { x: -2.8, y: 2.0, z: 0 },  to: { x: -2.8, y: 2.4, z: 0 }, label: "↻ GELU → SwiGLU 双路门控" },
+            { from: { x: -1.8, y: 1.2, z: 3.9 }, to: { x: -1.8, y: 1.4, z: 3.9 }, label: "↻ MHA KV → GQA 减半省 50%!" },
+          ],
+          calloutsOut: [
+            { x: -10.8, y: 2.9, z: 0,   text: "- 拆除: 绝对 pos_emb 与 Bias", kind: "rem" },
+            { x: -1.8,  y: 2.4, z: 3.9, text: "- 砍半: 冗余 KV 头显存 (-50%)", kind: "rem" },
+          ],
+          calloutsIn: [
+            { x: -5.4, y: 3.5, z: 0,   text: "+ 新增: 3D RoPE 旋转 + GQA(2Q/1KV)", kind: "add" },
+            { x: -2.8, y: 3.7, z: 0,   text: "↻ 替换: SwiGLU 双路门控 & RMSNorm", kind: "rep" },
+            { x: -1.8, y: 2.7, z: 3.9, text: "↻ 升级: 50% 瘦身版 GQA KV Cache", kind: "rep" },
+          ],
+          diff: STEP_META[6].diffFromPrev,
+        };
+      }
+      if (fromId === 6 && toId === 5) {
+        return {
+          title: "⏪ 退回对照：Step 06 现代底座 ──▶ Step 05 GPT-2 骨架 (SFT + MHA KV Cache)",
+          outRole: { chat_seq: "kept", rms_norm: "replaced", rope_dial: "removed", gqa_block: "replaced", swiglu_ffn: "replaced", gpt_res: "kept", softmax: "kept", loss_mask: "kept", gqa_kv_bank: "replaced" },
+          inRole:  { chat_seq: "kept", gpt_ln: "replaced", gpt_block1: "replaced", gpt_ffn: "replaced", gpt_block2: "replaced", gpt_res: "kept", softmax: "kept", loss_mask: "kept", kv_bank: "replaced" },
+          arcs: [{ from: { x: -5.4, y: 2.3, z: 0 }, to: { x: -10.8, y: 1.5, z: 0 }, label: "↻ 退回绝对 pos_emb + MHA" }],
+          calloutsOut: [
+            { x: -5.4, y: 3.5, z: 0, text: "- 收起: RoPE 旋转表盘 & GQA", kind: "rem" },
+            { x: -2.8, y: 3.5, z: 0, text: "- 收起: SwiGLU 门控", kind: "rem" },
+          ],
+          calloutsIn: [{ x: -1.8, y: 2.6, z: 3.9, text: "↻ 恢复: 2倍体积 MHA KV Cache", kind: "rep" }],
+          diff: STEP_META[5].diffFromPrev,
         };
       }
       // General fallback (reverse or multi-step jump)
@@ -2792,6 +2885,474 @@
     };
 
     // =========================================================================
+    // 6.7 STEP 06 ENGINE: 现代工业界 LLM 四大升级 (RMSNorm + RoPE + GQA 2Q/1KV + SwiGLU)
+    //     零 pos_emb！零 Bias！GQA KV Cache 显存严格省 50%！完整解析反传 + AdamW！
+    // =========================================================================
+    const S6_D = 8, S6_NQ = 2, S6_NKV = 1, S6_DH = 4, S6_DKV = 4, S6_FF = 12, S6_NL = 2;
+    const S6_SCALE = 1 / Math.sqrt(S6_DH);
+    const S6_ROPE_COS = new Float32Array(S5_TMAX * (S6_DH / 2));
+    const S6_ROPE_SIN = new Float32Array(S5_TMAX * (S6_DH / 2));
+    for (let pos = 0; pos < S5_TMAX; pos++) {
+      for (let k = 0; k < S6_DH / 2; k++) {
+        const theta = pos / Math.pow(10000, (2 * k) / S6_DH);
+        S6_ROPE_COS[pos * (S6_DH / 2) + k] = Math.cos(theta);
+        S6_ROPE_SIN[pos * (S6_DH / 2) + k] = Math.sin(theta);
+      }
+    }
+
+    function rmsForward(x, T, D, gamma) {
+      const eps = 1e-5, invD = 1 / D;
+      const invRms = new Float32Array(T), out = new Float32Array(T * D);
+      for (let r = 0; r < T; r++) {
+        const off = r * D; let sq = 0;
+        for (let c = 0; c < D; c++) sq += x[off + c] * x[off + c];
+        const ir = 1 / Math.sqrt(sq * invD + eps); invRms[r] = ir;
+        for (let c = 0; c < D; c++) out[off + c] = x[off + c] * ir * gamma[c];
+      }
+      return { out, invRms };
+    }
+
+    function rmsBackward(dOut, x, T, D, invRms, gamma, gGamma) {
+      const dX = new Float32Array(T * D), invD = 1 / D;
+      for (let r = 0; r < T; r++) {
+        const off = r * D, ir = invRms[r]; let dot = 0;
+        for (let c = 0; c < D; c++) {
+          const xh = x[off + c] * ir, dy = dOut[off + c];
+          gGamma[c] += dy * xh; dot += (dy * gamma[c]) * xh;
+        }
+        const mDot = dot * invD;
+        for (let c = 0; c < D; c++) dX[off + c] = ir * (dOut[off + c] * gamma[c] - (x[off + c] * ir) * mDot);
+      }
+      return dX;
+    }
+
+    function ropeApplySeq(x, T, nHeads, dHead) {
+      const out = new Float32Array(x.length), cols = nHeads * dHead, half = dHead / 2;
+      for (let t = 0; t < T; t++) {
+        const csOff = t * half;
+        for (let h = 0; h < nHeads; h++) {
+          const off = t * cols + h * dHead;
+          for (let k = 0; k < half; k++) {
+            const c = S6_ROPE_COS[csOff + k], s = S6_ROPE_SIN[csOff + k];
+            const x0 = x[off + 2 * k], x1 = x[off + 2 * k + 1];
+            out[off + 2 * k] = x0 * c - x1 * s;
+            out[off + 2 * k + 1] = x0 * s + x1 * c;
+          }
+        }
+      }
+      return out;
+    }
+
+    function ropeBackwardSeq(dOut, T, nHeads, dHead) {
+      const dX = new Float32Array(dOut.length), cols = nHeads * dHead, half = dHead / 2;
+      for (let t = 0; t < T; t++) {
+        const csOff = t * half;
+        for (let h = 0; h < nHeads; h++) {
+          const off = t * cols + h * dHead;
+          for (let k = 0; k < half; k++) {
+            const c = S6_ROPE_COS[csOff + k], s = S6_ROPE_SIN[csOff + k];
+            const dy0 = dOut[off + 2 * k], dy1 = dOut[off + 2 * k + 1];
+            dX[off + 2 * k] = dy0 * c + dy1 * s;
+            dX[off + 2 * k + 1] = -dy0 * s + dy1 * c;
+          }
+        }
+      }
+      return dX;
+    }
+
+    function ropeApplyVecInplace(v, nHeads, pos) {
+      const half = S6_DH / 2, csOff = pos * half;
+      for (let h = 0; h < nHeads; h++) {
+        const off = h * S6_DH;
+        for (let k = 0; k < half; k++) {
+          const c = S6_ROPE_COS[csOff + k], s = S6_ROPE_SIN[csOff + k];
+          const x0 = v[off + 2 * k], x1 = v[off + 2 * k + 1];
+          v[off + 2 * k] = x0 * c - x1 * s;
+          v[off + 2 * k + 1] = x0 * s + x1 * c;
+        }
+      }
+    }
+
+    function s6RmsVec(x, gamma) {
+      const D = x.length; let sq = 0;
+      for (let c = 0; c < D; c++) sq += x[c] * x[c];
+      const ir = 1 / Math.sqrt(sq / D + 1e-5), out = new Float32Array(D);
+      for (let c = 0; c < D; c++) out[c] = x[c] * ir * gamma[c];
+      return out;
+    }
+
+    const S6 = {
+      viewMode: "train",
+      mode: "idle",
+      stage: 0, // 0..8
+      stageStartMs: 0,
+      stage8Applied: false,
+      stepCount: 0,
+      lr: 0.025,
+      selectedSampleIdx: 0,
+      selectedPos: 3,
+      lastGradNorm: 0,
+      model: null,
+      cache: null,
+      computedStage: 0,
+      lastReport: null,
+      fastRemaining: 0,
+      lastFastTick: 0,
+      visProbs: new Float32Array(S5_V),
+      visMaskLosses: new Float32Array(S5_TMAX),
+      visSwi0: new Float32Array(S6_FF),
+      visSwi1: new Float32Array(S6_FF),
+      visRmsF: new Float32Array(S6_D),
+      temp: 0.3,
+      genSampleIdx: 0,
+      genIds: [...S5_SAMPLES[0].promptIds],
+      kvCache: null,
+      stoppedByEos: false,
+      lastDraw: null,
+      inferAnim: null,
+      trainNarrator: {
+        title: "Step 06 现代工业界底座（LLaMA/DeepSeek 同款）：点「⏭ 下一步」体验 RMSNorm + RoPE + GQA + SwiGLU！",
+        desc: "彻底删掉了绝对位置编码表 pos_emb 和所有偏置 Bias，用旋转位置 + 分组 KV + 双路门控把效率与泛化拉满！",
+      },
+      inferNarrator: {
+        title: "🟢 现代 GQA + RoPE 推理模式：2 个 Query 头共享 1 个 KV 头，KV Cache 显存直接减半（省 50%！）",
+        desc: "先点「⚡ 快速 SFT 微调 60 step」，再点「⚡ Prefill 并吐第 1 字」看瘦身版 3D 青色 GQA KV 缓存库实时省显存！",
+      },
+      stageNames: ["① 纯Token入场(无pos)", "② RMSNorm+RoPE旋转", "③ GQA(2Q共享1KV)", "④ SwiGLU双路门控", "⑤ Block2 现代堆叠", "⑥ 13维概率与<|E|>", "⑦ 0/1 Loss Mask", "⑧ 掩码反传+AdamW"],
+      init() {
+        const rng = new Rng(2027), std = Math.sqrt(1 / S6_D), resStd = std / Math.sqrt(2 * S6_NL);
+        const mkOnes = (n, c) => new Param(n, 1, c, new Float32Array(c).fill(1), false);
+        const mkBlk = idx => ({
+          rms1G: mkOnes(`s6_b${idx}_r1`, S6_D),
+          wq: Param.randn(`s6_b${idx}_wq`, S6_D, S6_D, std, rng, true),
+          wk: Param.randn(`s6_b${idx}_wk`, S6_D, S6_DKV, std, rng, true), // GQA: 8x4!
+          wv: Param.randn(`s6_b${idx}_wv`, S6_D, S6_DKV, std, rng, true), // GQA: 8x4!
+          wo: Param.randn(`s6_b${idx}_wo`, S6_D, S6_D, resStd, rng, true),
+          rms2G: mkOnes(`s6_b${idx}_r2`, S6_D),
+          wGate: Param.randn(`s6_b${idx}_wg`, S6_D, S6_FF, std, rng, true),
+          wUp: Param.randn(`s6_b${idx}_wu`, S6_D, S6_FF, std, rng, true),
+          wDown: Param.randn(`s6_b${idx}_wd`, S6_FF, S6_D, resStd, rng, true),
+        });
+        this.model = {
+          tokEmb: Param.randn("s6_tok", S5_V, S6_D, 0.25, rng, true),
+          blocks: [mkBlk(0), mkBlk(1)],
+          rmsFG: mkOnes("s6_rf", S6_D),
+          wLm: Param.randn("s6_wlm", S6_D, S5_V, std, rng, true),
+        };
+        this.stepCount = 0; this.mode = "idle"; this.stage = 0; this.stage8Applied = false;
+        this.selectedSampleIdx = 0; this.selectedPos = S5_SAMPLES[0].promptLen - 1;
+        this.cache = null; this.computedStage = 0; this.lastReport = null; this.lastGradNorm = 0;
+        this.visProbs.fill(0); this.visMaskLosses.fill(0); this.visSwi0.fill(0); this.visSwi1.fill(0); this.visRmsF.fill(0);
+        this.resetInfer();
+      },
+      resetInfer() {
+        this.genIds = [...S5_SAMPLES[this.genSampleIdx].promptIds];
+        this.kvCache = null; this.stoppedByEos = false; this.lastDraw = null; this.inferAnim = null;
+      },
+      forward(seqIds, targets = null, mask = null) {
+        const m = this.model, T = seqIds.length, grp = S6_NQ / S6_NKV;
+        let x = new Float32Array(T * S6_D);
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S6_D; c++) x[t * S6_D + c] = m.tokEmb.data[seqIds[t] * S6_D + c]; // 无 pos_emb!
+        const blkCaches = [];
+        for (let l = 0; l < S6_NL; l++) {
+          const blk = m.blocks[l], xIn = x;
+          const r1 = rmsForward(xIn, T, S6_D, blk.rms1G.data);
+          const qRaw = matmulFwd(r1.out, T, S6_D, blk.wq.data, S6_D);
+          const kRaw = matmulFwd(r1.out, T, S6_D, blk.wk.data, S6_DKV);
+          const v = matmulFwd(r1.out, T, S6_D, blk.wv.data, S6_DKV);
+          const q = ropeApplySeq(qRaw, T, S6_NQ, S6_DH);
+          const k = ropeApplySeq(kRaw, T, S6_NKV, S6_DH);
+
+          const attnW = new Float32Array(S6_NQ * T * T), ctx = new Float32Array(T * S6_D);
+          for (let h = 0; h < S6_NQ; h++) {
+            const kvh = Math.floor(h / grp), qc = h * S6_DH, kvc = kvh * S6_DH, wb = h * T * T;
+            for (let i = 0; i < T; i++) {
+              const qi = i * S6_D + qc; let ms = -Infinity;
+              const sc = new Float32Array(i + 1);
+              for (let j = 0; j <= i; j++) {
+                const kj = j * S6_DKV + kvc; let dot = 0;
+                for (let d = 0; d < S6_DH; d++) dot += q[qi + d] * k[kj + d];
+                sc[j] = dot * S6_SCALE; if (sc[j] > ms) ms = sc[j];
+              }
+              let se = 0;
+              for (let j = 0; j <= i; j++) { const e = Math.exp(sc[j] - ms); attnW[wb + i * T + j] = e; se += e; }
+              for (let j = 0; j <= i; j++) attnW[wb + i * T + j] /= se;
+              for (let j = 0; j <= i; j++) {
+                const w = attnW[wb + i * T + j], vj = j * S6_DKV + kvc;
+                for (let d = 0; d < S6_DH; d++) ctx[qi + d] += w * v[vj + d];
+              }
+            }
+          }
+          const attnOut = matmulFwd(ctx, T, S6_D, blk.wo.data, S6_D);
+          const x1 = new Float32Array(T * S6_D);
+          for (let i = 0; i < x1.length; i++) x1[i] = xIn[i] + attnOut[i];
+
+          const r2 = rmsForward(x1, T, S6_D, blk.rms2G.data);
+          const gate = matmulFwd(r2.out, T, S6_D, blk.wGate.data, S6_FF);
+          const up = matmulFwd(r2.out, T, S6_D, blk.wUp.data, S6_FF);
+          const act = new Float32Array(gate.length);
+          for (let i = 0; i < gate.length; i++) { const g = gate[i]; act[i] = (g / (1 + Math.exp(-g))) * up[i]; }
+          const down = matmulFwd(act, T, S6_FF, blk.wDown.data, S6_D);
+          const x2 = new Float32Array(T * S6_D);
+          for (let i = 0; i < x2.length; i++) x2[i] = x1[i] + down[i];
+
+          blkCaches.push({ xIn, r1, qRaw, kRaw, q, k, v, attnW, ctx, x1, r2, gate, up, act, x2 });
+          x = x2;
+        }
+        const rmsF = rmsForward(x, T, S6_D, m.rmsFG.data);
+        const logits = matmulFwd(rmsF.out, T, S6_D, m.wLm.data, S5_V);
+
+        let posLosses = null, maskedLoss = 0, activeCount = 0;
+        if (targets) {
+          posLosses = new Float32Array(T);
+          for (let t = 0; t < T; t++) {
+            const l = -Math.log(Math.max(softmaxRow(logits.subarray(t * S5_V, (t + 1) * S5_V), 1.0)[targets[t]], 1e-12));
+            posLosses[t] = l;
+            const mk = mask ? mask[t] : 1.0;
+            if (mk > 0) { maskedLoss += mk * l; activeCount += mk; }
+          }
+          maskedLoss /= Math.max(1, activeCount);
+        }
+        return { T, seqIds: [...seqIds], blocks: blkCaches, xFinal: x, rmsF, logits, posLosses, maskedLoss };
+      },
+      backward(cache, targets, mask, gradScale = 1.0) {
+        const m = this.model, T = cache.T, grp = S6_NQ / S6_NKV;
+        const gTok = new Float32Array(m.tokEmb.data.length), gRmsFG = new Float32Array(S6_D), gWLm = new Float32Array(m.wLm.data.length);
+        const gBlks = m.blocks.map(b => ({
+          rms1G: new Float32Array(S6_D), wq: new Float32Array(b.wq.data.length),
+          wk: new Float32Array(b.wk.data.length), wv: new Float32Array(b.wv.data.length), wo: new Float32Array(b.wo.data.length),
+          rms2G: new Float32Array(S6_D), wGate: new Float32Array(b.wGate.data.length),
+          wUp: new Float32Array(b.wUp.data.length), wDown: new Float32Array(b.wDown.data.length),
+        }));
+
+        const denom = Math.max(1, mask.reduce((a, b) => a + (b > 0 ? b : 0), 0));
+        const dLogits = new Float32Array(T * S5_V);
+        for (let t = 0; t < T; t++) {
+          if (mask[t] <= 0) continue;
+          const sc = (gradScale * mask[t]) / denom, p = softmaxRow(cache.logits.subarray(t * S5_V, (t + 1) * S5_V), 1.0), y = targets[t];
+          for (let j = 0; j < S5_V; j++) dLogits[t * S5_V + j] = (p[j] - (j === y ? 1 : 0)) * sc;
+        }
+        const dRmsFOut = new Float32Array(T * S6_D);
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S6_D; c++) {
+            let acc = 0; const v = cache.rmsF.out[t * S6_D + c];
+            for (let j = 0; j < S5_V; j++) { const g = dLogits[t * S5_V + j]; acc += g * m.wLm.data[c * S5_V + j]; gWLm[c * S5_V + j] += v * g; }
+            dRmsFOut[t * S6_D + c] = acc;
+          }
+        let dX = rmsBackward(dRmsFOut, cache.xFinal, T, S6_D, cache.rmsF.invRms, m.rmsFG.data, gRmsFG);
+
+        for (let l = S6_NL - 1; l >= 0; l--) {
+          const blk = m.blocks[l], bc = cache.blocks[l], gb = gBlks[l];
+          const dX1 = new Float32Array(dX), dAct = new Float32Array(T * S6_FF);
+          for (let t = 0; t < T; t++)
+            for (let p = 0; p < S6_FF; p++) {
+              let acc = 0; const av = bc.act[t * S6_FF + p];
+              for (let c = 0; c < S6_D; c++) { const g = dX[t * S6_D + c]; acc += g * blk.wDown.data[p * S6_D + c]; gb.wDown[p * S6_D + c] += av * g; }
+              dAct[t * S6_FF + p] = acc;
+            }
+          const dGate = new Float32Array(T * S6_FF), dUp = new Float32Array(T * S6_FF);
+          for (let i = 0; i < dAct.length; i++) {
+            const gv = bc.gate[i], uv = bc.up[i], sig = 1 / (1 + Math.exp(-gv)), silu = gv * sig, dSilu = sig * (1 + gv * (1 - sig));
+            dGate[i] = dAct[i] * uv * dSilu; dUp[i] = dAct[i] * silu;
+          }
+          const dR2Out = new Float32Array(T * S6_D);
+          for (let t = 0; t < T; t++)
+            for (let c = 0; c < S6_D; c++) {
+              let acc = 0; const rv = bc.r2.out[t * S6_D + c];
+              for (let p = 0; p < S6_FF; p++) {
+                const gg = dGate[t * S6_FF + p], gu = dUp[t * S6_FF + p];
+                gb.wGate[c * S6_FF + p] += rv * gg; gb.wUp[c * S6_FF + p] += rv * gu;
+                acc += gg * blk.wGate.data[c * S6_FF + p] + gu * blk.wUp.data[c * S6_FF + p];
+              }
+              dR2Out[t * S6_D + c] = acc;
+            }
+          const dX1FromR2 = rmsBackward(dR2Out, bc.x1, T, S6_D, bc.r2.invRms, blk.rms2G.data, gb.rms2G);
+          for (let i = 0; i < dX1.length; i++) dX1[i] += dX1FromR2[i];
+
+          const dXIn = new Float32Array(dX1), dCtx = new Float32Array(T * S6_D);
+          for (let t = 0; t < T; t++)
+            for (let c = 0; c < S6_D; c++) {
+              let acc = 0; const cv = bc.ctx[t * S6_D + c];
+              for (let j = 0; j < S6_D; j++) { const g = dX1[t * S6_D + j]; acc += g * blk.wo.data[c * S6_D + j]; gb.wo[c * S6_D + j] += cv * g; }
+              dCtx[t * S6_D + c] = acc;
+            }
+          const dQRot = new Float32Array(T * S6_D), dKRot = new Float32Array(T * S6_DKV), dV = new Float32Array(T * S6_DKV), dWRow = new Float32Array(T);
+          for (let h = 0; h < S6_NQ; h++) {
+            const kvh = Math.floor(h / grp), qc = h * S6_DH, kvc = kvh * S6_DH, wb = h * T * T;
+            for (let i = 0; i < T; i++) {
+              const qi = i * S6_D + qc; let wDot = 0;
+              for (let j = 0; j <= i; j++) {
+                const w = bc.attnW[wb + i * T + j], vj = j * S6_DKV + kvc; let dw = 0;
+                for (let d = 0; d < S6_DH; d++) { const g = dCtx[qi + d]; dV[vj + d] += w * g; dw += g * bc.v[vj + d]; }
+                dWRow[j] = dw; wDot += w * dw;
+              }
+              for (let j = 0; j <= i; j++) {
+                const ds = bc.attnW[wb + i * T + j] * (dWRow[j] - wDot) * S6_SCALE, kj = j * S6_DKV + kvc;
+                for (let d = 0; d < S6_DH; d++) { dQRot[qi + d] += ds * bc.k[kj + d]; dKRot[kj + d] += ds * bc.q[qi + d]; }
+              }
+            }
+          }
+          const dQ = ropeBackwardSeq(dQRot, T, S6_NQ, S6_DH);
+          const dK = ropeBackwardSeq(dKRot, T, S6_NKV, S6_DH);
+          const dR1Out = new Float32Array(T * S6_D);
+          for (let t = 0; t < T; t++)
+            for (let c = 0; c < S6_D; c++) {
+              const rv = bc.r1.out[t * S6_D + c]; let acc = 0;
+              for (let j = 0; j < S6_D; j++) { const gq = dQ[t * S6_D + j]; gb.wq[c * S6_D + j] += rv * gq; acc += gq * blk.wq.data[c * S6_D + j]; }
+              for (let j = 0; j < S6_DKV; j++) {
+                const gk = dK[t * S6_DKV + j], gv = dV[t * S6_DKV + j];
+                gb.wk[c * S6_DKV + j] += rv * gk; gb.wv[c * S6_DKV + j] += rv * gv;
+                acc += gk * blk.wk.data[c * S6_DKV + j] + gv * blk.wv.data[c * S6_DKV + j];
+              }
+              dR1Out[t * S6_D + c] = acc;
+            }
+          const dXInFromR1 = rmsBackward(dR1Out, bc.xIn, T, S6_D, bc.r1.invRms, blk.rms1G.data, gb.rms1G);
+          for (let i = 0; i < dXIn.length; i++) dXIn[i] += dXInFromR1[i];
+          dX = dXIn;
+        }
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S6_D; c++) gTok[cache.seqIds[t] * S6_D + c] += dX[t * S6_D + c];
+        return { tokEmb: gTok, blocks: gBlks, rmsFG: gRmsFG, wLm: gWLm };
+      },
+      // GQA + RoPE 真单步 KV Cache 推理（每步只存 D_KV=4 维，比 Step 05 MHA 的 D=8 省 50%！）
+      decodeOneWithKv(tokId, kv) {
+        const m = this.model, pos = kv.seqLen, grp = S6_NQ / S6_NKV;
+        let x = new Float32Array(S6_D);
+        for (let c = 0; c < S6_D; c++) x[c] = m.tokEmb.data[tokId * S6_D + c];
+        let swi0 = null, swi1 = null;
+        for (let l = 0; l < S6_NL; l++) {
+          const blk = m.blocks[l], lk = kv.layers[l];
+          const h1 = s6RmsVec(x, blk.rms1G.data);
+          const q = s5MatVec(h1, blk.wq.data, S6_D, S6_D);
+          const kn = s5MatVec(h1, blk.wk.data, S6_D, S6_DKV);
+          const vn = s5MatVec(h1, blk.wv.data, S6_D, S6_DKV);
+          ropeApplyVecInplace(q, S6_NQ, pos);
+          ropeApplyVecInplace(kn, S6_NKV, pos);
+          lk.k.push(kn); lk.v.push(vn);
+          const tot = lk.k.length, attn = new Float32Array(S6_D);
+          for (let h = 0; h < S6_NQ; h++) {
+            const kvh = Math.floor(h / grp), qc = h * S6_DH, kvc = kvh * S6_DH;
+            let ms = -Infinity; const sc = new Float32Array(tot);
+            for (let j = 0; j < tot; j++) {
+              let dot = 0; for (let d = 0; d < S6_DH; d++) dot += q[qc + d] * lk.k[j][kvc + d];
+              sc[j] = dot * S6_SCALE; if (sc[j] > ms) ms = sc[j];
+            }
+            let se = 0; for (let j = 0; j < tot; j++) { sc[j] = Math.exp(sc[j] - ms); se += sc[j]; }
+            for (let j = 0; j < tot; j++) {
+              const w = sc[j] / se;
+              for (let d = 0; d < S6_DH; d++) attn[qc + d] += w * lk.v[j][kvc + d];
+            }
+          }
+          const attnOut = s5MatVec(attn, blk.wo.data, S6_D, S6_D);
+          const x1 = new Float32Array(S6_D); for (let c = 0; c < S6_D; c++) x1[c] = x[c] + attnOut[c];
+          const h2 = s6RmsVec(x1, blk.rms2G.data);
+          const gate = s5MatVec(h2, blk.wGate.data, S6_D, S6_FF);
+          const up = s5MatVec(h2, blk.wUp.data, S6_D, S6_FF);
+          const act = new Float32Array(S6_FF);
+          for (let c = 0; c < S6_FF; c++) act[c] = (gate[c] / (1 + Math.exp(-gate[c]))) * up[c];
+          if (l === 0) swi0 = act; else swi1 = act;
+          const down = s5MatVec(act, blk.wDown.data, S6_FF, S6_D);
+          const x2 = new Float32Array(S6_D); for (let c = 0; c < S6_D; c++) x2[c] = x1[c] + down[c];
+          x = x2;
+        }
+        kv.seqLen += 1;
+        const rmsF = s6RmsVec(x, m.rmsFG.data);
+        const logits = s5MatVec(rmsF, m.wLm.data, S6_D, S5_V);
+        kv.lastLogits = logits; kv.lastSwi0 = swi0; kv.lastSwi1 = swi1; kv.lastRmsF = rmsF;
+        return logits;
+      },
+      prefillKv(promptIds) {
+        const kv = {
+          layers: [{ k: [], v: [] }, { k: [], v: [] }],
+          seqLen: 0, promptLen: promptIds.length, savedTokenCalcs: 0, totalDecodeSteps: 0,
+          lastLogits: null, lastSwi0: null, lastSwi1: null, lastRmsF: null,
+        };
+        for (const tid of promptIds) this.decodeOneWithKv(tid, kv);
+        return kv;
+      },
+      stepAdamW() {
+        const invN = 1 / S5_SAMPLES.length, m = this.model;
+        let acc = null, beforeAll = 0;
+        for (const s of S5_SAMPLES) {
+          const c = this.forward(s.inIds, s.tgtIds, s.mask);
+          beforeAll += c.maskedLoss * invN;
+          const g = this.backward(c, s.tgtIds, s.mask, invN);
+          if (!acc) acc = g;
+          else {
+            for (const k of ["tokEmb", "rmsFG", "wLm"]) for (let i = 0; i < acc[k].length; i++) acc[k][i] += g[k][i];
+            for (let l = 0; l < S6_NL; l++)
+              for (const k of ["rms1G", "wq", "wk", "wv", "wo", "rms2G", "wGate", "wUp", "wDown"])
+                for (let i = 0; i < acc.blocks[l][k].length; i++) acc.blocks[l][k][i] += g.blocks[l][k][i];
+          }
+        }
+        const pairs = [[m.tokEmb, acc.tokEmb], [m.rmsFG, acc.rmsFG], [m.wLm, acc.wLm]];
+        for (let l = 0; l < S6_NL; l++) {
+          const b = m.blocks[l], gb = acc.blocks[l];
+          for (const k of ["rms1G", "wq", "wk", "wv", "wo", "rms2G", "wGate", "wUp", "wDown"]) pairs.push([b[k], gb[k]]);
+        }
+        let nsq = 0; for (const [, g] of pairs) for (let i = 0; i < g.length; i++) nsq += g[i] * g[i];
+        this.lastGradNorm = Math.sqrt(nsq);
+        const clip = this.lastGradNorm > 1.0 ? (1.0 / this.lastGradNorm) : 1.0;
+
+        this.stepCount += 1;
+        for (const [p, g] of pairs) {
+          if (clip < 1.0) for (let i = 0; i < g.length; i++) g[i] *= clip;
+          p.adamwStep(g, this.lr, 0.01, this.stepCount);
+        }
+        let afterAll = 0;
+        for (let i = 0; i < S5_SAMPLES.length; i++) {
+          const s = S5_SAMPLES[i], c = this.forward(s.inIds, s.tgtIds, s.mask);
+          afterAll += c.maskedLoss * invN;
+          if (i === this.selectedSampleIdx) this.cache = c;
+        }
+        this.computedStage = 7; this.kvCache = null; this.stoppedByEos = false;
+        this.genIds = [...S5_SAMPLES[this.genSampleIdx].promptIds];
+        this.lastReport = { step: this.stepCount, beforeAll, afterAll };
+      },
+      flushStage8() { if (this.stage === 8 && !this.stage8Applied) { this.stepAdamW(); this.stage8Applied = true; } },
+      flushInfer() {
+        if (this.inferAnim && !this.inferAnim.committed) {
+          this.inferAnim.committed = true;
+          const a = this.inferAnim;
+          this.genIds.push(a.nextId);
+          if (a.nextId === S5_EOS) {
+            this.stoppedByEos = true;
+            this.inferNarrator = {
+              title: `🛑 现代底座吐出 <|E|>（概率 ${(a.prob * 100).toFixed(1)}%），自动闭嘴！`,
+              desc: `GQA(2Q/1KV) 缓存仅占 ${this.kvCache.seqLen * S6_NL * 2 * S6_DKV} floats，比 Step 05 MHA 省下整整 50% 显存！`,
+            };
+          } else {
+            this.inferNarrator = {
+              title: a.phase === "prefill"
+                ? `🟢 GQA Prefill 完成！一次预填 ${a.prevLen} 槽瘦身 KV（显存 -50%）→ 吐出「${S5_VOCAB[a.nextId]}」`
+                : `🟢 GQA Decode：RoPE 旋转 pos=${a.prevLen}，复用 ${a.reusedSlots} 槽共享 KV → 吐出「${S5_VOCAB[a.nextId]}」`,
+              desc: "继续点「🎲 Decode 下一个字」，观察 3D 青色瘦身 KV Cache 与虚线省显存区！",
+            };
+          }
+          this.lastDraw = { dice: a.dice, nextId: a.nextId, prob: a.prob, phase: a.phase, reusedSlots: a.reusedSlots };
+        }
+      },
+      enterStage(st, nowMs) {
+        this.flushStage8(); this.stage = st; this.stageStartMs = nowMs; this.stage8Applied = false;
+        const s = S5_SAMPLES[this.selectedSampleIdx];
+        if (!this.cache || st === 1 || this.cache.T !== s.inIds.length) this.cache = this.forward(s.inIds, s.tgtIds, s.mask);
+        this.computedStage = Math.max(this.computedStage, Math.min(st, 7));
+        const i = Math.min(this.selectedPos, s.inIds.length - 1);
+        if (st === 1) this.trainNarrator = { title: "① 纯 Token 嵌入入场：彻底删除绝对 pos_emb 表（0 位置参数！）", desc: "入口不再给字符加固定位置向量——位置信息稍后由 RoPE 在每一层按相对角度动态旋转注入！" };
+        else if (st === 2) this.trainNarrator = { title: `② RMSNorm 稳压 + RoPE 旋转位置编码（pos[${i}] 旋转角度 θ·${i}）`, desc: "RMSNorm 去掉均值减法和 beta 偏置更快更稳；RoPE 把 Q 和 K 旋转 m·θ，使点积只依赖相对距离 (m-n)！" };
+        else if (st === 3) this.trainNarrator = { title: "③ GQA 分组查询注意力（2 个 Q 头共享 1 个 KV 头）", desc: "Key 和 Value 维度直接砍半，KV Cache 显存立刻省 50%，这是 LLaMA 3 / Qwen 2.5 / Gemma 的核心提速秘诀！" };
+        else if (st === 4) this.trainNarrator = { title: "④ SwiGLU 双路门控前馈：SiLU(x·W_gate) ⊙ (x·W_up) → W_down", desc: "用一条动态阀门路去逐维开关内容路，全程零 Bias，表达力全面超越 GPT-2 的 GELU FFN！" };
+        else if (st === 5) this.trainNarrator = { title: "⑤ Block 2 现代堆叠 + Final RMSNorm：完成深层语义提炼", desc: "这套结构就是当今 LLaMA 3 / DeepSeek / Qwen 的标准积木（大厂只是把层数堆到 32~80 层）！" };
+        else if (st === 6) {
+          const p = softmaxRow(this.cache.logits.subarray(i * S5_V, (i + 1) * S5_V), 1.0);
+          this.trainNarrator = { title: `⑥ 13 维概率塔：pos[${i}]「${S5_VOCAB[s.inIds[i]]}」→ 目标「${S5_VOCAB[s.tgtIds[i]]}」概率 ${(p[s.tgtIds[i]] * 100).toFixed(1)}%`, desc: "虽然参数比 Step 05 少了近 20%（1,048 vs 1,293），现代四件套的拟合与泛化能力反而更强！" };
+        } else if (st === 7) this.trainNarrator = { title: `⑦ Assistant-Only Loss Mask：Masked Loss = ${this.cache.maskedLoss.toFixed(4)}`, desc: "提问区 mask=0 屏蔽，仅在助手回答与 <|E|> 停机位计分！" };
+        else if (st === 8) this.trainNarrator = { title: `⑧ 掩码反向传播（含 RoPE 逆旋转 -θ 与 GQA 梯度汇聚）+ AdamW`, desc: "RoPE 的反向传播极其优雅：只需把梯度反向旋转 -m·θ 即可精确回传！" };
+      },
+    };
+
+    // =========================================================================
     // 7. Global State, 3D Morph Transition Manager & Camera
     // =========================================================================
     let activeStep = 0; // 0, 1, 2, 3
@@ -2815,6 +3376,7 @@
       else if (activeStep === 3) { S3.flushStage8(); S3.flushInfer(); }
       else if (activeStep === 4) { S4.flushStage8(); S4.flushInfer(); }
       else if (activeStep === 5) { S5.flushStage8(); S5.flushInfer(); }
+      else if (activeStep === 6) { S6.flushStage8(); S6.flushInfer(); }
     }
 
     function pauseActiveAuto() {
@@ -2824,10 +3386,11 @@
       if (S3.mode === "autoplay" || S3.mode === "fast") S3.mode = S3.stage > 0 ? "step" : "idle";
       if (S4.mode === "autoplay" || S4.mode === "fast") S4.mode = S4.stage > 0 ? "step" : "idle";
       if (S5.mode === "autoplay" || S5.mode === "fast") S5.mode = S5.stage > 0 ? "step" : "idle";
+      if (S6.mode === "autoplay" || S6.mode === "fast") S6.mode = S6.stage > 0 ? "step" : "idle";
     }
 
     function switchStep(nextStep, withAnim = true) {
-      if (nextStep < 0 || nextStep > 5) return;
+      if (nextStep < 0 || nextStep > 6) return;
       flushActiveStepPending();
       pauseActiveAuto();
       const prevStep = activeStep;
@@ -3900,13 +4463,225 @@
       }
     }
 
+    function drawStep06Scene(G, dl, project, theme, nowMs, isMorphing) {
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPri = M.parseRgb(theme.primary), rgbSuc = M.parseRgb(theme.success), rgbErr = M.parseRgb(theme.error), rgbWarn = M.parseRgb(theme.warning);
+      const rgbCyan = [6, 182, 212], rgbPurp = [168, 85, 247], rgbTeal = [20, 184, 166];
+      const isTrain = S6.viewMode === "train";
+      const s = S5_SAMPLES[S6.selectedSampleIdx];
+      const dispIds = isTrain ? s.inIds : ((S6.inferAnim && !S6.inferAnim.committed) ? S6.inferAnim.prevIds : S6.genIds);
+      const T = dispIds.length;
+      const activeQ = isTrain ? Math.min(S6.selectedPos, T - 1) : (T - 1);
+      const stT = (!isMorphing && isTrain && S6.stage > 0) ? Math.max(0, Math.min(1, (nowMs - S6.stageStartMs) / stepAnimMs())) : 1;
+
+      const POS = {
+        seq:   { x: -10.8, z: 0 },
+        rms1a: { x:  -7.5, z: 0 },
+        gqa1:  { x:  -5.3, z: 0 },
+        swi1:  { x:  -2.6, z: 0 },
+        rms1b: { x:  -0.2, z: 0 },
+        gqa2:  { x:   1.9, z: 0 },
+        swi2:  { x:   4.4, z: 0 },
+        rmsF:  { x:   6.6, z: 0 },
+        sm:    { x:   9.0, z: 0 },
+        loss:  { x:  11.6, z: 0 },
+      };
+
+      G.pipe("rms_norm", POS.seq, POS.rms1a, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gqa_block", POS.rms1a, POS.gqa1, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("swiglu_ffn", POS.gqa1, POS.swi1, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gqa_block", POS.swi1, POS.rms1b, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("gqa_block", POS.rms1b, POS.gqa2, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("swiglu_ffn", POS.gqa2, POS.swi2, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("rms_norm", POS.swi2, POS.rmsF, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("softmax", POS.rmsF, POS.sm, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      if (isTrain) G.pipe("loss_mask", POS.sm, POS.loss, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+
+      // Module 1: Pure Token Embedding (NO pos_emb!)
+      const seqSpan = 0.72, seqZ = idx => (idx - (T - 1) * 0.5) * seqSpan;
+      const pLen = isTrain ? s.promptLen : S5_SAMPLES[S6.genSampleIdx].promptLen;
+      for (let idx = 0; idx < T; idx++) {
+        const cz = seqZ(idx), tid = dispIds[idx], isAct = idx === activeQ, isCtrl = tid >= 10;
+        const bh = isAct ? 1.35 : (isCtrl ? 1.05 : 0.78);
+        let col = tid === S5_USER ? rgbPurp : (tid === S5_ASST ? rgbCyan : (tid === S5_EOS ? rgbWarn : (isAct ? (isTrain ? rgbPri : rgbSuc) : M.lerpRgb(rgbCard, rgbTeal, 0.45))));
+        G.box("chat_seq", POS.seq.x - 0.44, 0, cz - 0.25, POS.seq.x + 0.44, bh, cz + 0.25, col, 0.94, isAct ? theme.fg : theme.border);
+        const lblCol = tid === S5_EOS ? theme.warning : (tid === S5_ASST ? "#06b6d4" : (tid === S5_USER ? "#a855f7" : (isAct ? (isTrain ? theme.primary : theme.success) : theme.fg)));
+        G.label("chat_seq", POS.seq.x - 0.95, bh + 0.14, cz, `${idx}:${S5_VOCAB[tid]}`, lblCol, isAct || isCtrl ? "bold 11px monospace" : "10px monospace");
+      }
+      G.label("chat_seq", POS.seq.x, 0.2, seqZ(T - 1) + 1.05, "纯 Token 嵌入（无 pos_emb!）", "#14b8a6", "bold 11px sans-serif");
+
+      // Modern Block Drawer: RMSNorm + 3D RoPE Rotary Vector Dial + GQA(2Q/1KV) + SwiGLU Twin Gate×Up
+      function drawModernBlock(rmsPos, gqaPos, swiPos, swiArr, litRms, litGqa, litSwi, title) {
+        G.box("gqa_block", rmsPos.x - 0.8, 0, -2.55, swiPos.x + 0.95, 0.14, 2.55, M.lerpRgb(rgbCard, rgbTeal, 0.18), 0.8, theme.border);
+        G.label("gqa_block", (rmsPos.x + swiPos.x) * 0.5, 0.22, -2.85, title, "#14b8a6", "bold 10px sans-serif");
+
+        // Slim Teal RMSNorm Arch (no beta!)
+        const rCol = litRms ? rgbTeal : rgbBorder;
+        G.box("rms_norm", rmsPos.x - 0.14, 0.14, -1.7, rmsPos.x + 0.14, 2.4, -1.48, rCol, 0.94, theme.fg);
+        G.box("rms_norm", rmsPos.x - 0.14, 0.14, 1.48, rmsPos.x + 0.14, 2.4, 1.7, rCol, 0.94, theme.fg);
+        G.box("rms_norm", rmsPos.x - 0.14, 2.18, -1.7, rmsPos.x + 0.14, 2.42, 1.7, rCol, 0.94, theme.fg);
+        G.label("rms_norm", rmsPos.x, 2.75, 0, "RMSNorm", litRms ? "#14b8a6" : theme.muted, "bold 10px monospace");
+
+        // 3D RoPE Rotary Dial spinning above GQA (angle = activeQ * theta + live subtle phase!)
+        const ropeAlpha = G.modAlpha("rope_dial");
+        if (ropeAlpha > 0.1) {
+          const theta = activeQ * 1.0 + (litRms && !isMorphing ? Math.sin(nowMs * 0.003) * 0.12 : 0);
+          const rx = gqaPos.x, ry = 2.65, rz = 0, rad = 0.72;
+          const pC = project(rx, ry, rz);
+          const pTip = project(rx + Math.cos(theta) * rad, ry + Math.sin(theta) * rad, rz);
+          if (pC && pTip) {
+            ctx.save();
+            ctx.globalAlpha = ropeAlpha * (litRms ? 0.95 : 0.45);
+            ctx.strokeStyle = "#06b6d4"; ctx.lineWidth = 2.0;
+            ctx.beginPath(); ctx.arc(pC.x, pC.y, 18 * pC.scale, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = theme.warning; ctx.lineWidth = 2.6;
+            ctx.beginPath(); ctx.moveTo(pC.x, pC.y); ctx.lineTo(pTip.x, pTip.y); ctx.stroke();
+            ctx.restore();
+          }
+          G.label("rope_dial", rx, ry + 0.85, rz, `RoPE θ·${activeQ}`, litRms ? "#06b6d4" : theme.muted, "bold 10px monospace");
+        }
+
+        // GQA(2Q/1KV) Attention Mini-Matrix
+        for (let r = 0; r < 4; r++) {
+          for (let c = 0; c < 4; c++) {
+            const cx = gqaPos.x + (c - 1.5) * 0.4, cz = (r - 1.5) * 0.4;
+            if (c > r) G.box("gqa_block", cx - 0.15, 0.14, cz - 0.15, cx + 0.15, 0.22, cz + 0.15, M.lerpRgb(rgbCard, rgbErr, 0.36), 0.58, theme.error);
+            else G.box("gqa_block", cx - 0.15, 0.14, cz - 0.15, cx + 0.15, 0.14 + (litGqa ? (r === c ? 0.95 : 0.52) : 0.2), cz + 0.15, litGqa ? rgbTeal : rgbCard, 0.92, theme.border);
+          }
+        }
+        G.label("gqa_block", gqaPos.x, 1.45, 1.55, "GQA 2Q/1KV", litGqa ? "#14b8a6" : theme.muted, "bold 10px monospace");
+
+        // SwiGLU Twin Gate(Amber) ⊙ Up(Purple) Tower (12 dims in 2 rows x 6 cols)
+        for (let i = 0; i < S6_FF; i++) {
+          const row = i < 6 ? -0.34 : 0.34, colIdx = i % 6;
+          const fz = (colIdx - 2.5) * 0.56, v = swiArr[i];
+          const bh = litSwi ? Math.max(0.18, Math.min(2.75, Math.abs(v) * 1.5 + 0.22)) : 0.14;
+          const col = !litSwi ? rgbCard : (i < 6 ? M.lerpRgb(rgbWarn, rgbSuc, v >= 0 ? 0.4 : 0) : M.lerpRgb(rgbPurp, rgbCyan, 0.35));
+          G.box("swiglu_ffn", swiPos.x + row - 0.22, 0.14, fz - 0.18, swiPos.x + row + 0.22, 0.14 + bh, fz + 0.18, col, 0.93, theme.border);
+        }
+        G.label("swiglu_ffn", swiPos.x, 3.25, 0, "SwiGLU(Gate⊙Up)", litSwi ? theme.warning : theme.muted, "bold 10px monospace");
+
+        const resA = G.modAlpha("gpt_res");
+        if (resA > 0.1) {
+          M.drawBezierArc3D(ctx, project, { x: rmsPos.x - 0.4, y: 0.7, z: -1.95 }, { x: (gqaPos.x + swiPos.x) * 0.5, y: 0.7, z: -1.95 }, 2.25, 1.0, theme.success, 2.0, true, resA * (litGqa ? 0.9 : 0.35));
+          M.drawBezierArc3D(ctx, project, { x: (gqaPos.x + swiPos.x) * 0.5, y: 0.7, z: -1.95 }, { x: swiPos.x + 0.85, y: 0.7, z: -1.95 }, 2.35, 1.0, theme.success, 2.0, true, resA * (litSwi ? 0.9 : 0.35));
+        }
+      }
+
+      drawModernBlock(POS.rms1a, POS.gqa1, POS.swi1, S6.visSwi0, !isTrain || S6.computedStage >= 2, !isTrain || S6.computedStage >= 3, !isTrain || S6.computedStage >= 4, "Modern Block 1 (RMSNorm+RoPE+GQA+SwiGLU)");
+      drawModernBlock(POS.rms1b, POS.gqa2, POS.swi2, S6.visSwi1, !isTrain || S6.computedStage >= 5, !isTrain || S6.computedStage >= 5, !isTrain || S6.computedStage >= 5, "Modern Block 2 (LLaMA/DeepSeek 堆叠)");
+
+      // Slim 50%-Smaller GQA KV Cache Bank (+ ghost saved-50% zone!)
+      const kvZ = 3.95, kvCount = (!isTrain && S6.kvCache) ? S6.kvCache.seqLen : 0, kvActive = !isTrain && kvCount > 0;
+      G.box("gqa_kv_bank", -6.8, 0, kvZ - 0.85, 3.2, 0.16, kvZ + 0.85, M.lerpRgb(rgbCard, rgbSuc, kvActive ? 0.25 : 0.1), isTrain ? 0.48 : 0.92, kvActive ? theme.success : theme.border);
+      G.label("gqa_kv_bank", -1.8, 0.25, kvZ + 1.25, kvActive ? `💎 GQA 瘦身 KV Cache：${kvCount} 槽位仅占 ${kvCount * S6_NL * 2 * S6_DKV} floats（比 Step 05 省 50% 显存！）` : "💎 GQA 瘦身 KV Cache（2Q 共享 1KV，宽度砍半省 50% 显存！）", kvActive ? theme.success : theme.muted, "bold 11px sans-serif");
+      const maxSlotsVis = Math.max(kvCount, pLen);
+      for (let sl = 0; sl < Math.min(11, maxSlotsVis); sl++) {
+        const sx = -6.0 + sl * 0.84, filled = sl < kvCount, isPref = sl < pLen;
+        const bh = filled ? (isPref ? 1.2 : 1.5) : 0.16;
+        // Left half: active slim GQA KV slice; Right half: faded dashed ghost showing 50% saved vs MHA!
+        G.box("gqa_kv_bank", sx - 0.28, 0.16, kvZ - 0.48, sx + 0.02, 0.16 + bh, kvZ + 0.48, filled ? (isPref ? rgbCyan : rgbSuc) : rgbCard, isTrain ? 0.4 : (filled ? 0.95 : 0.45), filled ? theme.fg : theme.border);
+        G.box("gqa_kv_bank", sx + 0.04, 0.16, kvZ - 0.48, sx + 0.28, 0.30, kvZ + 0.48, M.lerpRgb(rgbCard, rgbSuc, 0.15), 0.25, theme.success);
+        if (filled && sl < S6.genIds.length) G.label("gqa_kv_bank", sx - 0.12, 0.16 + bh + 0.24, kvZ, S5_VOCAB[S6.genIds[sl]], isPref ? "#06b6d4" : theme.success, "bold 10px monospace");
+      }
+      if (kvActive && !isMorphing) {
+        M.drawBezierArc3D(ctx, project, { x: -4.2, y: 1.25, z: kvZ - 0.4 }, { x: POS.gqa1.x, y: 1.2, z: 1.8 }, 1.2, 1.0, "#14b8a6", 2.0, true, 0.75);
+        M.drawBezierArc3D(ctx, project, { x: 0.8, y: 1.25, z: kvZ - 0.4 }, { x: POS.gqa2.x, y: 1.2, z: 1.8 }, 1.2, 1.0, "#14b8a6", 2.0, true, 0.75);
+      }
+
+      // Final RMSNorm
+      const rmsFLit = !isTrain || S6.computedStage >= 5;
+      for (let d = 0; d < S6_D; d++) {
+        const dz = (d - 3.5) * 0.48, v = S6.visRmsF[d];
+        G.box("rms_norm", POS.rmsF.x - 0.25, 0, dz - 0.16, POS.rmsF.x + 0.25, rmsFLit ? Math.max(0.16, Math.min(2.3, Math.abs(v) * 0.8 + 0.2)) : 0.12, dz + 0.16, !rmsFLit ? rgbCard : (v >= 0 ? rgbTeal : rgbErr), 0.92, theme.border);
+      }
+      G.label("rms_norm", POS.rmsF.x, 2.7, 0, "Final RMS", rmsFLit ? "#14b8a6" : theme.muted, "bold 10px monospace");
+
+      // 13-Bar Softmax Tower
+      const smLit = !isTrain || S6.computedStage >= 6, smSpan = 0.50;
+      for (let j = 0; j < S5_V; j++) {
+        const sz = (j - (S5_V - 1) * 0.5) * smSpan, p = S6.visProbs[j], isEos = j === S5_EOS;
+        const isHi = isTrain ? (j === s.tgtIds[activeQ]) : (S6.inferAnim ? j === S6.inferAnim.nextId : (S6.stoppedByEos && isEos));
+        const col = !smLit ? rgbBorder : (isHi ? (isEos ? rgbWarn : rgbSuc) : (isEos ? M.lerpRgb(rgbPri, rgbWarn, 0.65) : rgbPri));
+        G.box("softmax", POS.sm.x - 0.25, 0, sz - 0.18, POS.sm.x + 0.25, smLit ? Math.max(0.08, p * 4.5) : 0.08, sz + 0.18, col, smLit ? 0.93 : 0.45, isHi || isEos ? theme.fg : theme.border);
+        if (isHi || isEos || p >= 0.07 || j % 2 === 0) {
+          G.label("softmax", POS.sm.x + 0.88, 0.15, sz, smLit ? `${S5_VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${S5_VOCAB[j]}`, isEos ? theme.warning : (isHi ? theme.success : theme.muted), isHi || isEos ? "bold 11px monospace" : "10px monospace");
+        }
+      }
+      G.label("softmax", POS.sm.x, 4.95, 0, isTrain ? "现代底座概率塔 (无Bias)" : `现代 Chat 温度塔 (T=${S6.temp.toFixed(1)})`, isTrain ? "#14b8a6" : theme.success, "bold 11px monospace");
+      if (!isTrain && S6.stoppedByEos) G.label("softmax", POS.sm.x, 5.55, 0, "🛑 <|E|> 自动闭嘴停机！", theme.warning, "bold 13px sans-serif");
+
+      // 0/1 Loss Mask Array (Train mode)
+      if (isTrain) {
+        const maskLit = S6.computedStage >= 7;
+        for (let t = 0; t < T; t++) {
+          const mz = (t - (T - 1) * 0.5) * 0.70, isM1 = s.mask[t] > 0, lv = S6.visMaskLosses[t];
+          const bh = !maskLit ? 0.1 : (isM1 ? Math.max(0.18, Math.min(4.4, lv * 1.4)) : 0.16);
+          G.box("loss_mask", POS.loss.x - 0.36, 0, mz - 0.24, POS.loss.x + 0.36, bh, mz + 0.24, !maskLit ? rgbBorder : (isM1 ? rgbWarn : M.lerpRgb(rgbCard, rgbBorder, 0.5)), isM1 ? 0.94 : 0.52, t === activeQ ? theme.fg : theme.border);
+          G.label("loss_mask", POS.loss.x + 0.85, Math.max(0.25, bh * 0.5), mz, isM1 ? `1·${S5_VOCAB[s.tgtIds[t]]}` : "0·屏蔽", isM1 ? theme.warning : theme.muted, isM1 ? "bold 10px monospace" : "10px monospace");
+        }
+        G.label("loss_mask", POS.loss.x, 4.85, 0, maskLit && S6.cache ? `Masked Loss ${S6.cache.maskedLoss.toFixed(3)}` : "0/1 Loss Mask 阵列", maskLit ? theme.warning : theme.muted, "bold 11px monospace");
+      }
+
+      // Clamped Stage & Inference Orbs
+      if (!isMorphing) {
+        const ptOf = (p, y = 1.45) => ({ x: p.x, y, z: p.z });
+        if (isTrain && S6.stage >= 1 && S6.stage <= 7) {
+          const legs = [
+            [POS.seq, POS.rms1a, "#14b8a6", S5_VOCAB[s.inIds[activeQ]]],
+            [POS.rms1a, POS.gqa1, "#06b6d4", "RoPE"],
+            [POS.gqa1, POS.swi1, "#14b8a6", "GQA"],
+            [POS.swi1, POS.rms1b, theme.warning, "Swi"],
+            [POS.rms1b, POS.rmsF, "#a855f7", "Blk2"],
+            [POS.rmsF, POS.sm, theme.primary, "P"],
+            [POS.sm, POS.loss, theme.warning, "Mask"],
+          ];
+          const [a, b, col, txt] = legs[S6.stage - 1];
+          M.drawBezierArc3D(ctx, project, ptOf(a), ptOf(b), 1.8, stT, col, 2.8);
+          const cur = M.evalArc(ptOf(a), ptOf(b), 1.8, stT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, col, col, txt, "#fff");
+        } else if (isTrain && S6.stage === 8) {
+          const wps = [POS.loss, POS.sm, POS.rmsF, POS.swi2, POS.gqa2, POS.swi1, POS.gqa1, POS.seq];
+          const sf = stT * (wps.length - 1), si = Math.max(0, Math.min(wps.length - 2, Math.floor(sf))), su = sf - si;
+          const cur = M.evalArc(ptOf(wps[si], 1.9), ptOf(wps[si + 1], 1.9), 1.4, su);
+          M.drawBezierArc3D(ctx, project, ptOf(wps[si], 1.9), ptOf(wps[si + 1], 1.9), 1.4, su, theme.warning, 2.8, true);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.32, theme.warning, theme.warning, "-θ", "#000");
+        } else if (!isTrain && S6.inferAnim) {
+          const u = Math.max(0, Math.min(1, (nowMs - S6.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed))), a = S6.inferAnim;
+          if (u < 0.56) {
+            const p = Math.max(0, u / 0.56), isPref = a.phase === "prefill";
+            const wps = [POS.seq, POS.gqa1, { x: -4.2, z: kvZ }, POS.gqa2, { x: 0.8, z: kvZ }, POS.rmsF, POS.sm];
+            const sf = p * (wps.length - 1), si = Math.max(0, Math.min(wps.length - 2, Math.floor(sf))), su = sf - si;
+            const col = isPref ? "#06b6d4" : theme.success;
+            const cur = M.evalArc(ptOf(wps[si], 1.65), ptOf(wps[si + 1], 1.65), 1.3, su);
+            M.drawBezierArc3D(ctx, project, ptOf(wps[si], 1.65), ptOf(wps[si + 1], 1.65), 1.3, su, col, 2.7);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, col, col, isPref ? "GQA" : "Dec", "#000");
+          } else if (u < 0.78) {
+            const p = (u - 0.56) / 0.22;
+            const tz = (a.nextId - (S5_V - 1) * 0.5) * smSpan, ty = Math.max(0.5, S6.visProbs[a.nextId] * 4.5) + 0.55;
+            const sz = -2.8 + (tz + 2.8) * p, dy = 3.9 - (3.9 - ty) * p;
+            M.pushOrb(dl, ctx, project, POS.sm.x, dy, sz, 0.34, theme.warning, theme.warning, S5_VOCAB[a.nextId], "#000");
+            M.pushLabel3D(dl, ctx, project, POS.sm.x, dy + 0.65, sz, a.nextId === S5_EOS ? "🛑 抽中 <|E|> 停机！" : `🎲 抽中「${S5_VOCAB[a.nextId]}」`, a.nextId === S5_EOS ? theme.warning : theme.success, "bold 12px sans-serif", -0.5);
+          } else {
+            const p = (u - 0.78) / 0.22;
+            const from = { x: POS.sm.x, y: Math.max(0.6, S6.visProbs[a.nextId] * 4.5) + 0.4, z: (a.nextId - (S5_V - 1) * 0.5) * smSpan };
+            const to = { x: POS.seq.x, y: 1.1, z: seqZ(T - 1) + 0.65 };
+            M.drawBezierArc3D(ctx, project, from, to, 4.8, p, theme.warning, 3.0, true);
+            const cur = M.evalArc(from, to, 4.8, p);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.35, theme.warning, theme.warning, S5_VOCAB[a.nextId], "#000");
+          }
+        }
+      }
+    }
+
     function drawStepById(id, G, dl, project, theme, nowMs, isMorphing) {
       if (id === 0) drawStep00Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 1) drawStep01Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 2) drawStep02Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 3) drawStep03Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 4) drawStep04Scene(G, dl, project, theme, nowMs, isMorphing);
-      else drawStep05Scene(G, dl, project, theme, nowMs, isMorphing);
+      else if (id === 5) drawStep05Scene(G, dl, project, theme, nowMs, isMorphing);
+      else drawStep06Scene(G, dl, project, theme, nowMs, isMorphing);
     }
 
     // =========================================================================
@@ -4074,6 +4849,38 @@
             if (u >= 0.98 && !S5.inferAnim.committed) { S5.flushInfer(); renderAllUi(); }
             if (u >= 1) { S5.inferAnim = null; progWrap.classList.add("hidden"); }
           } else progWrap.classList.add("hidden");
+        } else if (activeStep === 6) {
+          if (S6.viewMode === "train") {
+            const stT = S6.stage > 0 ? Math.max(0, Math.min(1, (nowMs - S6.stageStartMs) / stepAnimMs())) : 0;
+            if (S6.mode === "step") {
+              progWrap.classList.remove("hidden"); progBar.style.width = `${(S6.stage / 8) * 100}%`;
+              if (S6.stage === 8 && stT >= 0.48 && !S6.stage8Applied) { S6.stepAdamW(); S6.stage8Applied = true; renderAllUi(); }
+            } else if (S6.mode === "autoplay") {
+              progWrap.classList.remove("hidden");
+              const el = nowMs - S6.stageStartMs; progBar.style.width = `${((S6.stage - 1 + Math.min(1, el / stepAnimMs())) / 8) * 100}%`;
+              if (S6.stage === 8 && stT >= 0.48 && !S6.stage8Applied) { S6.stepAdamW(); S6.stage8Applied = true; renderAllUi(); }
+              if (el >= stepAnimMs() + autoHoldMs()) {
+                if (S6.stage < 8) { S6.enterStage(S6.stage + 1, nowMs); renderAllUi(); }
+                else { S6.mode = "step"; renderAllUi(); }
+              }
+            } else if (S6.mode === "fast") {
+              progWrap.classList.remove("hidden");
+              if (nowMs - S6.lastFastTick >= 45 / animSpeed && S6.fastRemaining > 0) {
+                S6.stepAdamW(); S6.fastRemaining--; S6.lastFastTick = nowMs;
+                progBar.style.width = `${((60 - S6.fastRemaining) / 60) * 100}%`; renderAllUi();
+              }
+              if (S6.fastRemaining <= 0) {
+                S6.mode = "idle"; S6.stage = 0;
+                S6.trainNarrator = { title: `🎉 现代底座 SFT 60 step 完成（Step ${S6.stepCount}，Masked Loss = ${S6.cache.maskedLoss.toFixed(4)}）！`, desc: "切到「🟢 推理模式」体验 GQA(2Q/1KV) 瘦身 KV Cache 省 50% 显存 + <|E|> 自动闭嘴！" };
+                renderAllUi();
+              }
+            } else progWrap.classList.add("hidden");
+          } else if (S6.inferAnim) {
+            const u = Math.max(0, Math.min(1, (nowMs - S6.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed)));
+            progWrap.classList.remove("hidden"); progBar.style.width = `${u * 100}%`;
+            if (u >= 0.98 && !S6.inferAnim.committed) { S6.flushInfer(); renderAllUi(); }
+            if (u >= 1) { S6.inferAnim = null; progWrap.classList.add("hidden"); }
+          } else progWrap.classList.add("hidden");
         }
       }
 
@@ -4190,12 +4997,47 @@
         S5.visMaskLosses[t] += (tv - S5.visMaskLosses[t]) * lerpRate;
       }
 
+      // Step 06
+      let s6p = null, s6rms = null, s6sw0 = null, s6sw1 = null;
+      const s6Cur = S5_SAMPLES[S6.selectedSampleIdx], s6Pos = Math.min(S6.selectedPos, s6Cur.inIds.length - 1);
+      if (S6.viewMode === "train") {
+        if (S6.cache && S6.cache.T === s6Cur.inIds.length) {
+          if (S6.computedStage >= 4) s6sw0 = S6.cache.blocks[0].act.subarray(s6Pos * S6_FF, (s6Pos + 1) * S6_FF);
+          if (S6.computedStage >= 5) {
+            s6sw1 = S6.cache.blocks[1].act.subarray(s6Pos * S6_FF, (s6Pos + 1) * S6_FF);
+            s6rms = S6.cache.rmsF.out.subarray(s6Pos * S6_D, (s6Pos + 1) * S6_D);
+          }
+          if (S6.computedStage >= 6) s6p = softmaxRow(S6.cache.logits.subarray(s6Pos * S5_V, (s6Pos + 1) * S5_V), 1.0);
+        }
+      } else {
+        if (S6.kvCache && S6.kvCache.lastLogits) {
+          s6sw0 = S6.kvCache.lastSwi0; s6sw1 = S6.kvCache.lastSwi1; s6rms = S6.kvCache.lastRmsF;
+          s6p = softmaxRow(S6.kvCache.lastLogits, S6.temp);
+        } else {
+          const c = S6.forward(S6.genIds, null, null), last = S6.genIds.length - 1;
+          s6sw0 = c.blocks[0].act.subarray(last * S6_FF, (last + 1) * S6_FF);
+          s6sw1 = c.blocks[1].act.subarray(last * S6_FF, (last + 1) * S6_FF);
+          s6rms = c.rmsF.out.subarray(last * S6_D, (last + 1) * S6_D);
+          s6p = softmaxRow(c.logits.subarray(last * S5_V, (last + 1) * S5_V), S6.temp);
+        }
+      }
+      for (let j = 0; j < S5_V; j++) S6.visProbs[j] += ((s6p ? s6p[j] : 0) - S6.visProbs[j]) * lerpRate;
+      for (let d = 0; d < S6_D; d++) S6.visRmsF[d] += ((s6rms ? s6rms[d] : 0) - S6.visRmsF[d]) * lerpRate;
+      for (let i = 0; i < S6_FF; i++) {
+        S6.visSwi0[i] += ((s6sw0 ? s6sw0[i] : 0) - S6.visSwi0[i]) * lerpRate;
+        S6.visSwi1[i] += ((s6sw1 ? s6sw1[i] : 0) - S6.visSwi1[i]) * lerpRate;
+      }
+      for (let t = 0; t < S5_TMAX; t++) {
+        const tv = (S6.cache && S6.computedStage >= 7 && t < S6.cache.T && s6Cur.mask[t] > 0) ? S6.cache.posLosses[t] : 0;
+        S6.visMaskLosses[t] += (tv - S6.visMaskLosses[t]) * lerpRate;
+      }
+
       // --- Begin 3D Rendering ---
       const theme = M.getThemeColors();
       const { W, H } = M.beginFrame(canvas, ctx, theme);
       const { project, eye } = M.makeProjector(W, H, cam, 1.15, 0.47);
       const rgbBorder = M.parseRgb(theme.border), rgbSuc = M.parseRgb(theme.success);
-      const curInfer = [S0, S1, S2, S3, S4, S5][activeStep].viewMode === "infer";
+      const curInfer = [S0, S1, S2, S3, S4, S5, S6][activeStep].viewMode === "infer";
 
       // Floor grid
       ctx.strokeStyle = curInfer ? M.shade(rgbSuc, 0.8, 0.16) : M.shade(rgbBorder, 1, 0.25);
@@ -4288,15 +5130,15 @@
       });
       document.getElementById("btnPrevStep").disabled = activeStep === 0;
       document.getElementById("btnPrevStep").textContent = activeStep > 0 ? `← 上一 Step (0${activeStep - 1})` : "← 上一 Step";
-      document.getElementById("btnNextEvo").disabled = activeStep === 5;
-      document.getElementById("btnNextEvo").textContent = activeStep < 5 ? `下一 Step (0${activeStep + 1}) →` : "🏆 已通关迷你 ChatGPT (05)";
+      document.getElementById("btnNextEvo").disabled = activeStep === 6;
+      document.getElementById("btnNextEvo").textContent = activeStep < 6 ? `下一 Step (0${activeStep + 1}) →` : "🏆 已通关现代大模型 (06)";
       document.getElementById("btnReplayMorph").disabled = activeStep === 0;
 
       // Show/Hide Step-specific strips & inspectors
       document.getElementById("stripStep00").classList.toggle("hidden", activeStep !== 0);
       document.getElementById("stripTrainInfer").classList.toggle("hidden", activeStep === 0);
       document.getElementById("headSelectWrap").classList.toggle("hidden", activeStep !== 3);
-      for (let i = 0; i <= 5; i++) document.getElementById(`inspStep0${i}`).classList.toggle("hidden", activeStep !== i);
+      for (let i = 0; i <= 6; i++) document.getElementById(`inspStep0${i}`).classList.toggle("hidden", activeStep !== i);
 
       // Train buttons visibility
       document.getElementById("btnTrain1").classList.toggle("hidden", activeStep === 0);
@@ -4304,10 +5146,10 @@
       if (activeStep === 1) { document.getElementById("btnTrain1").textContent = "+1 推进 1 轮"; document.getElementById("btnTrainFast").textContent = "⚡ 50 轮矩阵生长"; }
       else if (activeStep === 2) { document.getElementById("btnTrain1").textContent = "+1 训练 step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速训练 40 step"; }
       else if (activeStep === 3 || activeStep === 4) { document.getElementById("btnTrain1").textContent = "+1 训练 step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速训练 60 step"; }
-      else if (activeStep === 5) { document.getElementById("btnTrain1").textContent = "+1 SFT step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速 SFT 微调 60 step"; }
+      else if (activeStep === 5 || activeStep === 6) { document.getElementById("btnTrain1").textContent = "+1 SFT step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速 SFT 微调 60 step"; }
 
       // Mode switch labels & state
-      const stObj = [S0, S1, S2, S3, S4, S5][activeStep];
+      const stObj = [S0, S1, S2, S3, S4, S5, S6][activeStep];
       const isTrain = stObj.viewMode === "train";
       const btnT = document.getElementById("btnModeTrain"), btnI = document.getElementById("btnModeInfer");
       btnT.textContent = activeStep === 0 ? "🔵 建表流程" : "🔵 训练模式";
@@ -4333,6 +5175,7 @@
         ["① 全部历史+位置", "② 末字Q扫描历史K", "③ 温度掷骰抽字", "④ 追加进序列(1字起步!)"],
         ["① 1字/历史入场", "② 穿过2层Block+LN", "③ 温度掷骰抽字", "④ 追加进序列(完整GPT!)"],
         ["① Prefill并行填缓存", "② Decode单字查KV库", "③ 温度抽字/判<|E|>", "④ 追加KV或自动闭嘴!"],
+        ["① RoPE+GQA Prefill", "② 瘦身KV复用(-50%)", "③ SwiGLU+判<|E|>", "④ 追加瘦身KV/闭嘴!"],
       ][activeStep];
       iPills.innerHTML = inferLabels.map((nm, idx) => `<span class="infer-pill">${nm}</span>${idx < 3 ? '<span class="muted">→</span>' : ""}`).join("");
 
@@ -4355,8 +5198,8 @@
     function renderCorpusAndHuds() {
       const cWrap = document.getElementById("corpusChars"), cLeg = document.getElementById("corpusLegend");
       cWrap.innerHTML = "";
-      if (activeStep === 5) {
-        const s = S5_SAMPLES[S5.selectedSampleIdx];
+      if (activeStep === 5 || activeStep === 6) {
+        const s = S5_SAMPLES[activeStep === 5 ? S5.selectedSampleIdx : S6.selectedSampleIdx];
         s.fullIds.forEach((tid, idx) => {
           const sp = document.createElement("span");
           sp.className = "corpus-char mono";
@@ -4397,11 +5240,12 @@
         "（深蓝=Query · 浅蓝=可见历史 · 绿=target · 虚框=未来掩码）",
         "（深蓝=Query · 浅蓝=可见历史 · 绿=target · 2层 Pre-Norm Mini-GPT）",
         "（浅蓝=用户提问 mask=0 屏蔽 · 深蓝=<|A|> 触发点 · 绿=助手回答+<|E|> mask=1 计分）",
+        "（现代四件套：无 pos_emb · RoPE 相对旋转 · GQA 省 50% KV · SwiGLU 门控）",
       ][activeStep];
 
       // Top-Left HUD & Top-Right Legend & Bottom Narrator
       const tl = document.getElementById("hudTopLeft"), tr = document.getElementById("hudTopRight");
-      const stObj = [S0, S1, S2, S3, S4, S5][activeStep];
+      const stObj = [S0, S1, S2, S3, S4, S5, S6][activeStep];
       const n = stObj.viewMode === "train" ? stObj.trainNarrator : stObj.inferNarrator;
       document.getElementById("narratorTitle").textContent = n.title;
       document.getElementById("narratorDesc").textContent = n.desc;
@@ -4442,7 +5286,7 @@
           ? `<div><strong style="color:var(--primary)">🔵 Step 04 Mini-GPT 训练</strong> | Step: <strong>${S4.stepCount}</strong> | 全序列Loss: <strong>${seqLoss}</strong></div><div class="muted">pos[${S4.selectedPos}]「${CHARS.slice(0, S4.selectedPos + 1).join("")}」→${CHARS[S4.selectedPos + 1]} | Loss: <strong style="color:var(--warning)">${posLoss}</strong> | ${ba}</div>`
           : `<div><strong style="color:var(--success)">🟢 Mini-GPT 推理（2层完整GPT·1字起步·不改权重）</strong> | Step ${S4.stepCount}</div><div class="muted">历史序列(${S4.genIds.length}/12): <strong>「${S4.genIds.map(i => VOCAB[i]).join("")}」</strong> | T = ${S4.temp.toFixed(1)}</div>`;
         tr.innerHTML = `<span><span class="dot" style="background:#06b6d4"></span>LayerNorm</span><span><span class="dot" style="background:#a855f7"></span>FFN(GELU)</span><span><span class="dot" style="background:var(--success)"></span>残差高速路</span><span><span class="dot" style="background:var(--warning)"></span>Loss/骰子</span>`;
-      } else {
+      } else if (activeStep === 5) {
         const s = S5_SAMPLES[S5.selectedSampleIdx];
         const mLoss = S5.cache && S5.computedStage >= 7 ? S5.cache.maskedLoss.toFixed(4) : "未计算 (0)";
         const ba = S5.lastReport ? `Step ${S5.lastReport.step} ${S5.lastReport.beforeAll.toFixed(3)} → ${S5.lastReport.afterAll.toFixed(3)}` : "尚无微调记录";
@@ -4452,6 +5296,16 @@
           ? `<div><strong style="color:var(--primary)">🔵 Step 05 SFT 指令微调</strong> | Step: <strong>${S5.stepCount}</strong> | Masked Loss: <strong>${mLoss}</strong></div><div class="muted">样本: <strong>${s.label}</strong> | 提问mask=0 / 回答+<|E|>mask=1 | ${ba}</div>`
           : `<div><strong style="color:var(--success)">🟢 Prefill + Decode KV Cache 推理</strong> | SFT Step ${S5.stepCount} | 缓存槽位: <strong style="color:#06b6d4">${kvLen}</strong></div><div class="muted">状态: <strong>${S5.stoppedByEos ? "🛑 <|E|> 已自动闭嘴" : (kvLen > 0 ? `已省 ${saved} 次历史重算` : "等待 Prefill")}</strong> | T = ${S5.temp.toFixed(1)}</div>`;
         tr.innerHTML = `<span><span class="dot" style="background:#06b6d4"></span>KV Cache</span><span><span class="dot" style="background:var(--warning)"></span>mask=1/&lt;|E|&gt;</span><span><span class="dot" style="background:var(--border)"></span>mask=0屏蔽</span><span><span class="dot" style="background:var(--success)"></span>Decode新字</span>`;
+      } else {
+        const s = S5_SAMPLES[S6.selectedSampleIdx];
+        const mLoss = S6.cache && S6.computedStage >= 7 ? S6.cache.maskedLoss.toFixed(4) : "未计算 (0)";
+        const ba = S6.lastReport ? `Step ${S6.lastReport.step} ${S6.lastReport.beforeAll.toFixed(3)} → ${S6.lastReport.afterAll.toFixed(3)}` : "尚无微调记录";
+        const kvLen = S6.kvCache ? S6.kvCache.seqLen : 0;
+        const gqaFloats = kvLen * S6_NL * 2 * S6_DKV, mhaFloats = kvLen * S6_NL * 2 * S6_D;
+        tl.innerHTML = S6.viewMode === "train"
+          ? `<div><strong style="color:#14b8a6">🔵 Step 06 现代底座 SFT</strong> | Step: <strong>${S6.stepCount}</strong> | Masked Loss: <strong>${mLoss}</strong></div><div class="muted">样本: <strong>${s.label}</strong> | RMSNorm+RoPE+GQA+SwiGLU | ${ba}</div>`
+          : `<div><strong style="color:var(--success)">🟢 GQA + RoPE 现代推理</strong> | Step ${S6.stepCount} | GQA KV: <strong style="color:#06b6d4">${gqaFloats}</strong> vs MHA ${mhaFloats} (-50%)</div><div class="muted">状态: <strong>${S6.stoppedByEos ? "🛑 <|E|> 已自动闭嘴" : (kvLen > 0 ? `已缓存 ${kvLen} 槽瘦身 KV` : "等待 Prefill")}</strong> | T = ${S6.temp.toFixed(1)}</div>`;
+        tr.innerHTML = `<span><span class="dot" style="background:#14b8a6"></span>RMSNorm/GQA</span><span><span class="dot" style="background:#06b6d4"></span>RoPE/KV</span><span><span class="dot" style="background:var(--warning)"></span>SwiGLU/&lt;|E|&gt;</span><span><span class="dot" style="background:var(--success)"></span>省50%显存</span>`;
       }
     }
 
@@ -4621,16 +5475,40 @@
         document.getElementById("inferWeightTag").textContent = `SFT 权重 Step ${S5.stepCount}`;
         document.getElementById("genTapeLabel").textContent = "对话 Token 流（青=Prefill · 绿=Decode · 橙=<|E|>）：";
         renderStep05Inspector();
+      } else if (activeStep === 6) {
+        sLbl.textContent = "🔵 切换 SFT 问答训练样本（现代四件套 3 条并行微调）：";
+        lrSlider.min = "0.005"; lrSlider.max = "0.06"; lrSlider.step = "0.005"; lrSlider.value = String(S6.lr); lrVal.textContent = S6.lr.toFixed(3);
+        S5_SAMPLES.forEach((sm, idx) => {
+          const b = document.createElement("button");
+          b.className = "mono"; b.style.padding = "2px 8px";
+          if (idx === S6.selectedSampleIdx) b.classList.add("primary");
+          b.textContent = sm.label;
+          b.onclick = () => {
+            S6.viewMode = "train"; S6.flushStage8(); S6.selectedSampleIdx = idx;
+            S6.selectedPos = sm.promptLen - 1;
+            if (S6.computedStage > 0) S6.cache = S6.forward(sm.inIds, sm.tgtIds, sm.mask);
+            renderAllUi();
+          };
+          sBtns.appendChild(b);
+        });
+        genSel.innerHTML = S5_SAMPLES.map((sm, idx) => `<option value="${idx}" ${idx === S6.genSampleIdx ? "selected" : ""}>提问「${sm.qText}」(期待: ${sm.aText}&lt;|E|&gt;)</option>`).join("");
+        tempSlider.value = String(S6.temp); tempVal.textContent = S6.temp.toFixed(1);
+        document.getElementById("inferStripTitle").textContent = "🟢 Step 06 GQA + RoPE 现代底座推理（省 50% KV Cache + <|E|> 停机！）";
+        document.getElementById("inferWeightTag").textContent = `现代权重 Step ${S6.stepCount}`;
+        document.getElementById("genTapeLabel").textContent = "对话 Token 流（GQA 瘦身缓存）：";
+        renderStep06Inspector();
       }
 
-      // Render genTape + Roulette for active Step (1..5)
+      // Render genTape + Roulette for active Step (1..6)
       const tapeEl = document.getElementById("genTape"), rBar = document.getElementById("inferRoulette"), ro = document.getElementById("genReadout");
       const btnGenNext = document.getElementById("btnGenNext");
-      btnGenNext.disabled = activeStep === 5 && S5.stoppedByEos;
-      btnGenNext.textContent = activeStep === 5
-        ? (S5.stoppedByEos ? "🛑 <|E|> 已自动闭嘴" : (!S5.kvCache ? "⚡ Prefill 并吐第 1 字" : "🎲 Decode 下一个字"))
+      const isChatStep = activeStep === 5 || activeStep === 6;
+      const chatObj = activeStep === 6 ? S6 : S5;
+      btnGenNext.disabled = isChatStep && chatObj.stoppedByEos;
+      btnGenNext.textContent = isChatStep
+        ? (chatObj.stoppedByEos ? "🛑 <|E|> 已自动闭嘴" : (!chatObj.kvCache ? "⚡ Prefill 并吐第 1 字" : "🎲 Decode 下一个字"))
         : "🎲 推理下一个字";
-      document.getElementById("btnGenReset").textContent = activeStep === 5 ? "↺ 重置对话 & 清空KV" : "↺ 重置接龙";
+      document.getElementById("btnGenReset").textContent = isChatStep ? "↺ 重置对话 & 清空KV" : "↺ 重置接龙";
       tapeEl.innerHTML = ""; rBar.innerHTML = "";
       let ids, probs, lastDice = null, vocabList = VOCAB;
       if (activeStep === 1) {
@@ -4651,20 +5529,20 @@
         ro.textContent = S4.lastDraw ? `「${S4.lastDraw.prevSeqStr}」r=${S4.lastDraw.dice.toFixed(2)} → 抽中「${VOCAB[S4.lastDraw.nextId]}」(${(S4.lastDraw.prob * 100).toFixed(1)}%) → 序列「${S4.lastDraw.seqStr}」` : "完整 2 层 Mini-GPT！只需 1 字「床」，点「🎲 推理下一个字」测试终极模型！";
       } else {
         vocabList = S5_VOCAB;
-        ids = S5.genIds;
-        if (S5.kvCache && S5.kvCache.lastLogits) probs = softmaxRow(S5.kvCache.lastLogits, S5.temp);
-        else { const f = S5.forward(ids, null, null); probs = softmaxRow(f.logits.subarray((ids.length - 1) * S5_V, ids.length * S5_V), S5.temp); }
-        lastDice = S5.lastDraw ? S5.lastDraw.dice : null;
-        ro.textContent = S5.stoppedByEos
-          ? `🛑 已预测 <|E|> 停机！共复用历史 KV ${S5.kvCache ? S5.kvCache.savedTokenCalcs : 0} 次（点「↺ 重置对话」可再试）`
-          : (S5.lastDraw
-            ? `${S5.lastDraw.phase === "prefill" ? "Prefill" : "Decode"} r=${S5.lastDraw.dice.toFixed(2)} → 抽中「${S5_VOCAB[S5.lastDraw.nextId]}」(${(S5.lastDraw.prob * 100).toFixed(1)}%)`
+        ids = chatObj.genIds;
+        if (chatObj.kvCache && chatObj.kvCache.lastLogits) probs = softmaxRow(chatObj.kvCache.lastLogits, chatObj.temp);
+        else { const f = chatObj.forward(ids, null, null); probs = softmaxRow(f.logits.subarray((ids.length - 1) * S5_V, ids.length * S5_V), chatObj.temp); }
+        lastDice = chatObj.lastDraw ? chatObj.lastDraw.dice : null;
+        ro.textContent = chatObj.stoppedByEos
+          ? `🛑 已预测 <|E|> 停机！${activeStep === 6 ? "GQA 显存比 MHA 省 50%！" : `共复用历史 KV ${chatObj.kvCache ? chatObj.kvCache.savedTokenCalcs : 0} 次`}`
+          : (chatObj.lastDraw
+            ? `${chatObj.lastDraw.phase === "prefill" ? "Prefill" : "Decode"} r=${chatObj.lastDraw.dice.toFixed(2)} → 抽中「${S5_VOCAB[chatObj.lastDraw.nextId]}」(${(chatObj.lastDraw.prob * 100).toFixed(1)}%)`
             : "点「⚡ Prefill 并吐第 1 字」一次性填满提问 KV Cache！");
       }
       const winStart = activeStep === 1 ? ids.length - 1 : (activeStep === 2 ? Math.max(0, ids.length - S2_CTX) : 0);
       ids.forEach((id, i) => {
         const sp = document.createElement("span"); sp.className = "chip";
-        if (activeStep === 5 && id === S5_EOS) { sp.style.borderColor = "var(--warning)"; sp.style.color = "var(--warning)"; sp.style.fontWeight = "700"; }
+        if (isChatStep && id === S5_EOS) { sp.style.borderColor = "var(--warning)"; sp.style.color = "var(--warning)"; sp.style.fontWeight = "700"; }
         else if (i === ids.length - 1) sp.classList.add("latest");
         else if (i >= winStart) sp.classList.add("win");
         sp.textContent = vocabList[id]; tapeEl.appendChild(sp);
@@ -4961,6 +5839,62 @@
       document.getElementById("s5EosReadout").textContent = `${eosProbs.join("  |  ")}（Step ${S5.stepCount}）`;
     }
 
+    function renderStep06Inspector() {
+      // 1) Live mathematical demonstration of RoPE Relative-Distance Invariance!
+      const q0 = new Float32Array([0.6, -0.9, 0.8, 0.4]), k0 = new Float32Array([-0.5, 0.7, 0.9, -0.3]);
+      const qa = new Float32Array(q0), ka = new Float32Array(k0), qb = new Float32Array(q0), kb = new Float32Array(k0);
+      ropeApplyVecInplace(qa, 1, 3); ropeApplyVecInplace(ka, 1, 1);
+      ropeApplyVecInplace(qb, 1, 8); ropeApplyVecInplace(kb, 1, 6); // shifted by +5!
+      let dotA = 0, dotB = 0; for (let i = 0; i < 4; i++) { dotA += qa[i] * ka[i]; dotB += qb[i] * kb[i]; }
+      document.getElementById("s6RopeProof").innerHTML =
+        `<div>· 相对距离 Δ=2 实测：<span style="color:#06b6d4">RoPE(q, pos=3)·RoPE(k, pos=1)</span> = <strong>${dotA.toFixed(6)}</strong></div>` +
+        `<div>· 整体右移 +5 实测：<span style="color:var(--success)">RoPE(q, pos=8)·RoPE(k, pos=6)</span> = <strong>${dotB.toFixed(6)}</strong>（差值 ${Math.abs(dotA - dotB).toExponential(1)} ≈ 0！）</div>` +
+        `<div class="muted">无论问题多长，只要两字相距 Δ 相同，注意力内积严格不变——彻底告别绝对位置错位！</div>`;
+
+      // 2) SwiGLU 12-dim activations
+      const swiEl = document.getElementById("s6SwigluVals"); swiEl.innerHTML = "";
+      const s = S5_SAMPLES[S6.selectedSampleIdx], pos = Math.min(S6.selectedPos, s.inIds.length - 1);
+      if (S6.cache && S6.computedStage >= 4 && S6.cache.T === s.inIds.length) {
+        const arr = S6.cache.blocks[0].act.subarray(pos * S6_FF, (pos + 1) * S6_FF);
+        for (let k = 0; k < S6_FF; k++) {
+          const v = arr[k], sp = document.createElement("span");
+          sp.className = "val-cell";
+          sp.style.color = v > 0.04 ? "var(--success)" : (v < -0.04 ? "var(--warning)" : "var(--muted-foreground)");
+          sp.textContent = `s${k}:${v >= 0 ? "+" : ""}${v.toFixed(2)}`;
+          swiEl.appendChild(sp);
+        }
+      } else {
+        swiEl.innerHTML = `<span class="muted">点「⏭ 下一步」到第 ④ 步或微调后显示 12 维 SwiGLU 门控激活值</span>`;
+      }
+
+      // 3) GQA 50%-smaller KV Cache slots
+      const kv = S6.kvCache, slotsEl = document.getElementById("s6KvSlots"); slotsEl.innerHTML = "";
+      if (!kv) {
+        document.getElementById("s6KvCompare").textContent = "等待 Prefill：每存 1 槽仅需 16 floats（对比 Step 05 MHA 32 floats，直接省 50%！）";
+        S6.genIds.forEach((tid, idx) => {
+          const sp = document.createElement("span"); sp.className = "kv-slot muted";
+          sp.textContent = `[${idx}] ${S5_VOCAB[tid]} (待预填)`; slotsEl.appendChild(sp);
+        });
+      } else {
+        const gqaF = kv.seqLen * S6_NL * 2 * S6_DKV, mhaF = kv.seqLen * S6_NL * 2 * S6_D;
+        document.getElementById("s6KvCompare").textContent = `GQA(2Q/1KV) = ${gqaF} floats  vs  MHA(2Q/2KV) = ${mhaF} floats → 实省 ${mhaF - gqaF} floats (-50.0%!)`;
+        for (let idx = 0; idx < kv.seqLen && idx < S6.genIds.length; idx++) {
+          const tid = S6.genIds[idx], sp = document.createElement("span");
+          sp.className = `kv-slot ${tid === S5_EOS ? "eos" : (idx < kv.promptLen ? "prefill" : "decode")}`;
+          sp.textContent = `[${idx}] ${S5_VOCAB[tid]} (1KV)`;
+          slotsEl.appendChild(sp);
+        }
+      }
+
+      // 4) EOS readout on all 3 Q&A samples
+      const eosProbs = S5_SAMPLES.map(sm => {
+        const c = S6.forward(sm.inIds, null, null), last = sm.inIds.length - 1;
+        const p = softmaxRow(c.logits.subarray(last * S5_V, (last + 1) * S5_V), 1.0)[S5_EOS];
+        return `问「${sm.qText}」P(<|E|>) = ${(p * 100).toFixed(1)}%`;
+      });
+      document.getElementById("s6EosReadout").textContent = `${eosProbs.join("  |  ")}（Step ${S6.stepCount}）`;
+    }
+
     function renderAllUi() {
       renderDiffBar();
       renderStepChrome();
@@ -4989,7 +5923,7 @@
       btn.onclick = () => switchStep(parseInt(btn.dataset.step, 10), true);
     });
     document.getElementById("btnPrevStep").onclick = () => { if (activeStep > 0) switchStep(activeStep - 1, true); };
-    document.getElementById("btnNextEvo").onclick = () => { if (activeStep < 5) switchStep(activeStep + 1, true); };
+    document.getElementById("btnNextEvo").onclick = () => { if (activeStep < 6) switchStep(activeStep + 1, true); };
     document.getElementById("btnReplayMorph").onclick = () => {
       if (activeStep === 0) return;
       const prev = activeStep - 1;
@@ -5001,18 +5935,18 @@
 
     document.getElementById("btnModeTrain").onclick = () => {
       flushActiveStepPending();
-      [S0, S1, S2, S3, S4, S5][activeStep].viewMode = "train";
+      [S0, S1, S2, S3, S4, S5, S6][activeStep].viewMode = "train";
       renderAllUi();
     };
     document.getElementById("btnModeInfer").onclick = () => {
       flushActiveStepPending(); pauseActiveAuto();
-      [S0, S1, S2, S3, S4, S5][activeStep].viewMode = "infer";
+      [S0, S1, S2, S3, S4, S5, S6][activeStep].viewMode = "infer";
       renderAllUi();
     };
 
     document.getElementById("btnNextAction").onclick = () => {
       morph = null;
-      const st = [S0, S1, S2, S3, S4, S5][activeStep];
+      const st = [S0, S1, S2, S3, S4, S5, S6][activeStep];
       if (activeStep === 0 && st.stage >= st.stageNames.length) {
         switchStep(1, true);
         return;
@@ -5025,7 +5959,7 @@
 
     document.getElementById("btnAutoPlay").onclick = () => {
       morph = null;
-      const st = [S0, S1, S2, S3, S4, S5][activeStep];
+      const st = [S0, S1, S2, S3, S4, S5, S6][activeStep];
       st.viewMode = "train";
       if (st.mode === "autoplay") { st.mode = "step"; renderAllUi(); }
       else { st.mode = "autoplay"; st.enterStage(st.stage >= st.stageNames.length || st.stage === 0 ? 1 : st.stage, performance.now()); renderAllUi(); }
@@ -5038,6 +5972,7 @@
       else if (activeStep === 3) { S3.viewMode = "train"; S3.flushStage8(); S3.mode = "idle"; S3.stage = 0; S3.stepAdamW(); S3.trainNarrator = { title: `+1 训练 step 完成（Step ${S3.stepCount}，全序列 Loss ${S3.lastReport.beforeSeq.toFixed(3)} → ${S3.lastReport.afterSeq.toFixed(3)}）`, desc: "因果自注意力热力图与长程对照已实时更新！" }; }
       else if (activeStep === 4) { S4.viewMode = "train"; S4.flushStage8(); S4.mode = "idle"; S4.stage = 0; S4.stepAdamW(); S4.trainNarrator = { title: `+1 训练 step 完成（Step ${S4.stepCount}，全序列 Loss ${S4.lastReport.beforeSeq.toFixed(3)} → ${S4.lastReport.afterSeq.toFixed(3)}）`, desc: `全局梯度范数 ${S4.lastGradNorm.toFixed(2)}，2 层 Block 热力图与 LayerNorm 统计已实时刷新！` }; }
       else if (activeStep === 5) { S5.viewMode = "train"; S5.flushStage8(); S5.mode = "idle"; S5.stage = 0; S5.stepAdamW(); S5.trainNarrator = { title: `+1 SFT 微调完成（Step ${S5.stepCount}，Masked Loss ${S5.lastReport.beforeAll.toFixed(3)} → ${S5.lastReport.afterAll.toFixed(3)}）`, desc: "提问区 mask=0 严格零梯度，仅回答与 <|E|> 区域更新权重！" }; }
+      else if (activeStep === 6) { S6.viewMode = "train"; S6.flushStage8(); S6.mode = "idle"; S6.stage = 0; S6.stepAdamW(); S6.trainNarrator = { title: `+1 现代底座微调完成（Step ${S6.stepCount}，Masked Loss ${S6.lastReport.beforeAll.toFixed(3)} → ${S6.lastReport.afterAll.toFixed(3)}）`, desc: "RMSNorm + RoPE + GQA + SwiGLU 精确解析反传并更新全部 1,048 参数！" }; }
       renderAllUi();
     };
 
@@ -5048,6 +5983,7 @@
       else if (activeStep === 3) { S3.viewMode = "train"; S3.flushStage8(); S3.mode = "fast"; S3.stage = 8; S3.stage8Applied = true; S3.fastRemaining = 60; S3.lastFastTick = performance.now(); }
       else if (activeStep === 4) { S4.viewMode = "train"; S4.flushStage8(); S4.mode = "fast"; S4.stage = 8; S4.stage8Applied = true; S4.fastRemaining = 60; S4.lastFastTick = performance.now(); }
       else if (activeStep === 5) { S5.viewMode = "train"; S5.flushStage8(); S5.mode = "fast"; S5.stage = 8; S5.stage8Applied = true; S5.fastRemaining = 60; S5.lastFastTick = performance.now(); }
+      else if (activeStep === 6) { S6.viewMode = "train"; S6.flushStage8(); S6.mode = "fast"; S6.stage = 8; S6.stage8Applied = true; S6.fastRemaining = 60; S6.lastFastTick = performance.now(); }
       renderAllUi();
     };
 
@@ -5058,7 +5994,8 @@
       else if (activeStep === 2) S2.init(false);
       else if (activeStep === 3) S3.init();
       else if (activeStep === 4) S4.init();
-      else S5.init();
+      else if (activeStep === 5) S5.init();
+      else S6.init();
       renderAllUi();
     };
 
@@ -5097,25 +6034,26 @@
         const ids = [...S4.genIds], cache = S4.forward(ids, null), probs = softmaxRow(cache.logits.subarray((ids.length - 1) * V, ids.length * V), S4.temp);
         const r = Math.random(); let cdf = 0, nextId = V - 1; for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
         S4.inferAnim = { startMs: now, prevSeqIds: ids, prevSeqStr: ids.map(i => VOCAB[i]).join(""), nextId, prob: probs[nextId], dice: r, probs, cache, committed: false };
-      } else if (activeStep === 5) {
-        S5.flushStage8(); S5.flushInfer(); S5.viewMode = "infer";
-        if (S5.stoppedByEos || S5.genIds.length >= S5_TMAX) { renderAllUi(); return; }
-        const prevIds = [...S5.genIds];
+      } else if (activeStep === 5 || activeStep === 6) {
+        const obj = activeStep === 6 ? S6 : S5;
+        obj.flushStage8(); obj.flushInfer(); obj.viewMode = "infer";
+        if (obj.stoppedByEos || obj.genIds.length >= S5_TMAX) { renderAllUi(); return; }
+        const prevIds = [...obj.genIds];
         let phase, logits, reusedSlots = 0;
-        if (!S5.kvCache) {
+        if (!obj.kvCache) {
           phase = "prefill";
-          S5.kvCache = S5.prefillKv(prevIds);
-          logits = S5.kvCache.lastLogits;
+          obj.kvCache = obj.prefillKv(prevIds);
+          logits = obj.kvCache.lastLogits;
         } else {
           phase = "decode";
-          reusedSlots = S5.kvCache.seqLen;
-          S5.kvCache.savedTokenCalcs += reusedSlots;
-          S5.kvCache.totalDecodeSteps += 1;
-          logits = S5.decodeOneWithKv(prevIds[prevIds.length - 1], S5.kvCache);
+          reusedSlots = obj.kvCache.seqLen;
+          obj.kvCache.savedTokenCalcs += reusedSlots;
+          obj.kvCache.totalDecodeSteps += 1;
+          logits = obj.decodeOneWithKv(prevIds[prevIds.length - 1], obj.kvCache);
         }
-        const probs = softmaxRow(logits, S5.temp);
+        const probs = softmaxRow(logits, obj.temp);
         const r = Math.random(); let cdf = 0, nextId = S5_V - 1; for (let j = 0; j < S5_V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
-        S5.inferAnim = { startMs: now, phase, prevIds, prevLen: prevIds.length, reusedSlots, nextId, prob: probs[nextId], dice: r, probs, committed: false };
+        obj.inferAnim = { startMs: now, phase, prevIds, prevLen: prevIds.length, reusedSlots, nextId, prob: probs[nextId], dice: r, probs, committed: false };
       }
       renderAllUi();
     };
@@ -5126,6 +6064,7 @@
       else if (activeStep === 3) { S3.inferAnim = null; S3.genIds = S3.genStartStr.split("").map(ch => STOI[ch]); S3.lastDraw = null; S3.viewMode = "infer"; }
       else if (activeStep === 4) { S4.inferAnim = null; S4.genIds = S4.genStartStr.split("").map(ch => STOI[ch]); S4.lastDraw = null; S4.viewMode = "infer"; }
       else if (activeStep === 5) { S5.resetInfer(); S5.viewMode = "infer"; }
+      else if (activeStep === 6) { S6.resetInfer(); S6.viewMode = "infer"; }
       renderAllUi();
     };
 
@@ -5135,12 +6074,13 @@
       else if (activeStep === 3) { S3.genStartStr = e.target.value; S3.genIds = S3.genStartStr.split("").map(ch => STOI[ch]); S3.lastDraw = null; S3.inferAnim = null; S3.viewMode = "infer"; }
       else if (activeStep === 4) { S4.genStartStr = e.target.value; S4.genIds = S4.genStartStr.split("").map(ch => STOI[ch]); S4.lastDraw = null; S4.inferAnim = null; S4.viewMode = "infer"; }
       else if (activeStep === 5) { S5.genSampleIdx = parseInt(e.target.value, 10); S5.resetInfer(); S5.viewMode = "infer"; }
+      else if (activeStep === 6) { S6.genSampleIdx = parseInt(e.target.value, 10); S6.resetInfer(); S6.viewMode = "infer"; }
       renderAllUi();
     };
 
     document.getElementById("lrSlider").oninput = e => {
       const val = parseFloat(e.target.value);
-      if (activeStep === 1) S1.lr = val; else if (activeStep === 2) S2.lr = val; else if (activeStep === 3) S3.lr = val; else if (activeStep === 4) S4.lr = val; else if (activeStep === 5) S5.lr = val;
+      if (activeStep === 1) S1.lr = val; else if (activeStep === 2) S2.lr = val; else if (activeStep === 3) S3.lr = val; else if (activeStep === 4) S4.lr = val; else if (activeStep === 5) S5.lr = val; else if (activeStep === 6) S6.lr = val;
       document.getElementById("lrVal").textContent = activeStep === 1 ? val.toFixed(1) : val.toFixed(3);
     };
 
@@ -5151,6 +6091,7 @@
       else if (activeStep === 3) { S3.temp = val; S3.viewMode = "infer"; }
       else if (activeStep === 4) { S4.temp = val; S4.viewMode = "infer"; }
       else if (activeStep === 5) { S5.temp = val; S5.viewMode = "infer"; }
+      else if (activeStep === 6) { S6.temp = val; S6.viewMode = "infer"; }
       renderAllUi();
     };
 
@@ -5173,8 +6114,8 @@
     document.getElementById("btnCloseScalar").onclick = () => { if (scalarDlg.close) scalarDlg.close(); else scalarDlg.removeAttribute("open"); };
     ["scW1", "scB1", "scW2", "scX"].forEach(id => document.getElementById(id).oninput = renderScalarModal);
 
-    // Boot all 6 steps (Step 00 -> Step 05 Mini ChatGPT)
-    S0.init(); S1.init(); S2.init(false); S3.init(); S4.init(); S5.init();
+    // Boot all 7 steps (Step 00 -> Step 06 Modern LLaMA/DeepSeek LLM)
+    S0.init(); S1.init(); S2.init(false); S3.init(); S4.init(); S5.init(); S6.init();
     renderAllUi();
     requestAnimationFrame(renderFrame);
   </script>
