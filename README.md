@@ -6,6 +6,7 @@
 
 | 阶段 | 代码目录 | 学习笔记 | 核心内容 | 状态 |
 | :--- | :--- | :--- | :--- | :--- |
+| **全景单文件 3D 演示** | `notes/learn-ai-visualizer.html` | 单文件离线版 | **Step 00 Tokenizer → Step 01 Bigram → Step 02 Autograd/MLP → Step 03 自注意力** 全景串联，支持「上一 Step / 下一 Step」3D 架构迭代过渡动画（直观展示 `+多了 / -少了 / ↻替换 / ✓保留`） | 已就绪 |
 | **共享基础库** | `crates/mini-core` + `notes/assets/` | — | 复用的 `Rng` / `Tokenizer` / `softmax` / 温度采样 + 3D 渲染引擎 `engine3d.js` 与样式 | 已就绪 |
 | **Step 01** | `crates/step01-bigram` | `notes/01-bigram.md` + `01-bigram-visualizer.html` | Bigram 查表模型、交叉熵 Loss、手推梯度、SGD、温度采样 | 已完成 |
 | **Step 02** | `crates/step02-autograd` | `notes/02-autograd.md` + `02-autograd-visualizer.html` | 矩阵张量、Arena Tape 计算图与自动求导（Autograd）、数值梯度单测、3 字上下文多层神经语言模型 | 已完成 |

@@ -1,0 +1,3293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Learn AI 3D：从 Tokenizer 到自注意力全景演化演示（单文件离线版）</title>
+  <style>
+    /* Shared light/dark theme tokens and layout (inlined for 100% single-file offline distribution) */
+    :root {
+      --background: #0d1017;
+      --card: #151924;
+      --content: #1a1f2e;
+      --border: #2a3245;
+      --foreground: #e8edf7;
+      --muted-foreground: #94a3b8;
+      --primary: #4f8cff;
+      --primary-foreground: #ffffff;
+      --secondary: #22293a;
+      --secondary-foreground: #cbd5e1;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --background: #f4f6fb;
+        --card: #ffffff;
+        --content: #edf1f8;
+        --border: #d4dce9;
+        --foreground: #141c2c;
+        --muted-foreground: #5c6b82;
+        --primary: #2563eb;
+        --primary-foreground: #ffffff;
+        --secondary: #e5ebf6;
+        --secondary-foreground: #1e293b;
+        --success: #16a34a;
+        --warning: #d97706;
+        --error: #dc2626;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 14px;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 11px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+    .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .muted { color: var(--muted-foreground); }
+    .xs { font-size: 12px; }
+    h1 { margin: 0; font-size: 16px; }
+
+    .badge {
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: var(--secondary);
+      color: var(--secondary-foreground);
+      font-size: 12px;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      color: var(--foreground);
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    button:hover { border-color: var(--primary); }
+    button.primary {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-color: var(--primary);
+      font-weight: 600;
+    }
+    button.primary:hover { opacity: 0.92; }
+
+    /* Step Evolution Stepper */
+    .evo-stepper {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    @media (max-width: 820px) { .evo-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .evo-tab {
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .evo-tab:hover { border-color: var(--primary); transform: translateY(-1px); }
+    .evo-tab.active {
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 16%, var(--card));
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+    .evo-tab-num { font-size: 11px; font-weight: 700; color: var(--primary); }
+    .evo-tab-title { font-size: 13px; font-weight: 700; margin-top: 2px; }
+    .evo-tab-sub { font-size: 11px; color: var(--muted-foreground); margin-top: 2px; }
+
+    /* Evolution Diff Summary Bar */
+    .diff-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+    .diff-bar.morphing {
+      border-color: var(--warning);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 55%, transparent);
+    }
+    .diff-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+    .diff-pill.add {
+      background: color-mix(in srgb, var(--success) 16%, var(--card));
+      border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+      color: var(--success);
+    }
+    .diff-pill.rem {
+      background: color-mix(in srgb, var(--error) 15%, var(--card));
+      border-color: color-mix(in srgb, var(--error) 55%, var(--border));
+      color: var(--error);
+    }
+    .diff-pill.rep {
+      background: color-mix(in srgb, var(--warning) 16%, var(--card));
+      border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+      color: var(--warning);
+    }
+    .diff-pill.keep {
+      background: color-mix(in srgb, var(--primary) 14%, var(--card));
+      border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+      color: var(--primary);
+    }
+
+    .stage-pill {
+      border-radius: 999px;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      user-select: none;
+      font-size: 11px;
+      transition: all 0.2s ease;
+    }
+    .stage-pill.active {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-color: var(--primary);
+      font-weight: 600;
+    }
+    .stage-pill.done { border-color: var(--success); color: var(--success); }
+
+    .mode-switch {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      gap: 2px;
+    }
+    .mode-btn {
+      padding: 3px 9px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .mode-btn.active-train {
+      background: color-mix(in srgb, var(--primary) 22%, var(--card));
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .mode-btn.active-infer {
+      background: color-mix(in srgb, var(--success) 20%, var(--card));
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .infer-pill {
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--content);
+      color: var(--muted-foreground);
+      font-size: 11px;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .infer-pill.active {
+      border-color: var(--success);
+      background: color-mix(in srgb, var(--success) 18%, var(--content));
+      color: var(--success);
+      font-weight: 700;
+    }
+    .infer-pill.done { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--foreground); }
+
+    .viewport {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--content);
+      margin-top: 10px;
+    }
+    canvas {
+      width: 100%;
+      height: 515px;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+    canvas:active { cursor: grabbing; }
+
+    .hud {
+      position: absolute;
+      pointer-events: none;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--card) 90%, transparent);
+      backdrop-filter: blur(6px);
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+    .hud-tl { top: 12px; left: 12px; max-width: 56%; }
+    .hud-tr { top: 12px; right: 12px; max-width: 40%; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: flex-end; }
+    .hud-bottom { bottom: 12px; left: 12px; right: 12px; }
+    .hud-morph {
+      top: 62px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-color: var(--warning);
+      background: color-mix(in srgb, var(--card) 94%, transparent);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.28);
+      text-align: center;
+      min-width: 320px;
+      max-width: 82%;
+    }
+
+    .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+    .prog-track { width: 112px; height: 6px; border-radius: 999px; overflow: hidden; background: var(--content); border: 1px solid var(--border); }
+    .prog-fill { height: 100%; background: var(--primary); width: 0%; }
+    .hidden { display: none !important; }
+    .divider { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+
+    select {
+      background: var(--content);
+      color: var(--foreground);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    input[type="range"] { accent-color: var(--primary); width: 88px; }
+
+    .chip { padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 12px; }
+    .chip.win { background: color-mix(in srgb, var(--primary) 22%, var(--card)); border-color: var(--primary); font-weight: 700; }
+    .chip.latest { background: var(--success); color: #062814; border-color: var(--success); font-weight: 700; }
+    .chip.oov { background: color-mix(in srgb, var(--error) 20%, var(--card)); border-color: var(--error); color: var(--error); font-weight: 700; }
+
+    .tape-box { background: var(--content); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+    .infer-strip { border-left: 3px solid var(--success); padding-left: 10px; }
+    .roulette-bar {
+      position: relative; height: 16px; border-radius: 6px; overflow: hidden;
+      border: 1px solid var(--border); display: flex; margin-top: 6px; background: var(--card);
+    }
+    .roulette-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--foreground); pointer-events: none; }
+
+    .corpus-char {
+      width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px; border: 1px solid var(--border); background: var(--content); font-size: 13px;
+    }
+    .corpus-char.hist { background: color-mix(in srgb, var(--primary) 16%, var(--content)); border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); }
+    .corpus-char.ctx { background: color-mix(in srgb, var(--primary) 26%, var(--content)); border-color: var(--primary); font-weight: 700; }
+    .corpus-char.query { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); font-weight: 700; }
+    .corpus-char.tgt { background: color-mix(in srgb, var(--success) 24%, var(--content)); border-color: var(--success); color: var(--success); font-weight: 700; }
+    .corpus-char.future { opacity: 0.4; border-style: dashed; border-color: var(--error); }
+
+    .grid-2 { display: grid; grid-template-columns: 7fr 5fr; gap: 12px; margin-top: 10px; }
+    @media (max-width: 960px) { .grid-2 { grid-template-columns: 1fr; } }
+    .subpanel { background: var(--content); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+
+    /* Step 00 Vocab Grid */
+    .vocab-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+    @media (max-width: 640px) { .vocab-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .vocab-cell {
+      padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card);
+      display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.16s ease;
+    }
+    .vocab-cell:hover { border-color: var(--primary); }
+    .vocab-cell.lit { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 16%, var(--card)); }
+
+    /* Step 02 Tape & ReLU Inspector */
+    .tape-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+    @media (max-width: 720px) { .tape-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .tape-slot {
+      padding: 5px 6px; border-radius: 7px; border: 1px solid var(--border); background: var(--card);
+      text-align: left; font-size: 11px; cursor: pointer; transition: all 0.16s ease;
+    }
+    .tape-slot:hover { border-color: var(--primary); }
+    .tape-slot.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+    .tape-slot.fwd { border-color: color-mix(in srgb, var(--primary) 70%, var(--border)); }
+    .tape-slot.bwd { border-color: var(--warning); }
+    .tape-slot.param-kind { background: color-mix(in srgb, var(--secondary) 65%, var(--card)); }
+    .val-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+    .val-cell { padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border); background: var(--card); font-size: 11px; }
+    .embed-groups { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 4px; }
+    .embed-group { border-left: 2px solid var(--primary); padding-left: 6px; }
+    .neuron-btn { padding: 3px 8px; border-radius: 6px; font-size: 11px; }
+    .neuron-btn.open { border-color: var(--success); }
+    .neuron-btn.closed { border-color: var(--error); color: var(--error); }
+    .neuron-btn.selected { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+
+    /* Step 03 Attention Heatmap */
+    .attn-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; table-layout: fixed; }
+    .attn-table th, .attn-table td { border: 1px solid var(--border); text-align: center; padding: 3px 1px; overflow: hidden; white-space: nowrap; }
+    .attn-table tr.q-row { cursor: pointer; }
+    .attn-table tr.q-row:hover td { outline: 1px solid var(--primary); }
+    .attn-table tr.q-row.active-row th { background: var(--primary); color: var(--primary-foreground); }
+    .attn-table td.masked { color: color-mix(in srgb, var(--error) 65%, var(--muted-foreground)); background: color-mix(in srgb, var(--error) 6%, var(--card)); font-size: 10px; }
+    .score-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 225px; overflow-y: auto; }
+    .score-row { display: grid; grid-template-columns: 54px 66px 1fr 44px; align-items: center; gap: 6px; font-size: 11px; }
+    .score-bar-track { height: 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); overflow: hidden; }
+    .score-bar-fill { height: 100%; background: var(--primary); transition: width 0.2s ease; }
+
+    /* Scalar Modal */
+    .modal-card {
+      max-width: 680px; width: calc(100% - 24px); max-height: calc(100% - 24px); overflow: auto;
+      color: var(--foreground); background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+    }
+    .modal-card::backdrop { background: rgba(0, 0, 0, 0.55); }
+    .scalar-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0; }
+    .scalar-node { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--content); min-width: 92px; }
+    .sliders { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+    @media (max-width: 860px) { .sliders { grid-template-columns: repeat(2, 1fr); } }
+    .slider-box {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background: var(--content); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+    }
+    .slider-box input[type="range"] { flex: 1; min-width: 56px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- =================================================================== -->
+    <!-- CARD 1: GLOBAL EVOLUTION STEPPER + LIVE ARCHITECTURE DIFF SUMMARY   -->
+    <!-- =================================================================== -->
+    <div class="card">
+      <div class="row">
+        <div class="flex">
+          <span class="badge mono">Learn AI · 单文件 3D 全景演化</span>
+          <h1>从零手搓 LLM：Step 00 → Step 03 架构迭代演示</h1>
+        </div>
+        <div class="flex">
+          <button id="btnPrevStep">← 上一 Step</button>
+          <button id="btnReplayMorph" title="重播上一步到当前步的 3D 架构迭代过渡动画">↻ 重播过渡</button>
+          <button id="btnNextEvo" class="primary">下一 Step →</button>
+        </div>
+      </div>
+
+      <div class="evo-stepper" role="tablist" aria-label="演化关卡切换">
+        <button class="evo-tab active" data-step="0" role="tab">
+          <div class="evo-tab-num mono">STEP 00 · 入口基石</div>
+          <div class="evo-tab-title">Tokenizer 分词与词表</div>
+          <div class="evo-tab-sub">文本拆字 → 去重排序 V=10 → Encode/Decode</div>
+        </button>
+        <button class="evo-tab" data-step="1" role="tab">
+          <div class="evo-tab-num mono">STEP 01 · 最简模型</div>
+          <div class="evo-tab-title">Bigram 单字查表</div>
+          <div class="evo-tab-sub">10×10 查表矩阵 + Softmax + Loss + SGD</div>
+        </button>
+        <button class="evo-tab" data-step="2" role="tab">
+          <div class="evo-tab-num mono">STEP 02 · 深度学习</div>
+          <div class="evo-tab-title">Autograd &amp; 3字 MLP</div>
+          <div class="evo-tab-sub">3字拼接(12维) + ReLU 门 + Arena-Tape + AdamW</div>
+        </button>
+        <button class="evo-tab" data-step="3" role="tab">
+          <div class="evo-tab-num mono">STEP 03 · Transformer 心脏</div>
+          <div class="evo-tab-title">因果多头自注意力</div>
+          <div class="evo-tab-sub">位置编码 + Q/K/V + 因果下三角掩码 + 1字起步</div>
+        </button>
+      </div>
+
+      <!-- Architecture Evolution Diff Bar (Clearly shows + 多了 / - 少了 / ↻ 替换 / ✓ 保留) -->
+      <div id="diffBar" class="diff-bar xs"></div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- CARD 2: UNIFIED SINGLE 3D STAGE (Morphs seamlessly across Steps!)   -->
+    <!-- =================================================================== -->
+    <div class="card">
+      <!-- Top Action Bar for Active Step -->
+      <div class="row">
+        <div class="flex">
+          <span class="xs muted">共享短语料：</span>
+          <div id="corpusChars" class="flex" style="gap:4px;"></div>
+          <span id="corpusLegend" class="xs muted" style="margin-left:4px;"></span>
+        </div>
+        <div class="flex">
+          <button id="btnNextAction" class="primary">⏭ 下一步</button>
+          <button id="btnAutoPlay">▶ 自动连播</button>
+          <button id="btnTrain1">+1 训练 step</button>
+          <button id="btnTrainFast">⚡ 快速训练</button>
+          <button id="btnResetStep">↺ 重置</button>
+        </div>
+      </div>
+
+      <!-- Mode Switch + Stage Ribbon + Head/Speed/Camera -->
+      <div class="row xs divider">
+        <div class="flex" style="gap:8px;">
+          <div class="mode-switch" role="tablist">
+            <button id="btnModeTrain" class="mode-btn active-train" role="tab">🔵 训练模式</button>
+            <button id="btnModeInfer" class="mode-btn" role="tab">🟢 推理模式</button>
+          </div>
+          <div id="stagePills" class="flex"></div>
+          <div id="inferPills" class="flex hidden"></div>
+        </div>
+        <div class="flex">
+          <label id="headSelectWrap" class="flex muted hidden">
+            注意力头:
+            <select id="headSelect" class="mono">
+              <option value="-1" selected>2头平均</option>
+              <option value="0">Head 0</option>
+              <option value="1">Head 1</option>
+            </select>
+          </label>
+          <label class="flex muted">
+            速度:
+            <select id="speedSelect" class="mono">
+              <option value="0.5">0.5x 慢放</option>
+              <option value="1" selected>1.0x 正常</option>
+              <option value="2">2.0x 快速</option>
+              <option value="3">3.0x 极速</option>
+            </select>
+          </label>
+          <button id="camIso">立体视角</button>
+          <button id="camTop">俯视</button>
+          <button id="camFront">正视</button>
+          <button id="camOrbit">自动环绕</button>
+        </div>
+      </div>
+
+      <!-- Single Shared 3D Canvas -->
+      <div class="viewport">
+        <canvas id="scene3d"></canvas>
+
+        <!-- Top-Left HUD -->
+        <div class="hud hud-tl mono" id="hudTopLeft"></div>
+
+        <!-- Top-Right Legend -->
+        <div class="hud hud-tr" id="hudTopRight"></div>
+
+        <!-- Center-Top Floating 3D Morph Banner (Visible ONLY during step transition!) -->
+        <div class="hud hud-morph hidden" id="morphBanner">
+          <div id="morphTitle" style="font-weight:700; color:var(--warning); font-size:13px;"></div>
+          <div id="morphSub" class="muted xs" style="margin-top:3px;"></div>
+          <div class="prog-track" style="width:100%; margin-top:6px;">
+            <div id="morphProgFill" class="prog-fill" style="background:var(--warning);"></div>
+          </div>
+        </div>
+
+        <!-- Bottom Narrator -->
+        <div class="hud hud-bottom">
+          <div class="row">
+            <strong id="narratorTitle"></strong>
+            <div id="stageProgressWrap" class="prog-track hidden"><div id="stageProgressBar" class="prog-fill"></div></div>
+          </div>
+          <div id="narratorDesc" class="muted" style="margin-top:3px;"></div>
+        </div>
+      </div>
+
+      <!-- Step-Specific Interactive Control Strip Directly Under 3D Stage -->
+      <div id="stripStep00" class="divider xs">
+        <div class="row">
+          <div class="flex">
+            <strong style="color:var(--success)">🟢 3D 实时编解码实验（点击汉字，看它在 3D 舞台查词表变整数再还原）</strong>
+            <div id="s0CharBtns" class="flex"></div>
+            <button id="btnS0Oov" style="border-color:var(--error); color:var(--error);" title="测试不在词表中的生僻字">⚠️ 塞入词表外生僻字「人」</button>
+          </div>
+          <button id="btnS0Clear">↺ 恢复默认「床前明月」</button>
+        </div>
+        <div class="tape-box row mono">
+          <div class="flex">
+            <span class="muted">输入文本:</span>
+            <div id="s0InputChips" class="flex"></div>
+            <span class="muted">→ Encode IDs:</span>
+            <strong id="s0EncodedIds" style="color:var(--primary)"></strong>
+            <span class="muted">→ Decode 还原:</span>
+            <strong id="s0DecodedTxt" style="color:var(--success)"></strong>
+          </div>
+          <span id="s0OovNote" class="muted"></span>
+        </div>
+      </div>
+
+      <div id="stripTrainInfer" class="hidden">
+        <!-- Sample / Query Selector + Learning Rate -->
+        <div class="row divider xs">
+          <div class="flex">
+            <span id="sampleStripLabel" class="muted"></span>
+            <div id="sampleButtons" class="flex"></div>
+          </div>
+          <div class="flex">
+            <label class="flex muted">
+              学习率 lr:
+              <input id="lrSlider" type="range" min="0.005" max="0.08" step="0.005" value="0.03" />
+              <span id="lrVal" class="mono" style="color:var(--foreground); min-width:36px;">0.030</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Unified Autoregressive Inference Strip (Steps 01 / 02 / 03) -->
+        <div class="divider xs infer-strip">
+          <div class="row">
+            <div class="flex" style="gap:10px;">
+              <strong id="inferStripTitle" style="color:var(--success)">🟢 3D 自回归接龙推理</strong>
+              <span id="inferWeightTag" class="badge mono">共享权重 Step 0</span>
+              <label class="flex muted">
+                起始输入:
+                <select id="genStartSelect" class="mono"></select>
+              </label>
+              <label class="flex muted">
+                温度 T:
+                <input id="tempSlider" type="range" min="0.1" max="2.5" step="0.1" value="0.7" />
+                <span id="tempVal" class="mono" style="color:var(--foreground); min-width:24px;">0.7</span>
+              </label>
+            </div>
+            <div class="flex">
+              <button id="btnGenNext" class="primary">🎲 推理下一个字</button>
+              <button id="btnGenReset">↺ 重置接龙</button>
+            </div>
+          </div>
+          <div class="tape-box row">
+            <div class="flex">
+              <span id="genTapeLabel" class="muted">接龙序列：</span>
+              <div id="genTape" class="flex mono"></div>
+            </div>
+            <span id="genReadout" class="mono muted"></span>
+          </div>
+          <div id="inferRoulette" class="roulette-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- CARD 3: STEP-SPECIFIC DEEP-DIVE INSPECTOR                           -->
+    <!-- =================================================================== -->
+    <!-- Inspector 00: Tokenizer Vocab Table -->
+    <div id="inspStep00" class="card xs">
+      <div class="grid-2">
+        <div class="subpanel">
+          <div class="row">
+            <strong>双向词表字典 <span class="mono">stoi</span> / <span class="mono">itos</span>（去重排序后共 V = 10 个唯一字符）</strong>
+            <span class="muted">点击任意词条在 3D 舞台高亮编码</span>
+          </div>
+          <div id="s0VocabGrid" class="vocab-grid mono"></div>
+        </div>
+        <div class="subpanel">
+          <strong>为什么大模型第 0 步必须是 Tokenizer？</strong>
+          <div class="muted" style="margin-top:6px; line-height:1.7;">
+            <div>1. <strong>神经网络只认数字，不认汉字</strong>：必须先用词表把每个字符映射成整数 ID（<code>0 .. V-1</code>），才能去 Embedding 表里按行索引或做矩阵乘法。</div>
+            <div>2. <strong>整首短诗编码结果</strong>：<span id="s0FullPoemIds" class="mono" style="color:var(--primary)"></span></div>
+            <div>3. <strong>字符级 vs 工业界 BPE</strong>：本教程用字符级分词（短诗 <code>V=10</code>，Rust 30 首唐诗 <code>V=373</code>）最直观；GPT-4/Llama 则用 BPE 把常见词根合并成子词（词表 5~12 万），本质仍是这张 <code>stoi/itos</code> 双向映射表！</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector 01: Bigram Contradiction Spotlight -->
+    <div id="inspStep01" class="card xs hidden">
+      <div class="grid-2">
+        <div class="subpanel">
+          <strong>Step 01 核心直觉：Bigram 只是一张 <span class="mono">10×10</span> 统计打分表</strong>
+          <div class="muted" style="margin-top:6px; line-height:1.7;">
+            <div>· 行索引 = 当前字 <code>x</code>，列索引 = 下一个字 <code>y</code>。前向只需查第 <code>x</code> 行，反向只把正确答案柱子拉高、其余 9 根压低。</div>
+            <div>· <strong>实测当前选中样本</strong>：<span id="s1InspectLine" class="mono" style="color:var(--foreground)"></span></div>
+          </div>
+        </div>
+        <div class="subpanel">
+          <strong>🔥 为什么必须进化到 Step 02？（Bigram 死穴对照）</strong>
+          <div class="muted mono" style="margin-top:6px; line-height:1.7;">
+            <div>· 原文里有两处「月」：<strong>床前明「月」→ 光</strong> 与 <strong>举头望明「月」→ 。</strong></div>
+            <div id="s1MoonContrast" style="color:var(--warning)">点击「⚡ 50 轮矩阵生长」看「月」这一行永远卡在 50% 光 vs 50% 。！</div>
+            <div>· 因为 Bigram 只能看 1 个字，两个「月」查的是同一行——点击顶部 <strong>Step 02</strong> 看 3 字窗口如何破局！</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector 02: Arena Tape + ReLU Gate -->
+    <div id="inspStep02" class="card xs hidden">
+      <div class="muted">
+        <strong>Step 02 教学配置</strong>：9 个三字窗口完整 batch，<span class="mono">V=10, ctx=3, emb=4, H=8</span>（共 234 真实可训练参数 + 完整 Arena-Tape 自动求导 + AdamW）。
+      </div>
+      <div class="grid-2">
+        <div class="subpanel">
+          <div class="row">
+            <strong>Arena Tape（5 个参数节点 + 7 个操作节点，点击查看）</strong>
+            <span id="s2TapeBadge" class="mono muted">等待前向压栈 0→11</span>
+          </div>
+          <div id="s2TapeGrid" class="tape-grid mono"></div>
+          <div class="divider">
+            <div class="row mono">
+              <strong id="s2NdTitle" style="color:var(--primary)">TensorId(5) · x</strong>
+              <span id="s2NdMeta" class="muted"></span>
+            </div>
+            <div id="s2NdDeps" class="muted mono" style="margin-top:3px;"></div>
+            <div id="s2NdRule" class="muted mono" style="margin-top:2px;"></div>
+            <div style="margin-top:6px;">
+              <span id="s2NdValLabel" class="muted">前向值 data：</span>
+              <div id="s2NdVals" class="val-grid mono"></div>
+            </div>
+            <div style="margin-top:6px;">
+              <span class="muted">反向梯度 <span class="mono" style="color:var(--warning)">grad = ∂Loss/∂node</span>：</span>
+              <div id="s2NdGrads" class="val-grid mono"></div>
+            </div>
+            <div id="s2NdDeltaWrap" class="hidden" style="margin-top:6px;">
+              <span class="muted">最近一次 AdamW 实际变化量 <span class="mono" style="color:var(--success)">Δw = w_new - w_old</span>（与 grad 方向相反）：</span>
+              <div id="s2NdDeltas" class="val-grid mono"></div>
+            </div>
+          </div>
+        </div>
+        <div class="subpanel" style="display:flex; flex-direction:column; justify-content:space-between; gap:10px;">
+          <div>
+            <div class="row">
+              <strong>ReLU 神经元闸门解剖（8 个隐藏神经元）</strong>
+              <span id="s2ReluBadge" class="mono badge">等待前向</span>
+            </div>
+            <div id="s2NeuronBtns" class="flex mono" style="margin-top:6px;"></div>
+            <div class="tape-box mono" style="margin-top:8px; line-height:1.7;">
+              <div>样本 <strong id="s2ReluSample">床前明</strong> · 神经元 <strong id="s2ReluIdx">#0</strong>：z = <strong id="s2ReluZ">--</strong> → h = <strong id="s2ReluH">--</strong></div>
+              <div>反传：<span style="color:var(--warning)">dH</span> = <strong id="s2ReluDh">--</strong> → <span style="color:var(--warning)">dZ</span> = <strong id="s2ReluDz">--</strong></div>
+              <div id="s2ReluHint" class="muted">z &gt; 0 放行 (×1)，z ≤ 0 截断归零 (×0)。</div>
+            </div>
+            <div class="flex" style="margin-top:8px;">
+              <button id="btnDeadRelu">💀 体验 Dead ReLU</button>
+              <button id="btnScalarModal">🔍 放大看链式法则</button>
+            </div>
+          </div>
+          <div class="divider">
+            <strong>对照观察：「前明月 → 光」 vs 「望明月 → 。」</strong>
+            <div class="muted mono" style="margin-top:4px; line-height:1.6;">
+              <div id="s2ContrastA">「前明月 → 光」：待第 ⑥ 步或训练后查看</div>
+              <div id="s2ContrastB">「望明月 → 。」：待第 ⑥ 步或训练后查看</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector 03: Causal Attention Heatmap & Q·K Breakdown -->
+    <div id="inspStep03" class="card xs hidden">
+      <div class="muted">
+        <strong>Step 03 教学配置</strong>：11 个因果并行位置，<span class="mono">V=10, T_max=12, D=8, N_HEAD=2 (d_head=4)</span>（共 522 真实可训练参数 + 精确解析反传 + AdamW）。
+      </div>
+      <div class="grid-2">
+        <div class="subpanel">
+          <div class="row">
+            <strong>因果注意力权重矩阵 A = Softmax(Mask(Q·Kᵀ / √d))（点击任意行切换 Query）</strong>
+            <span id="s3HeadBadge" class="mono badge">2头平均</span>
+          </div>
+          <table class="attn-table mono" id="s3AttnTable"></table>
+        </div>
+        <div class="subpanel" style="display:flex; flex-direction:column; justify-content:space-between; gap:10px;">
+          <div>
+            <div class="row">
+              <strong>当前 Query 探照灯：<span id="s3QTitle" style="color:var(--primary)">pos[3]「月」</span></strong>
+              <span class="mono muted">scale = 1/√4 = 0.5</span>
+            </div>
+            <div id="s3ScoreList" class="score-list mono"></div>
+          </div>
+          <div class="divider">
+            <strong>长程视野对照：pos[3]「床前明月→光」 vs pos[10]「…望明月→。」</strong>
+            <div class="muted mono" style="margin-top:4px; line-height:1.65;">
+              <div id="s3Contrast3">pos[3]：待第 ⑦ 步或训练后查看</div>
+              <div id="s3Contrast10">pos[10]：待第 ⑦ 步或训练后查看</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Optional Modal: Step 02 Pure Scalar Chain Rule -->
+  <dialog id="scalarModal" class="modal-card xs" aria-labelledby="scalarTitle">
+    <div class="row">
+      <div>
+        <span class="badge mono">🔍 放大看链式法则（标量版）</span>
+        <strong id="scalarTitle" style="margin-left:6px; font-size:14px;">单条数值路径上的局部导数连乘</strong>
+      </div>
+      <button id="btnCloseScalar">✕ 关闭</button>
+    </div>
+    <div class="muted" style="margin-top:6px;">
+      标量例子 <span class="mono">x = 1.5, target = 3.0</span>：<span class="mono">pred = ReLU(x·w1 + b1)·w2</span>、<span class="mono">L = (pred - 3)²</span>，拖动滑块观察上游梯度 × 局部导数。
+    </div>
+    <div class="scalar-flow mono" id="scalarFlow"></div>
+    <div class="sliders mono">
+      <label class="slider-box"><span class="muted">w1:</span><input id="scW1" type="range" min="-2" max="2" step="0.1" value="0.8" /><span id="scW1V">0.8</span></label>
+      <label class="slider-box"><span class="muted">b1:</span><input id="scB1" type="range" min="-2" max="2" step="0.1" value="-0.3" /><span id="scB1V">-0.3</span></label>
+      <label class="slider-box"><span class="muted">w2:</span><input id="scW2" type="range" min="-2" max="2" step="0.1" value="1.2" /><span id="scW2V">1.2</span></label>
+      <label class="slider-box"><span class="muted">x:</span><input id="scX" type="range" min="-2" max="3" step="0.1" value="1.5" /><span id="scXV">1.5</span></label>
+    </div>
+    <div id="scalarChainText" class="tape-box mono" style="margin-top:10px; line-height:1.7;"></div>
+  </dialog>
+
+  <script>
+    // =========================================================================
+    // 0. Inlined Pure-Canvas 3D Engine (Mini3D)
+    // =========================================================================
+    const M = (function () {
+      const colorCache = new Map();
+      function getThemeColors() {
+        const s = getComputedStyle(document.documentElement);
+        const get = (k, fb) => s.getPropertyValue(k).trim() || fb;
+        return {
+          bg: get("--content", "#1a1f2e"), fg: get("--foreground", "#e8edf7"),
+          muted: get("--muted-foreground", "#94a3b8"), border: get("--border", "#2a3245"),
+          primary: get("--primary", "#4f8cff"), success: get("--success", "#22c55e"),
+          error: get("--error", "#ef4444"), warning: get("--warning", "#f59e0b"),
+          card: get("--card", "#151924"),
+        };
+      }
+      function parseRgb(cssColor) {
+        if (colorCache.has(cssColor)) return colorCache.get(cssColor);
+        const tmp = document.createElement("canvas").getContext("2d");
+        tmp.fillStyle = cssColor; tmp.fillRect(0, 0, 1, 1);
+        const d = tmp.getImageData(0, 0, 1, 1).data;
+        const res = [d[0], d[1], d[2]];
+        colorCache.set(cssColor, res);
+        return res;
+      }
+      if (window.matchMedia) {
+        const mq = window.matchMedia("(prefers-color-scheme: light)");
+        if (mq.addEventListener) mq.addEventListener("change", () => colorCache.clear());
+      }
+      function shade(rgb, factor, alpha = 1) {
+        const r = Math.min(255, Math.max(0, Math.round(rgb[0] * factor)));
+        const g = Math.min(255, Math.max(0, Math.round(rgb[1] * factor)));
+        const b = Math.min(255, Math.max(0, Math.round(rgb[2] * factor)));
+        return `rgba(${r},${g},${b},${alpha})`;
+      }
+      function lerpRgb(a, b, t) {
+        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+      }
+      function createCamera(canvas, opts) {
+        const cam = {
+          yaw: opts.yaw ?? -0.45, pitch: opts.pitch ?? 0.5, dist: opts.dist ?? 26,
+          targetYaw: opts.yaw ?? -0.45, targetPitch: opts.pitch ?? 0.5, targetDist: opts.dist ?? 26,
+          tx: opts.tx ?? 0, ty: opts.ty ?? 0.6, tz: opts.tz ?? 0,
+          targetTx: opts.tx ?? 0, targetTz: opts.tz ?? 0,
+          minPitch: 0.14, maxPitch: 1.42, minDist: 13, maxDist: 46, autoOrbit: false,
+          step() {
+            if (this.autoOrbit) this.targetYaw += 0.005;
+            this.yaw += (this.targetYaw - this.yaw) * 0.11;
+            this.pitch += (this.targetPitch - this.pitch) * 0.11;
+            this.dist += (this.targetDist - this.dist) * 0.11;
+            this.tx += (this.targetTx - this.tx) * 0.11;
+            this.tz += (this.targetTz - this.tz) * 0.11;
+          },
+          setPreset(yaw, pitch, dist, tx = 0.2, tz = 0.2) {
+            this.autoOrbit = false;
+            this.targetYaw = yaw; this.targetPitch = pitch; this.targetDist = dist;
+            this.targetTx = tx; this.targetTz = tz;
+          },
+        };
+        let dragging = false, lastX = 0, lastY = 0;
+        canvas.addEventListener("pointerdown", e => {
+          dragging = true; cam.autoOrbit = false; lastX = e.clientX; lastY = e.clientY;
+          canvas.setPointerCapture(e.pointerId);
+        });
+        canvas.addEventListener("pointermove", e => {
+          if (!dragging) return;
+          cam.targetYaw -= (e.clientX - lastX) * 0.008;
+          cam.targetPitch = Math.max(cam.minPitch, Math.min(cam.maxPitch, cam.targetPitch + (e.clientY - lastY) * 0.007));
+          lastX = e.clientX; lastY = e.clientY;
+        });
+        canvas.addEventListener("pointerup", () => { dragging = false; });
+        canvas.addEventListener("wheel", e => {
+          e.preventDefault();
+          cam.targetDist = Math.max(cam.minDist, Math.min(cam.maxDist, cam.targetDist + e.deltaY * 0.015));
+        }, { passive: false });
+        return cam;
+      }
+      function beginFrame(canvas, ctx, theme) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const tw = Math.round(rect.width * dpr), th = Math.round(rect.height * dpr);
+          if (canvas.width !== tw || canvas.height !== th) { canvas.width = tw; canvas.height = th; }
+        }
+        const W = rect.width, H = rect.height;
+        ctx.save(); ctx.scale(dpr, dpr);
+        const bgGrad = ctx.createRadialGradient(W * 0.5, H * 0.42, 40, W * 0.5, H * 0.5, Math.max(W, H) * 0.72);
+        bgGrad.addColorStop(0, theme.card); bgGrad.addColorStop(1, theme.bg);
+        ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
+        return { W, H };
+      }
+      function makeProjector(W, H, cam, focalFactor = 1.15, centerY = 0.48) {
+        const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+        const focal = Math.min(W, H) * focalFactor;
+        const eye = { x: cam.tx + cam.dist * cp * sy, y: cam.ty + cam.dist * sp, z: cam.tz + cam.dist * cp * cy };
+        function project(wx, wy, wz) {
+          const dx = wx - cam.tx, dy = wy - cam.ty, dz = wz - cam.tz;
+          const x1 = dx * cy - dz * sy, z1 = dx * sy + dz * cy;
+          const y2 = dy * cp - z1 * sp, z2 = dy * sp + z1 * cp;
+          const depth = cam.dist - z2;
+          if (depth < 0.5) return null;
+          const sc = focal / depth;
+          return { x: W * 0.5 + x1 * sc, y: H * centerY - y2 * sc, depth, sc };
+        }
+        return { project, eye };
+      }
+      function pushBox(dl, ctx, proj, eye, x0, y0, z0, x1, y1, z1, rgb, alpha = 1, strokeCss = null) {
+        if (alpha <= 0.02 || y1 - y0 < 0.004) return;
+        const cs = [
+          proj(x0, y0, z0), proj(x1, y0, z0), proj(x1, y0, z1), proj(x0, y0, z1),
+          proj(x0, y1, z0), proj(x1, y1, z0), proj(x1, y1, z1), proj(x0, y1, z1),
+        ];
+        if (cs.some(c => !c)) return;
+        const cp = proj((x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5);
+        if (!cp) return;
+        const faces = [];
+        if (eye.y > y1) faces.push({ i: [4, 5, 6, 7], l: 1.12 });
+        if (eye.y < y0) faces.push({ i: [0, 3, 2, 1], l: 0.55 });
+        if (eye.x > x1) faces.push({ i: [1, 2, 6, 5], l: 0.88 });
+        if (eye.x < x0) faces.push({ i: [0, 4, 7, 3], l: 0.72 });
+        if (eye.z > z1) faces.push({ i: [3, 7, 6, 2], l: 0.96 });
+        if (eye.z < z0) faces.push({ i: [0, 1, 5, 4], l: 0.66 });
+        dl.push({
+          depth: cp.depth,
+          draw: () => {
+            for (const f of faces) {
+              ctx.beginPath();
+              ctx.moveTo(cs[f.i[0]].x, cs[f.i[0]].y);
+              ctx.lineTo(cs[f.i[1]].x, cs[f.i[1]].y);
+              ctx.lineTo(cs[f.i[2]].x, cs[f.i[2]].y);
+              ctx.lineTo(cs[f.i[3]].x, cs[f.i[3]].y);
+              ctx.closePath();
+              ctx.fillStyle = shade(rgb, f.l, alpha);
+              ctx.fill();
+              if (strokeCss) {
+                ctx.save(); ctx.globalAlpha = Math.min(1, alpha + 0.15);
+                ctx.strokeStyle = strokeCss; ctx.lineWidth = 0.85; ctx.stroke();
+                ctx.restore();
+              }
+            }
+          },
+        });
+      }
+      function pushOrb(dl, ctx, proj, wx, wy, wz, radiusWorld, colorCss, glowCss = null, label = null, fgCss = "#fff") {
+        const p = proj(wx, wy, wz);
+        if (!p) return;
+        const r = Math.max(3, radiusWorld * p.sc);
+        dl.push({
+          depth: p.depth - 0.18,
+          draw: () => {
+            ctx.save();
+            if (glowCss) { ctx.shadowColor = glowCss; ctx.shadowBlur = 14; }
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = colorCss; ctx.fill(); ctx.restore();
+            if (label) {
+              ctx.fillStyle = fgCss;
+              ctx.font = `bold ${Math.max(10, Math.round(r * 0.92))}px monospace`;
+              ctx.textAlign = "center"; ctx.textBaseline = "middle";
+              ctx.fillText(label, p.x, p.y + 0.5);
+            }
+          },
+        });
+      }
+      function pushArrow3D(dl, ctx, proj, wx, y0, y1, wz, colorCss, lineWidth = 3) {
+        const p0 = proj(wx, y0, wz), p1 = proj(wx, y1, wz);
+        if (!p0 || !p1) return;
+        dl.push({
+          depth: (p0.depth + p1.depth) * 0.5 - 0.28,
+          draw: () => {
+            ctx.save(); ctx.strokeStyle = colorCss; ctx.fillStyle = colorCss;
+            ctx.lineWidth = lineWidth; ctx.shadowColor = colorCss; ctx.shadowBlur = 8;
+            ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+            const a = Math.atan2(p1.y - p0.y, p1.x - p0.x), head = 7 + lineWidth * 0.55;
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p1.x - head * Math.cos(a - 0.5), p1.y - head * Math.sin(a - 0.5));
+            ctx.lineTo(p1.x - head * Math.cos(a + 0.5), p1.y - head * Math.sin(a + 0.5));
+            ctx.closePath(); ctx.fill(); ctx.restore();
+          },
+        });
+      }
+      function pushLabel3D(dl, ctx, proj, wx, wy, wz, text, colorCss, font = "11px monospace", bias = -0.15, alpha = 1) {
+        if (alpha <= 0.04) return;
+        const p = proj(wx, wy, wz);
+        if (!p) return;
+        dl.push({
+          depth: p.depth + bias,
+          draw: () => {
+            ctx.save(); ctx.globalAlpha = alpha;
+            ctx.fillStyle = colorCss; ctx.font = font;
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(text, p.x, p.y); ctx.restore();
+          },
+        });
+      }
+      function drawPipe3D(ctx, proj, a, b, colorCss, width = 2, alpha = 1) {
+        if (alpha <= 0.03) return;
+        const p0 = proj(a.x, a.y, a.z), p1 = proj(b.x, b.y, b.z);
+        if (!p0 || !p1) return;
+        ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = colorCss; ctx.lineWidth = width;
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); ctx.restore();
+      }
+      function drawBezierArc3D(ctx, proj, a, b, arcH, tProg, colorCss, width = 2, dashed = false, alpha = 1) {
+        if (alpha <= 0.03 || tProg <= 0.005) return;
+        ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = colorCss; ctx.lineWidth = width;
+        if (dashed) ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i <= 22; i++) {
+          const u = (i / 22) * tProg;
+          const p = proj(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + Math.sin(u * Math.PI) * arcH, a.z + (b.z - a.z) * u);
+          if (!p) continue;
+          if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke(); ctx.restore();
+      }
+      function evalArc(a, b, arcH, u) {
+        return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u + Math.sin(u * Math.PI) * arcH, z: a.z + (b.z - a.z) * u };
+      }
+      function flushDrawList(dl) {
+        dl.sort((a, b) => b.depth - a.depth);
+        for (const item of dl) item.draw();
+      }
+      return { getThemeColors, parseRgb, shade, lerpRgb, createCamera, beginFrame, makeProjector, pushBox, pushOrb, pushArrow3D, pushLabel3D, drawPipe3D, drawBezierArc3D, evalArc, flushDrawList };
+    })();
+
+    // =========================================================================
+    // 1. Shared Corpus, Vocabulary, Deterministic RNG & Math
+    // =========================================================================
+    const CORPUS = "床前明月光，举头望明月。";
+    const CHARS = CORPUS.split("");
+    const VOCAB = Array.from(new Set(CHARS)).sort();
+    const V = VOCAB.length; // 10
+    const STOI = Object.fromEntries(VOCAB.map((ch, i) => [ch, i]));
+    const DATA = CHARS.map(ch => STOI[ch]);
+
+    class Rng {
+      constructor(seed) {
+        let z = (BigInt(seed) + 0x9E3779B97F4A7C15n) & 0xFFFFFFFFFFFFFFFFn;
+        z = ((z ^ (z >> 30n)) * 0xBF58476D1CE4E5B9n) & 0xFFFFFFFFFFFFFFFFn;
+        z = ((z ^ (z >> 27n)) * 0x94D049BB133111EBn) & 0xFFFFFFFFFFFFFFFFn;
+        z = z ^ (z >> 31n);
+        this.state = z === 0n ? 1n : z;
+      }
+      nextU64() {
+        let x = this.state;
+        x = (x ^ ((x << 13n) & 0xFFFFFFFFFFFFFFFFn)) & 0xFFFFFFFFFFFFFFFFn;
+        x = (x ^ (x >> 7n)) & 0xFFFFFFFFFFFFFFFFn;
+        x = (x ^ ((x << 17n) & 0xFFFFFFFFFFFFFFFFn)) & 0xFFFFFFFFFFFFFFFFn;
+        this.state = x;
+        return x;
+      }
+      nextF32() { return Number(this.nextU64() >> 40n) / 16777216; }
+      normal(std) {
+        const u1 = Math.max(this.nextF32(), 1e-7), u2 = this.nextF32();
+        return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2) * std;
+      }
+    }
+
+    function softmaxRow(logits, temp = 1.0) {
+      const invT = 1.0 / Math.max(temp, 1e-4);
+      let m = -Infinity;
+      for (let i = 0; i < logits.length; i++) { const v = logits[i] * invT; if (v > m) m = v; }
+      const exps = new Float32Array(logits.length);
+      let sum = 0;
+      for (let i = 0; i < logits.length; i++) { exps[i] = Math.exp(logits[i] * invT - m); sum += exps[i]; }
+      const probs = new Float32Array(logits.length);
+      for (let i = 0; i < logits.length; i++) probs[i] = exps[i] / sum;
+      return probs;
+    }
+
+    function matmulFwd(a, m, k, b, n) {
+      const out = new Float32Array(m * n);
+      for (let i = 0; i < m; i++) {
+        for (let p = 0; p < k; p++) {
+          const aip = a[i * k + p];
+          for (let j = 0; j < n; j++) out[i * n + j] += aip * b[p * n + j];
+        }
+      }
+      return out;
+    }
+
+    class Param {
+      constructor(name, rows, cols, data, decay) {
+        this.name = name; this.rows = rows; this.cols = cols;
+        this.data = new Float32Array(data);
+        this.m = new Float32Array(rows * cols);
+        this.v = new Float32Array(rows * cols);
+        this.lastDelta = new Float32Array(rows * cols);
+        this.decay = decay;
+      }
+      static randn(name, rows, cols, std, rng, decay) {
+        const arr = new Float32Array(rows * cols);
+        for (let i = 0; i < arr.length; i++) arr[i] = rng.normal(std);
+        return new Param(name, rows, cols, arr, decay);
+      }
+      static zeros(name, rows, cols) { return new Param(name, rows, cols, new Float32Array(rows * cols), false); }
+      adamwStep(grad, lr, wd, step) {
+        const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+        const bc1 = 1 - Math.pow(b1, step), bc2 = 1 - Math.pow(b2, step);
+        for (let i = 0; i < this.data.length; i++) {
+          const oldW = this.data[i], g = grad[i];
+          if (this.decay) this.data[i] -= lr * wd * this.data[i];
+          this.m[i] = b1 * this.m[i] + (1 - b1) * g;
+          this.v[i] = b2 * this.v[i] + (1 - b2) * g * g;
+          this.data[i] -= lr * (this.m[i] / bc1) / (Math.sqrt(this.v[i] / bc2) + eps);
+          this.lastDelta[i] = this.data[i] - oldW;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 2. Architecture Evolution Diff Definitions (What's Added / Removed / Replaced!)
+    // =========================================================================
+    const STEP_META = [
+      {
+        id: 0, name: "Step 00 · Tokenizer",
+        cam: { yaw: -0.35, pitch: 0.45, dist: 23.5, tx: 0.0, tz: 0.0 },
+        diffBase: {
+          title: "🏁 起点 Step 00：所有大模型的第 0 步——把汉字翻译成整数 ID",
+          added: ["原始文本拆字", "去重排序建词表 V=10", "stoi / itos 双向查表", "Encode / Decode"],
+          removed: [], replaced: [], kept: [],
+        },
+      },
+      {
+        id: 1, name: "Step 01 · Bigram",
+        cam: { yaw: -0.60, pitch: 0.55, dist: 25.5, tx: 1.2, tz: 0.0 },
+        diffFromPrev: {
+          title: "Step 00 Tokenizer ──▶ Step 01 Bigram：第一次让数字学会「预测下一个字」",
+          added: ["10×10 Bigram 权重矩阵", "Softmax 概率塔", "橙色 Loss 能量柱", "SGD 反向梯度推拉"],
+          removed: ["纯 Decode 还原演示槽"],
+          replaced: ["整句 Encode 序列 → 单字 (x→y) 查表输入"],
+          kept: ["词表编码 (V=10)"],
+        },
+      },
+      {
+        id: 2, name: "Step 02 · Autograd & 3字 MLP",
+        cam: { yaw: -0.38, pitch: 0.48, dist: 29.0, tx: 0.2, tz: 0.6 },
+        diffFromPrev: {
+          title: "Step 01 Bigram ──▶ Step 02 3字 MLP + Autograd：打破单字盲区，引入自动求导",
+          added: ["3D ReLU 非线性门控", "12 槽 Arena-Tape 计算图", "AdamW 优化器"],
+          removed: ["10×10 静态单字查表矩阵"],
+          replaced: ["单字输入 → 3字滑动窗口", "查表一行 → Embedding(10×4)拼接12维 + 2层MLP"],
+          kept: ["Softmax 概率塔", "Loss 能量柱"],
+        },
+      },
+      {
+        id: 3, name: "Step 03 · 因果多头自注意力",
+        cam: { yaw: -0.44, pitch: 0.56, dist: 31.0, tx: 0.6, tz: 0.2 },
+        diffFromPrev: {
+          title: "Step 02 3字 MLP ──▶ Step 03 因果多头自注意力：挣脱 3 字牢笼，一眼回望全前文！",
+          added: ["Position 位置编码", "11×11 因果下三角掩码(-∞)", "金色注意力光束汇聚 Value", "残差连接"],
+          removed: ["固定 3 字拼接槽", "3D ReLU 门控", "MLP 12 槽 Tape"],
+          replaced: ["3字拼接 MLP → 11位全序列并行 + Q/K/V 自注意力（推理只需 1 字起步！）"],
+          kept: ["Token Embedding", "Softmax 概率塔", "Loss 能量柱", "AdamW"],
+        },
+      },
+    ];
+
+    // 3D Morph Transition Metadata between adjacent or arbitrary steps
+    function getTransitionSpec(fromId, toId) {
+      const forward = toId > fromId;
+      // Detailed bespoke module classification for adjacent evolutionary transitions
+      if (fromId === 0 && toId === 1) {
+        return {
+          title: "✨ 架构升级：Step 00 Tokenizer ──▶ Step 01 Bigram",
+          outRole: { text_in: "replaced", token_ids: "replaced", decode_out: "removed", vocab_dict: "kept" },
+          inRole:  { input_1: "replaced", bigram_mat: "added", softmax: "added", loss: "added" },
+          arcs: [
+            { from: { x: -8.2, y: 1.2, z: 0 }, to: { x: -9.8, y: 1.2, z: 0 }, label: "↻ 单字查表入口" },
+            { from: { x: 2.8, y: 1.2, z: 0 },  to: { x: -1.5, y: 1.4, z: 0 }, label: "+ 升起 10×10 权重阵" },
+          ],
+          calloutsOut: [{ x: 8.2, y: 2.2, z: 0, text: "- 移除: 纯 Decode 演示槽", kind: "rem" }],
+          calloutsIn: [
+            { x: -1.5, y: 3.1, z: 0, text: "+ 新增: 10×10 Bigram 矩阵", kind: "add" },
+            { x: 7.4, y: 3.6, z: 0, text: "+ 新增: Softmax 与 Loss", kind: "add" },
+          ],
+          diff: STEP_META[1].diffFromPrev,
+        };
+      }
+      if (fromId === 1 && toId === 2) {
+        return {
+          title: "✨ 架构升级：Step 01 Bigram ──▶ Step 02 3字 MLP + Autograd",
+          outRole: { input_1: "replaced", bigram_mat: "removed", softmax: "kept", loss: "kept" },
+          inRole:  { input_3: "replaced", mlp_params: "added", x_concat: "replaced", z1_h: "added", relu_gate: "added", arena_tape: "added", softmax: "kept", loss: "kept" },
+          arcs: [
+            { from: { x: -9.8, y: 1.2, z: 0 }, to: { x: -10.5, y: 1.4, z: -0.6 }, label: "↻ 1字 → 3字窗口" },
+            { from: { x: -1.5, y: 1.4, z: 0 }, to: { x: -3.2, y: 1.6, z: -0.8 }, label: "↻ 静态表 → 2层MLP" },
+          ],
+          calloutsOut: [{ x: -1.5, y: 3.1, z: 0, text: "- 拆除: 10×10 静态查表", kind: "rem" }],
+          calloutsIn: [
+            { x: -7.2, y: 3.0, z: -0.8, text: "↻ 替换: 3×4=12维拼接 x", kind: "rep" },
+            { x: 0.2, y: 4.1, z: -0.8, text: "+ 新增: ReLU 门控", kind: "add" },
+            { x: 0.0, y: 1.6, z: 4.35, text: "+ 新增: 12槽 Arena-Tape", kind: "add" },
+          ],
+          diff: STEP_META[2].diffFromPrev,
+        };
+      }
+      if (fromId === 2 && toId === 3) {
+        return {
+          title: "✨ 架构升级：Step 02 3字 MLP ──▶ Step 03 因果多头自注意力",
+          outRole: { input_3: "replaced", mlp_params: "replaced", x_concat: "removed", z1_h: "removed", relu_gate: "removed", arena_tape: "removed", softmax: "kept", loss: "kept" },
+          inRole:  { seq_pos: "replaced", qkv: "added", attn_mat: "added", ctx_h1: "added", softmax: "kept", loss: "kept" },
+          arcs: [
+            { from: { x: -10.5, y: 1.3, z: -0.6 }, to: { x: -10.4, y: 1.5, z: 0 }, label: "↻ 3字窗 → 全序列+位置" },
+            { from: { x: -3.2, y: 1.5, z: -0.8 }, to: { x: -0.6, y: 2.0, z: 0 }, label: "↻ MLP → Q/K/V 自注意力" },
+          ],
+          calloutsOut: [
+            { x: 0.2, y: 3.9, z: -0.8, text: "- 拆除: ReLU 门控", kind: "rem" },
+            { x: 0.0, y: 1.5, z: 4.35, text: "- 拆除: 固定3字 MLP Tape", kind: "rem" },
+          ],
+          calloutsIn: [
+            { x: -10.4, y: 2.8, z: 0, text: "+ 新增: Position 位置编码", kind: "add" },
+            { x: -0.6, y: 4.5, z: 0, text: "+ 新增: 11×11 因果注意力+红区Mask", kind: "add" },
+            { x: 5.2, y: 3.2, z: 0, text: "+ 新增: Value 汇聚 + 残差", kind: "add" },
+          ],
+          diff: STEP_META[3].diffFromPrev,
+        };
+      }
+      // Bespoke reverse transitions (clicking ← 上一 Step!)
+      if (fromId === 1 && toId === 0) {
+        return {
+          title: "⏪ 退回对照：Step 01 Bigram ──▶ Step 00 Tokenizer",
+          outRole: { input_1: "replaced", bigram_mat: "removed", softmax: "removed", loss: "removed" },
+          inRole:  { text_in: "replaced", vocab_dict: "kept", token_ids: "replaced", decode_out: "added" },
+          arcs: [{ from: { x: -9.8, y: 1.2, z: 0 }, to: { x: -8.2, y: 1.2, z: 0 }, label: "↻ 回到整句拆字与编码" }],
+          calloutsOut: [
+            { x: -1.5, y: 3.1, z: 0, text: "- 收起: 10×10 Bigram 矩阵", kind: "rem" },
+            { x: 7.4, y: 3.4, z: 0, text: "- 收起: Softmax 与 Loss", kind: "rem" },
+          ],
+          calloutsIn: [{ x: 8.2, y: 2.4, z: 0, text: "+ 恢复: Decode 无损还原槽", kind: "add" }],
+          diff: STEP_META[0].diffBase,
+        };
+      }
+      if (fromId === 2 && toId === 1) {
+        return {
+          title: "⏪ 退回对照：Step 02 3字 MLP ──▶ Step 01 Bigram",
+          outRole: { input_3: "replaced", mlp_params: "removed", x_concat: "removed", z1_h: "removed", relu_gate: "removed", arena_tape: "removed", softmax: "kept", loss: "kept" },
+          inRole:  { input_1: "replaced", bigram_mat: "added", softmax: "kept", loss: "kept" },
+          arcs: [{ from: { x: -10.5, y: 1.3, z: -0.6 }, to: { x: -9.8, y: 1.2, z: 0 }, label: "↻ 3字窗 → 单字输入" }],
+          calloutsOut: [
+            { x: 0.2, y: 3.9, z: -0.8, text: "- 收起: ReLU 门控与 MLP", kind: "rem" },
+            { x: 0.0, y: 1.5, z: 4.35, text: "- 收起: 12槽 Arena-Tape", kind: "rem" },
+          ],
+          calloutsIn: [{ x: -1.5, y: 3.2, z: 0, text: "+ 恢复: 10×10 Bigram 静态表", kind: "add" }],
+          diff: STEP_META[1].diffFromPrev,
+        };
+      }
+      if (fromId === 3 && toId === 2) {
+        return {
+          title: "⏪ 退回对照：Step 03 自注意力 ──▶ Step 02 3字 MLP + Autograd",
+          outRole: { seq_pos: "replaced", qkv: "removed", attn_mat: "removed", ctx_h1: "removed", softmax: "kept", loss: "kept" },
+          inRole:  { input_3: "replaced", mlp_params: "added", x_concat: "added", z1_h: "added", relu_gate: "added", arena_tape: "added", softmax: "kept", loss: "kept" },
+          arcs: [
+            { from: { x: -10.4, y: 1.4, z: 0 }, to: { x: -10.5, y: 1.3, z: -0.6 }, label: "↻ 全序列 → 3字固定窗" },
+            { from: { x: -0.6, y: 1.8, z: 0 }, to: { x: -3.2, y: 1.5, z: -0.8 }, label: "↻ 自注意力 → 2层MLP" },
+          ],
+          calloutsOut: [{ x: -0.6, y: 4.3, z: 0, text: "- 收起: 11×11 因果注意力与 Mask", kind: "rem" }],
+          calloutsIn: [
+            { x: 0.2, y: 4.0, z: -0.8, text: "+ 恢复: 3D ReLU 门控", kind: "add" },
+            { x: 0.0, y: 1.6, z: 4.35, text: "+ 恢复: 12槽 Arena-Tape", kind: "add" },
+          ],
+          diff: STEP_META[2].diffFromPrev,
+        };
+      }
+      // General fallback (reverse or multi-step jump)
+      const targetDiff = toId === 0 ? STEP_META[0].diffBase : STEP_META[toId].diffFromPrev;
+      return {
+        title: `${forward ? "✨ 架构跨越升级" : "⏪ 架构回看对比"}：${STEP_META[fromId].name} ──▶ ${STEP_META[toId].name}`,
+        outRole: { _default: "removed", softmax: (fromId >= 1 && toId >= 1) ? "kept" : "removed", loss: (fromId >= 1 && toId >= 1) ? "kept" : "removed" },
+        inRole:  { _default: "added", softmax: (fromId >= 1 && toId >= 1) ? "kept" : "added", loss: (fromId >= 1 && toId >= 1) ? "kept" : "added" },
+        arcs: [{ from: { x: -4, y: 1.5, z: 0 }, to: { x: 0, y: 1.8, z: 0 }, label: `↻ 切换至 ${STEP_META[toId].name}` }],
+        calloutsOut: [],
+        calloutsIn: [{ x: 0, y: 4.0, z: 0, text: `+ 进入 ${STEP_META[toId].name}`, kind: "add" }],
+        diff: targetDiff,
+      };
+    }
+
+    // =========================================================================
+    // 3. STEP 00 ENGINE: Tokenizer (Char-Level Vocab + Encode/Decode)
+    // =========================================================================
+    const S0 = {
+      viewMode: "train", // "train" (build vocab 5 stages) | "infer" (interactive encode/decode)
+      mode: "idle",
+      stage: 0, // 0..5
+      stageStartMs: 0,
+      testText: "床前明月",
+      lastFlight: null, // { startMs, char, tokId, isOov }
+      highlightVocabId: -1,
+      trainNarrator: {
+        title: "Step 00 准备就绪：点「⏭ 下一步」看一段汉字怎样被拆字、去重、编码成数字！",
+        desc: "所有大语言模型（GPT / DeepSeek / Gemini）的第一道工序都是 Tokenizer——先建双向词表，再把文字翻译成整数。",
+      },
+      inferNarrator: {
+        title: "🟢 编解码实验模式：点击下方汉字，看它飞过 3D 词表变成整数 ID 再还原！",
+        desc: "试着点一下红色按钮「⚠️ 塞入生僻字「人」」，亲眼看看词表外字符 (OOV) 为什么会让字符级分词器卡壳！",
+      },
+      stageNames: ["① 原始文本拆字", "② 去重排序建词表", "③ 分配 ID (stoi/itos)", "④ Encode 文本→数字", "⑤ Decode 数字→文本"],
+      init() {
+        this.mode = "idle"; this.stage = 0; this.testText = "床前明月"; this.lastFlight = null; this.highlightVocabId = -1;
+      },
+      enterStage(st, nowMs) {
+        this.stage = st; this.stageStartMs = nowMs;
+        if (st === 1) {
+          this.trainNarrator = {
+            title: "① 原始文本拆字：把「床前明月光，举头望明月。」拆成 12 个独立字符",
+            desc: "注意其中「明」和「月」各出现了 2 次——直接拿原始文本编号会造成重复，必须先去重！",
+          };
+        } else if (st === 2) {
+          this.trainNarrator = {
+            title: "② 去重并排序建词表：12 个字去重合并后剩下 V = 10 个唯一字符！",
+            desc: `排序后的唯一词表：[${VOCAB.join("、")}]。这就是整个模型认识的「全部汉字宇宙」。`,
+          };
+        } else if (st === 3) {
+          this.trainNarrator = {
+            title: "③ 构建双向映射表 stoi / itos：给 10 个唯一字符盖上 0..9 编号印章",
+            desc: `例如「床」↔ ${STOI["床"]}、「明」↔ ${STOI["明"]}、「月」↔ ${STOI["月"]}。整数 ID 才能作为矩阵行号送进神经网络！`,
+          };
+        } else if (st === 4) {
+          this.trainNarrator = {
+            title: `④ Encode（文本 → 整数序列）：12 字翻译为 [${DATA.join(", ")}]`,
+            desc: "前向推理和训练时，模型看到的从来不是「床前明月」，而是这串干干净净的整数数组！",
+          };
+        } else if (st === 5) {
+          this.trainNarrator = {
+            title: `⑤ Decode（整数序列 → 还原文本）：按 itos 查回「${CORPUS}」`,
+            desc: "100% 无损可逆！搞懂 Tokenizer 后，点顶部「下一关进化 →」看 3D 舞台平滑长出 Step 01 Bigram 矩阵！",
+          };
+        }
+      },
+    };
+
+    // =========================================================================
+    // 4. STEP 01 ENGINE: Bigram Language Model (Real 10x10 SGD)
+    // =========================================================================
+    const S1_PAIRS = [];
+    for (let i = 0; i < DATA.length - 1; i++) S1_PAIRS.push([DATA[i], DATA[i + 1]]);
+
+    const S1 = {
+      viewMode: "train",
+      mode: "idle", // idle | step | autoplay | fast
+      stage: 0, // 0..5
+      stageStartMs: 0,
+      stage5Applied: false,
+      epoch: 0,
+      lr: 6.0,
+      selectedPairIdx: 0,
+      table: new Float32Array(V * V),
+      visHeights: new Float32Array(V * V),
+      visProbs: new Float32Array(V),
+      visLoss: 0,
+      hasSoftmax: false,
+      hasLoss: false,
+      lastLossVal: 0,
+      fastRemaining: 0,
+      lastFastTick: 0,
+      // Inference
+      temp: 0.7,
+      genStartId: STOI["床"],
+      genIds: [STOI["床"]],
+      lastDraw: null,
+      inferAnim: null, // { startMs, fromId, nextId, prob, dice, probs, committed }
+      trainNarrator: {
+        title: "Step 01 准备就绪：点「⏭ 下一步」看 Bigram 如何查表、算概率、算 Loss 并反向推拉！",
+        desc: "初始权重全为 0，尚未计算前向，因此 Softmax 概率塔和 Loss 能量柱初始高度都为 0。",
+      },
+      inferNarrator: {
+        title: "🟢 Step 01 推理模式：看当前字对应行，经温度 Softmax 掷骰子跳到下一行！",
+        desc: "拖动温度 T 看右侧 3D 概率塔实时变尖或变平；点「🎲 推理下一个字」看金色骰子在 10×10 矩阵上跳跃！",
+      },
+      stageNames: ["① 词典编码", "② 扫描矩阵行", "③ Softmax 概率塔", "④ Loss 能量柱", "⑤ 梯度回流推拉"],
+      init() {
+        this.table.fill(0); this.visHeights.fill(0); this.visProbs.fill(0); this.visLoss = 0;
+        this.epoch = 0; this.stage = 0; this.mode = "idle"; this.stage5Applied = false;
+        this.hasSoftmax = false; this.hasLoss = false; this.lastLossVal = 0;
+        this.genIds = [this.genStartId]; this.lastDraw = null; this.inferAnim = null;
+      },
+      getRow(x) { return this.table.subarray(x * V, (x + 1) * V); },
+      fullLossAndGrads() {
+        const n = S1_PAIRS.length, grads = new Float32Array(V * V);
+        let total = 0;
+        for (const [x, y] of S1_PAIRS) {
+          const probs = softmaxRow(this.getRow(x), 1.0);
+          total += -Math.log(Math.max(probs[y], 1e-12));
+          for (let j = 0; j < V; j++) grads[x * V + j] += (probs[j] - (j === y ? 1.0 : 0.0)) / n;
+        }
+        return { loss: total / n, grads };
+      },
+      trainOneEpoch() {
+        const { grads } = this.fullLossAndGrads();
+        for (let i = 0; i < this.table.length; i++) this.table[i] -= this.lr * grads[i];
+        this.epoch += 1;
+        this.hasSoftmax = true; this.hasLoss = true;
+        this.lastLossVal = this.fullLossAndGrads().loss;
+      },
+      flushStage5() {
+        if (this.stage === 5 && !this.stage5Applied) { this.trainOneEpoch(); this.stage5Applied = true; }
+      },
+      flushInfer() {
+        if (this.inferAnim && !this.inferAnim.committed) {
+          this.inferAnim.committed = true;
+          this.genIds.push(this.inferAnim.nextId);
+          if (this.genIds.length > 20) this.genIds.shift();
+          this.lastDraw = { dice: this.inferAnim.dice, nextId: this.inferAnim.nextId, prob: this.inferAnim.prob, fromId: this.inferAnim.fromId };
+        }
+      },
+      enterStage(st, nowMs) {
+        this.flushStage5();
+        this.stage = st; this.stageStartMs = nowMs; this.stage5Applied = false;
+        const [x, y] = S1_PAIRS[this.selectedPairIdx];
+        if (st === 1) {
+          this.trainNarrator = {
+            title: `① 词典编码：当前字「${VOCAB[x]}」→ 行号 ${x}，正确答案「${VOCAB[y]}」→ 目标列 ${y}`,
+            desc: "Bigram 只看这 1 个当前字，直接拿它的整数 ID 去 10×10 表格里查对应行。",
+          };
+        } else if (st === 2) {
+          this.trainNarrator = {
+            title: `② 扫描矩阵第 ${x} 行（「${VOCAB[x]}」的 10 个原始打分 logits）`,
+            desc: "整张 10×10 表里只有这一行参与当前样本的预测。",
+          };
+        } else if (st === 3) {
+          this.hasSoftmax = true;
+          const p = softmaxRow(this.getRow(x), 1.0)[y];
+          this.trainNarrator = {
+            title: `③ Softmax 概率塔：「${VOCAB[x]} → ${VOCAB[y]}」当前概率 ${(p * 100).toFixed(1)}%`,
+            desc: "Softmax 把 10 个任意实数打分压成总和 100% 的概率分布。",
+          };
+        } else if (st === 4) {
+          this.hasLoss = true;
+          this.lastLossVal = this.fullLossAndGrads().loss;
+          this.trainNarrator = {
+            title: `④ 交叉熵 Loss 能量柱：全量平均 Loss = ${this.lastLossVal.toFixed(4)}`,
+            desc: "正确答案概率越低，橙色 Loss 能量柱越高；训练目标就是把这根柱子压到最低！",
+          };
+        } else if (st === 5) {
+          this.trainNarrator = {
+            title: `⑤ 反向梯度推拉（lr = ${this.lr.toFixed(1)}）：绿箭拉高「${VOCAB[y]}」，红箭压低其余 9 列！`,
+            desc: "Bigram 梯度非常干净：g[j] = probs[j] - one_hot[y]，直接用 SGD 更新权重表！",
+          };
+        }
+      },
+    };
+
+    // =========================================================================
+    // 5. STEP 02 ENGINE: Real Arena-Tape Autograd + 3-Char Context MLP
+    // =========================================================================
+    const S2_CTX = 3, S2_EMB = 4, S2_IN = 12, S2_H = 8;
+    const S2_SAMPLES = [];
+    for (let i = 0; i <= DATA.length - S2_CTX - 1; i++) {
+      S2_SAMPLES.push({
+        start: i, ctxIds: DATA.slice(i, i + S2_CTX), ctxText: CHARS.slice(i, i + S2_CTX).join(""),
+        targetId: DATA[i + S2_CTX], targetChar: CHARS[i + S2_CTX],
+      });
+    }
+    const S2_BATCH_CTX = S2_SAMPLES.map(s => s.ctxIds);
+    const S2_BATCH_TGT = S2_SAMPLES.map(s => s.targetId);
+
+    class S2Tape {
+      constructor() { this.nodes = []; }
+      push(name, rows, cols, data, op, parents, opLabel, ruleText) {
+        const id = this.nodes.length;
+        this.nodes.push({ id, name, rows, cols, data: new Float32Array(data), grad: new Float32Array(rows * cols), op, parents, opLabel, ruleText });
+        return id;
+      }
+      param(p) { return this.push(p.name, p.rows, p.cols, p.data, { kind: "Leaf" }, [], "Leaf (Param)", "叶子参数节点：累加下游梯度供 AdamW 更新。"); }
+      embedConcat(name, tableId, ctxIndices) {
+        const tbl = this.nodes[tableId], d = tbl.cols, batch = ctxIndices.length, outCols = ctxIndices[0].length * d;
+        const out = new Float32Array(batch * outCols);
+        for (let b = 0; b < batch; b++)
+          for (let slot = 0; slot < ctxIndices[b].length; slot++) {
+            const tok = ctxIndices[b][slot];
+            for (let j = 0; j < d; j++) out[b * outCols + slot * d + j] = tbl.data[tok * d + j];
+          }
+        return this.push(name, batch, outCols, out, { kind: "EmbedConcat", table: tableId, ctxIndices }, [tableId], "EmbedConcat", "切回 3 段 4 维梯度，按 token ID 累加(+=)回 emb 对应行。");
+      }
+      matmul(name, aId, bId) {
+        const a = this.nodes[aId], b = this.nodes[bId];
+        return this.push(name, a.rows, b.cols, matmulFwd(a.data, a.rows, a.cols, b.data, b.cols), { kind: "MatMul", a: aId, b: bId }, [aId, bId], "MatMul", "dA += dOut @ Bᵀ，dB += Aᵀ @ dOut。");
+      }
+      add(name, aId, bId) {
+        const a = this.nodes[aId], b = this.nodes[bId], out = new Float32Array(a.rows * a.cols);
+        for (let r = 0; r < a.rows; r++) {
+          const br = b.rows === 1 ? 0 : r;
+          for (let c = 0; c < a.cols; c++) out[r * a.cols + c] = a.data[r * a.cols + c] + b.data[br * a.cols + c];
+        }
+        return this.push(name, a.rows, a.cols, out, { kind: "Add", a: aId, b: bId }, [aId, bId], "Add (行广播)", "dA += dOut，偏置 dB 沿 batch 行求和。");
+      }
+      relu(name, xId) {
+        const x = this.nodes[xId], out = new Float32Array(x.data.length);
+        for (let i = 0; i < out.length; i++) out[i] = x.data[i] > 0 ? x.data[i] : 0;
+        return this.push(name, x.rows, x.cols, out, { kind: "Relu", x: xId }, [xId], "ReLU", "x > 0 处梯度 ×1 放行，x ≤ 0 处梯度 ×0 截断。");
+      }
+      crossEntropy(name, logitsId, targets) {
+        const z = this.nodes[logitsId], batch = z.rows, v = z.cols, sampleLosses = new Float32Array(batch);
+        let total = 0;
+        for (let b = 0; b < batch; b++) {
+          const probs = softmaxRow(z.data.subarray(b * v, (b + 1) * v), 1.0);
+          const l = -Math.log(Math.max(probs[targets[b]], 1e-12));
+          sampleLosses[b] = l; total += l;
+        }
+        const id = this.push(name, 1, 1, [total / batch], { kind: "CrossEntropy", logits: logitsId, targets }, [logitsId], "CrossEntropy", "dLogits[b,j] += (probs[b,j] - one_hot) / B。");
+        this.nodes[id].sampleLosses = sampleLosses;
+        return id;
+      }
+      backward(lossId) {
+        this.nodes[lossId].grad[0] = 1.0;
+        for (let id = lossId; id >= 0; id--) {
+          const node = this.nodes[id], dOut = node.grad, op = node.op;
+          if (op.kind === "Add") {
+            const a = this.nodes[op.a], b = this.nodes[op.b];
+            for (let r = 0; r < a.rows; r++) {
+              const br = b.rows === 1 ? 0 : r;
+              for (let c = 0; c < a.cols; c++) { const g = dOut[r * a.cols + c]; a.grad[r * a.cols + c] += g; b.grad[br * b.cols + c] += g; }
+            }
+          } else if (op.kind === "MatMul") {
+            const a = this.nodes[op.a], b = this.nodes[op.b], m = a.rows, k = a.cols, n = b.cols;
+            for (let i = 0; i < m; i++)
+              for (let p = 0; p < k; p++) {
+                let acc = 0; const aip = a.data[i * k + p];
+                for (let j = 0; j < n; j++) { const g = dOut[i * n + j]; acc += g * b.data[p * n + j]; b.grad[p * n + j] += aip * g; }
+                a.grad[i * k + p] += acc;
+              }
+          } else if (op.kind === "Relu") {
+            const x = this.nodes[op.x];
+            for (let i = 0; i < dOut.length; i++) if (x.data[i] > 0) x.grad[i] += dOut[i];
+          } else if (op.kind === "EmbedConcat") {
+            const tbl = this.nodes[op.table], d = tbl.cols, outCols = op.ctxIndices[0].length * d;
+            for (let b = 0; b < op.ctxIndices.length; b++)
+              for (let slot = 0; slot < op.ctxIndices[b].length; slot++) {
+                const tok = op.ctxIndices[b][slot];
+                for (let j = 0; j < d; j++) tbl.grad[tok * d + j] += dOut[b * outCols + slot * d + j];
+              }
+          } else if (op.kind === "CrossEntropy") {
+            const logits = this.nodes[op.logits], batch = logits.rows, v = logits.cols, scale = dOut[0] / batch;
+            for (let b = 0; b < batch; b++) {
+              const probs = softmaxRow(logits.data.subarray(b * v, (b + 1) * v), 1.0), y = op.targets[b];
+              for (let j = 0; j < v; j++) logits.grad[b * v + j] += (probs[j] - (j === y ? 1.0 : 0.0)) * scale;
+            }
+          }
+        }
+      }
+    }
+
+    const S2 = {
+      viewMode: "train",
+      mode: "idle",
+      stage: 0, // 0..8
+      stageStartMs: 0,
+      stage8Applied: false,
+      stepCount: 0,
+      lr: 0.03,
+      model: null,
+      tape: null,
+      fwdStage: 0,
+      hasBwd: false,
+      hasUpdated: false,
+      lastReport: null,
+      selectedSampleIdx: 0,
+      selectedNodeId: 5,
+      selectedNeuron: 0,
+      fastRemaining: 0,
+      lastFastTick: 0,
+      visProbs: new Float32Array(V),
+      visX: new Float32Array(S2_IN),
+      visZ1: new Float32Array(S2_H),
+      visH: new Float32Array(S2_H),
+      visLoss: 0,
+      temp: 0.7,
+      genStartIdx: 0,
+      genIds: [...S2_SAMPLES[0].ctxIds],
+      lastDraw: null,
+      inferAnim: null,
+      trainNarrator: {
+        title: "Step 02 准备就绪：选中「床前明 → 月」，点「⏭ 下一步」拆解 3字拼接 MLP 与 Arena-Tape！",
+        desc: "3 个字查 4 维词向量拼成 12 维 x（全部 12 根柱子真实绘制），彻底区分「前明月→光」与「望明月→。」！",
+      },
+      inferNarrator: {
+        title: "🟢 Step 02 推理模式：纯前向滑窗接龙（隐藏 Tape / Loss / Target，绝不改权重）",
+        desc: "每点一次「🎲 推理下一个字」，末尾 3 字穿过同一套 MLP 抽字并飞回输入槽右滑！",
+      },
+      stageNames: ["① 编码与取样", "② Embed拼接", "③ MatMul+b1", "④ ReLU门控", "⑤ MatMul+b2", "⑥ 概率与Loss", "⑦ Tape反传", "⑧ AdamW更新"],
+      init(deadRelu = false) {
+        const rng = new Rng(42);
+        this.model = {
+          emb: Param.randn("emb", V, S2_EMB, 0.35, rng, true),
+          w1: Param.randn("w1", S2_IN, S2_H, Math.sqrt(2 / S2_IN), rng, true),
+          b1: Param.zeros("b1", 1, S2_H),
+          w2: Param.randn("w2", S2_H, V, Math.sqrt(1 / S2_H), rng, true),
+          b2: Param.zeros("b2", 1, V),
+        };
+        if (deadRelu) this.model.b1.data.fill(-3.2);
+        this.stepCount = 0; this.mode = "idle"; this.stage = 0; this.stage8Applied = false;
+        this.tape = null; this.fwdStage = 0; this.hasBwd = false; this.hasUpdated = false; this.lastReport = null;
+        this.visProbs.fill(0); this.visX.fill(0); this.visZ1.fill(0); this.visH.fill(0); this.visLoss = 0;
+        this.genIds = [...S2_SAMPLES[this.genStartIdx].ctxIds]; this.lastDraw = null; this.inferAnim = null;
+      },
+      runForward() {
+        const t = new S2Tape(), m = this.model;
+        const embId = t.param(m.emb), w1Id = t.param(m.w1), b1Id = t.param(m.b1), w2Id = t.param(m.w2), b2Id = t.param(m.b2);
+        const xId = t.embedConcat("x", embId, S2_BATCH_CTX);
+        const z1Raw = t.matmul("z1_raw", xId, w1Id);
+        const z1Id = t.add("z1", z1Raw, b1Id);
+        const hId = t.relu("h", z1Id);
+        const z2Raw = t.matmul("z2_raw", hId, w2Id);
+        const logId = t.add("logits", z2Raw, b2Id);
+        t.crossEntropy("loss", logId, S2_BATCH_TGT);
+        return t;
+      },
+      inferForward(ctxIds) {
+        const m = this.model, x = new Float32Array(S2_IN), z1 = new Float32Array(S2_H), h = new Float32Array(S2_H), logits = new Float32Array(V);
+        for (let slot = 0; slot < S2_CTX; slot++)
+          for (let j = 0; j < S2_EMB; j++) x[slot * S2_EMB + j] = m.emb.data[ctxIds[slot] * S2_EMB + j];
+        for (let k = 0; k < S2_H; k++) {
+          let acc = m.b1.data[k];
+          for (let i = 0; i < S2_IN; i++) acc += x[i] * m.w1.data[i * S2_H + k];
+          z1[k] = acc; h[k] = acc > 0 ? acc : 0;
+        }
+        for (let j = 0; j < V; j++) {
+          let acc = m.b2.data[j];
+          for (let k = 0; k < S2_H; k++) acc += h[k] * m.w2.data[k * V + j];
+          logits[j] = acc;
+        }
+        return { x, z1, h, logits };
+      },
+      stepAdamW(useExisting = false) {
+        const oldT = useExisting && this.tape ? this.tape : this.runForward();
+        if (!useExisting) oldT.backward(11);
+        const beforeBatch = oldT.nodes[11].data[0], beforeSample = oldT.nodes[11].sampleLosses[this.selectedSampleIdx];
+        this.stepCount += 1;
+        const m = this.model;
+        m.emb.adamwStep(oldT.nodes[0].grad, this.lr, 0.01, this.stepCount);
+        m.w1.adamwStep(oldT.nodes[1].grad, this.lr, 0.01, this.stepCount);
+        m.b1.adamwStep(oldT.nodes[2].grad, this.lr, 0.01, this.stepCount);
+        m.w2.adamwStep(oldT.nodes[3].grad, this.lr, 0.01, this.stepCount);
+        m.b2.adamwStep(oldT.nodes[4].grad, this.lr, 0.01, this.stepCount);
+        const newT = this.runForward();
+        for (let i = 0; i < 12; i++) newT.nodes[i].grad.set(oldT.nodes[i].grad);
+        this.tape = newT; this.fwdStage = 6; this.hasBwd = true; this.hasUpdated = true;
+        this.lastReport = { step: this.stepCount, beforeBatch, afterBatch: newT.nodes[11].data[0], beforeSample, afterSample: newT.nodes[11].sampleLosses[this.selectedSampleIdx], idx: this.selectedSampleIdx };
+      },
+      flushStage8() { if (this.stage === 8 && !this.stage8Applied) { this.stepAdamW(true); this.stage8Applied = true; } },
+      flushInfer() {
+        if (this.inferAnim && !this.inferAnim.committed) {
+          this.inferAnim.committed = true;
+          this.genIds.push(this.inferAnim.nextId);
+          if (this.genIds.length > 22) this.genIds.shift();
+          this.lastDraw = { dice: this.inferAnim.dice, nextId: this.inferAnim.nextId, prob: this.inferAnim.prob, prevWinText: this.inferAnim.prevWinText, newWinText: this.genIds.slice(-S2_CTX).map(i => VOCAB[i]).join("") };
+        }
+      },
+      enterStage(st, nowMs) {
+        this.flushStage8(); this.stage = st; this.stageStartMs = nowMs; this.stage8Applied = false;
+        const s = S2_SAMPLES[this.selectedSampleIdx];
+        if (st === 1) {
+          this.tape = this.runForward(); this.fwdStage = 1; this.hasBwd = false; this.selectedNodeId = 0;
+          this.trainNarrator = { title: `① 编码与取样：「${s.ctxText}」→ ID [${s.ctxIds.join(",")}]，target「${s.targetChar}」(${s.targetId})`, desc: "3 个输入字即将查词向量并拼接，target 要到第 ⑥ 步算 Loss 时才登场。" };
+        } else if (st === 2) {
+          if (!this.tape) this.tape = this.runForward(); this.fwdStage = 2; this.selectedNodeId = 5;
+          this.trainNarrator = { title: "② Embedding 查表拼接（Node[5] x）：3 字 × 4 维 = 12 维完整输入 x！", desc: "画面已真实画出全部 12 根柱子（3 组底座），「前明月」与「望明月」的 x 从这里就彻底分叉！" };
+        } else if (st === 3) {
+          this.fwdStage = 3; this.selectedNodeId = 7;
+          const zv = this.tape.nodes[7].data[this.selectedSampleIdx * S2_H + this.selectedNeuron];
+          this.trainNarrator = { title: `③ MatMul + b1（Node[6→7] z1）：神经元 #${this.selectedNeuron} 输出 z = ${zv.toFixed(3)}`, desc: "绿色为正值、红色为负值，即将撞上 3D ReLU 非线性闸门！" };
+        } else if (st === 4) {
+          this.fwdStage = 4; this.selectedNodeId = 8;
+          const zv = this.tape.nodes[7].data[this.selectedSampleIdx * S2_H + this.selectedNeuron];
+          this.trainNarrator = { title: `④ ReLU 门控激活（Node[8] h = max(0, z1)）：神经元 #${this.selectedNeuron} ${zv > 0 ? "开启放行" : "关闭归零"}`, desc: zv > 0 ? "z > 0 绿色大门畅通无阻！" : "z ≤ 0 红色闸门自动拉下，输出归零且反传梯度将被 ×0 截断！" };
+        } else if (st === 5) {
+          this.fwdStage = 5; this.selectedNodeId = 10;
+          this.trainNarrator = { title: "⑤ 输出层 MatMul + b2（Node[9→10] logits）：算出词表 10 个字的原始打分", desc: "即将送入融合 CrossEntropy 节点计算概率与交叉熵损失。" };
+        } else if (st === 6) {
+          this.fwdStage = 6; this.selectedNodeId = 11;
+          const probs = softmaxRow(this.tape.nodes[10].data.subarray(this.selectedSampleIdx * V, (this.selectedSampleIdx + 1) * V), 1.0);
+          this.trainNarrator = { title: `⑥ 概率与交叉熵（Node[11]）：「${s.targetChar}」概率 ${(probs[s.targetId] * 100).toFixed(1)}%，样本 Loss = ${this.tape.nodes[11].sampleLosses[this.selectedSampleIdx].toFixed(3)}`, desc: "顶部显示 9 窗 Batch 平均 Loss，橙柱显示当前样本 Loss。下一步沿 Tape 11→0 倒序反传！" };
+        } else if (st === 7) {
+          this.tape.backward(11); this.hasBwd = true; this.selectedNodeId = 1;
+          this.trainNarrator = { title: "⑦ Arena-Tape 倒序自动反传（11 → 0）：全部 grad 已算完（权重尚未改动）", desc: "点击下方任意 Tape 槽位核对每个节点的 grad；负 z 神经元在 ReLU 处梯度归零！" };
+        } else if (st === 8) {
+          this.selectedNodeId = 1;
+          this.trainNarrator = { title: `⑧ AdamW 更新 5 组参数（lr = ${this.lr.toFixed(3)}）：按 grad 计算 Δw 并用新权重重算 Loss`, desc: "3D 箭头标注的是参数变化量 Δw（与 grad 方向相反），HUD 显示更新前/后两次前向真实 Loss！" };
+        }
+      },
+    };
+
+    // =========================================================================
+    // 6. STEP 03 ENGINE: Real 2-Head Causal Multi-Head Self-Attention + Residual
+    // =========================================================================
+    const S3_TMAX = 12, S3_SEQ = DATA.length - 1, S3_D = 8, S3_NH = 2, S3_DH = 4, S3_SCALE = 0.5;
+    const S3_IN = DATA.slice(0, S3_SEQ), S3_TGT = DATA.slice(1, S3_SEQ + 1);
+
+    const S3 = {
+      viewMode: "train",
+      mode: "idle",
+      stage: 0, // 0..8
+      stageStartMs: 0,
+      stage8Applied: false,
+      stepCount: 0,
+      lr: 0.03,
+      selectedHead: -1,
+      selectedPos: 3,
+      model: null,
+      cache: null,
+      computedStage: 0,
+      lastReport: null,
+      fastRemaining: 0,
+      lastFastTick: 0,
+      visProbs: new Float32Array(V),
+      visH1: new Float32Array(S3_D),
+      visAttn: new Float32Array(S3_TMAX * S3_TMAX),
+      visLoss: 0,
+      temp: 0.7,
+      genStartStr: "床",
+      genIds: [STOI["床"]],
+      lastDraw: null,
+      inferAnim: null,
+      trainNarrator: {
+        title: "Step 03 准备就绪：选中 pos[3]「床前明月 → 光」，点「⏭ 下一步」看因果自注意力扫描历史！",
+        desc: "11 个位置并行计算！因果下三角掩码封死未来偷看路径，推理只需 1 个字就能起步！",
+      },
+      inferNarrator: {
+        title: "🟢 Step 03 推理模式：只需 1 个「床」字就能起步！末字举起 Query 扫描全部历史！",
+        desc: "拖动温度 T 看概率塔变形，点「🎲 推理下一个字」看序列逐字生长并向全部前文发射注意力光束！",
+      },
+      stageNames: ["① 词+位置编码", "② 投影 Q/K/V", "③ Q·Kᵀ/√d打分", "④ 因果掩码", "⑤ Softmax权重", "⑥ 汇聚V+残差", "⑦ 概率与Loss", "⑧ 反传与AdamW"],
+      init() {
+        const rng = new Rng(42), std = Math.sqrt(1 / S3_D);
+        this.model = {
+          tokEmb: Param.randn("tok_emb", V, S3_D, 0.32, rng, true),
+          posEmb: Param.randn("pos_emb", S3_TMAX, S3_D, 0.20, rng, true),
+          wq: Param.randn("wq", S3_D, S3_D, std, rng, true),
+          wk: Param.randn("wk", S3_D, S3_D, std, rng, true),
+          wv: Param.randn("wv", S3_D, S3_D, std, rng, true),
+          wo: Param.randn("wo", S3_D, S3_D, std * 0.6, rng, true),
+          wLm: Param.randn("w_lm", S3_D, V, std, rng, true),
+          bLm: Param.zeros("b_lm", 1, V),
+        };
+        this.stepCount = 0; this.mode = "idle"; this.stage = 0; this.stage8Applied = false;
+        this.cache = null; this.computedStage = 0; this.lastReport = null;
+        this.visProbs.fill(0); this.visH1.fill(0); this.visAttn.fill(0); this.visLoss = 0;
+        this.genIds = this.genStartStr.split("").map(ch => STOI[ch]); this.lastDraw = null; this.inferAnim = null;
+      },
+      forward(seqIds, targets = null) {
+        const m = this.model, T = seqIds.length;
+        const h0 = new Float32Array(T * S3_D);
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S3_D; c++) h0[t * S3_D + c] = m.tokEmb.data[seqIds[t] * S3_D + c] + m.posEmb.data[t * S3_D + c];
+        const q = matmulFwd(h0, T, S3_D, m.wq.data, S3_D);
+        const k = matmulFwd(h0, T, S3_D, m.wk.data, S3_D);
+        const v = matmulFwd(h0, T, S3_D, m.wv.data, S3_D);
+        const rawScores = new Float32Array(S3_NH * T * T), attnWeights = new Float32Array(S3_NH * T * T), ctx = new Float32Array(T * S3_D);
+        for (let h = 0; h < S3_NH; h++) {
+          const hCol = h * S3_DH, wBase = h * T * T;
+          for (let i = 0; i < T; i++) {
+            const qiOff = i * S3_D + hCol;
+            let maxS = -Infinity;
+            for (let j = 0; j < T; j++) {
+              const kjOff = j * S3_D + hCol;
+              let dot = 0; for (let d = 0; d < S3_DH; d++) dot += q[qiOff + d] * k[kjOff + d];
+              const sc = dot * S3_SCALE; rawScores[wBase + i * T + j] = sc;
+              if (j <= i && sc > maxS) maxS = sc;
+            }
+            let sumE = 0;
+            for (let j = 0; j <= i; j++) { const e = Math.exp(rawScores[wBase + i * T + j] - maxS); attnWeights[wBase + i * T + j] = e; sumE += e; }
+            for (let j = 0; j <= i; j++) attnWeights[wBase + i * T + j] /= sumE;
+            const outOff = i * S3_D + hCol;
+            for (let j = 0; j <= i; j++) {
+              const w = attnWeights[wBase + i * T + j], vjOff = j * S3_D + hCol;
+              for (let d = 0; d < S3_DH; d++) ctx[outOff + d] += w * v[vjOff + d];
+            }
+          }
+        }
+        const attnOut = matmulFwd(ctx, T, S3_D, m.wo.data, S3_D);
+        const h1 = new Float32Array(T * S3_D);
+        for (let i = 0; i < h1.length; i++) h1[i] = h0[i] + attnOut[i];
+        const logits = matmulFwd(h1, T, S3_D, m.wLm.data, V);
+        for (let t = 0; t < T; t++) for (let j = 0; j < V; j++) logits[t * V + j] += m.bLm.data[j];
+        let posLosses = null, meanLoss = 0;
+        if (targets) {
+          posLosses = new Float32Array(T);
+          for (let t = 0; t < T; t++) {
+            const l = -Math.log(Math.max(softmaxRow(logits.subarray(t * V, (t + 1) * V), 1.0)[targets[t]], 1e-12));
+            posLosses[t] = l; meanLoss += l;
+          }
+          meanLoss /= T;
+        }
+        return { T, seqIds: [...seqIds], h0, q, k, v, rawScores, attnWeights, ctx, h1, logits, posLosses, meanLoss };
+      },
+      backward(cache, targets) {
+        const m = this.model, T = cache.T;
+        const gTok = new Float32Array(m.tokEmb.data.length), gPos = new Float32Array(m.posEmb.data.length);
+        const gWq = new Float32Array(m.wq.data.length), gWk = new Float32Array(m.wk.data.length), gWv = new Float32Array(m.wv.data.length);
+        const gWo = new Float32Array(m.wo.data.length), gWLm = new Float32Array(m.wLm.data.length), gBLm = new Float32Array(m.bLm.data.length);
+        const dLogits = new Float32Array(T * V), invT = 1 / T;
+        for (let t = 0; t < T; t++) {
+          const probs = softmaxRow(cache.logits.subarray(t * V, (t + 1) * V), 1.0), y = targets[t];
+          for (let j = 0; j < V; j++) { const g = (probs[j] - (j === y ? 1 : 0)) * invT; dLogits[t * V + j] = g; gBLm[j] += g; }
+        }
+        const dH1 = new Float32Array(T * S3_D);
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S3_D; c++) {
+            let acc = 0; const h1tc = cache.h1[t * S3_D + c];
+            for (let j = 0; j < V; j++) { const g = dLogits[t * V + j]; acc += g * m.wLm.data[c * V + j]; gWLm[c * V + j] += h1tc * g; }
+            dH1[t * S3_D + c] = acc;
+          }
+        const dH0 = new Float32Array(dH1), dCtx = new Float32Array(T * S3_D);
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S3_D; c++) {
+            let acc = 0; const ctxTc = cache.ctx[t * S3_D + c];
+            for (let j = 0; j < S3_D; j++) { const g = dH1[t * S3_D + j]; acc += g * m.wo.data[c * S3_D + j]; gWo[c * S3_D + j] += ctxTc * g; }
+            dCtx[t * S3_D + c] = acc;
+          }
+        const dQ = new Float32Array(T * S3_D), dK = new Float32Array(T * S3_D), dV = new Float32Array(T * S3_D), dWRow = new Float32Array(T);
+        for (let h = 0; h < S3_NH; h++) {
+          const hCol = h * S3_DH, wBase = h * T * T;
+          for (let i = 0; i < T; i++) {
+            const dOff = i * S3_D + hCol; let wDotDw = 0;
+            for (let j = 0; j <= i; j++) {
+              const wIj = cache.attnWeights[wBase + i * T + j], vjOff = j * S3_D + hCol;
+              let dw = 0;
+              for (let d = 0; d < S3_DH; d++) { const g = dCtx[dOff + d]; dV[vjOff + d] += wIj * g; dw += g * cache.v[vjOff + d]; }
+              dWRow[j] = dw; wDotDw += wIj * dw;
+            }
+            for (let j = 0; j <= i; j++) {
+              const dS = cache.attnWeights[wBase + i * T + j] * (dWRow[j] - wDotDw) * S3_SCALE, kjOff = j * S3_D + hCol;
+              for (let d = 0; d < S3_DH; d++) { dQ[dOff + d] += dS * cache.k[kjOff + d]; dK[kjOff + d] += dS * cache.q[dOff + d]; }
+            }
+          }
+        }
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S3_D; c++) {
+            const h0tc = cache.h0[t * S3_D + c]; let acc = 0;
+            for (let j = 0; j < S3_D; j++) {
+              const gq = dQ[t * S3_D + j], gk = dK[t * S3_D + j], gv = dV[t * S3_D + j];
+              gWq[c * S3_D + j] += h0tc * gq; gWk[c * S3_D + j] += h0tc * gk; gWv[c * S3_D + j] += h0tc * gv;
+              acc += gq * m.wq.data[c * S3_D + j] + gk * m.wk.data[c * S3_D + j] + gv * m.wv.data[c * S3_D + j];
+            }
+            dH0[t * S3_D + c] += acc;
+          }
+        for (let t = 0; t < T; t++)
+          for (let c = 0; c < S3_D; c++) { const g = dH0[t * S3_D + c]; gTok[cache.seqIds[t] * S3_D + c] += g; gPos[t * S3_D + c] += g; }
+        return { tokEmb: gTok, posEmb: gPos, wq: gWq, wk: gWk, wv: gWv, wo: gWo, wLm: gWLm, bLm: gBLm };
+      },
+      getHeadMat(buf, T) {
+        const mat = new Float32Array(T * T);
+        if (this.selectedHead >= 0) mat.set(buf.subarray(this.selectedHead * T * T, (this.selectedHead + 1) * T * T));
+        else for (let h = 0; h < S3_NH; h++) { const off = h * T * T; for (let i = 0; i < T * T; i++) mat[i] += buf[off + i] / S3_NH; }
+        return mat;
+      },
+      stepAdamW() {
+        const oldC = this.forward(S3_IN, S3_TGT), grads = this.backward(oldC, S3_TGT);
+        const beforeSeq = oldC.meanLoss, beforePos = oldC.posLosses[this.selectedPos];
+        this.stepCount += 1;
+        for (const k of ["tokEmb", "posEmb", "wq", "wk", "wv", "wo", "wLm", "bLm"]) this.model[k].adamwStep(grads[k], this.lr, 0.01, this.stepCount);
+        this.cache = this.forward(S3_IN, S3_TGT); this.computedStage = 7;
+        this.lastReport = { step: this.stepCount, beforeSeq, afterSeq: this.cache.meanLoss, beforePos, afterPos: this.cache.posLosses[this.selectedPos], pos: this.selectedPos };
+      },
+      flushStage8() { if (this.stage === 8 && !this.stage8Applied) { this.stepAdamW(); this.stage8Applied = true; } },
+      flushInfer() {
+        if (this.inferAnim && !this.inferAnim.committed) {
+          this.inferAnim.committed = true;
+          if (this.genIds.length >= S3_TMAX) this.genIds.shift();
+          this.genIds.push(this.inferAnim.nextId);
+          this.lastDraw = { dice: this.inferAnim.dice, nextId: this.inferAnim.nextId, prob: this.inferAnim.prob, prevSeqStr: this.inferAnim.prevSeqStr, seqStr: this.genIds.map(i => VOCAB[i]).join("") };
+        }
+      },
+      enterStage(st, nowMs) {
+        this.flushStage8(); this.stage = st; this.stageStartMs = nowMs; this.stage8Applied = false;
+        if (!this.cache || st === 1) this.cache = this.forward(S3_IN, S3_TGT);
+        this.computedStage = Math.max(this.computedStage, Math.min(st, 7));
+        const i = this.selectedPos, qCh = CHARS[i], tgtCh = CHARS[i + 1];
+        if (st === 1) this.trainNarrator = { title: `① 词 + 位置编码：h0[t] = tok_emb[字] + pos_emb[位置]（11 位并行）`, desc: `pos[3]「月」和 pos[10]「月」从入口就带上不同位置身份证！` };
+        else if (st === 2) this.trainNarrator = { title: `② 线性投影出 Q / K / V：pos[${i}]「${qCh}」举起 Query 探照灯`, desc: "Query 提问、Key 当目录标签、Value 携带内容干货。" };
+        else if (st === 3) this.trainNarrator = { title: `③ 缩放点积打分 S = Q·Kᵀ / √4：算出全图 11×11 相关度`, desc: "注意右上角目前还有未来位置——若不遮挡就会偷看答案！" };
+        else if (st === 4) this.trainNarrator = { title: `④ 因果下三角掩码（Causal Mask）：未来位置 (j > i) 设为 -∞！`, desc: `右上角红区彻底封死，pos[${i}]「${qCh}」只能看见左侧 0..${i}（「${CHARS.slice(0, i + 1).join("")}」）！` };
+        else if (st === 5) {
+          const mat = this.getHeadMat(this.cache.attnWeights, S3_SEQ);
+          let bestJ = 0; for (let j = 1; j <= i; j++) if (mat[i * S3_SEQ + j] > mat[i * S3_SEQ + bestJ]) bestJ = j;
+          this.trainNarrator = { title: `⑤ Softmax 生成因果注意力山峰：最关注 [${bestJ}]「${CHARS[bestJ]}」(${(mat[i * S3_SEQ + bestJ] * 100).toFixed(1)}%)`, desc: "未来权重严格 0%，可见历史权重之和为 100%。" };
+        } else if (st === 6) this.trainNarrator = { title: "⑥ 金色光束汇聚 Value + 残差连接：h1 = h0 + Context·Wo", desc: "保留当前字自身信息，同时把前文线索吸进特征向量！" };
+        else if (st === 7) {
+          const probs = softmaxRow(this.cache.logits.subarray(i * V, (i + 1) * V), 1.0);
+          this.trainNarrator = { title: `⑦ 概率与交叉熵：预测「${tgtCh}」概率 ${(probs[S3_TGT[i]] * 100).toFixed(1)}%（全序列平均 Loss ${this.cache.meanLoss.toFixed(3)}）`, desc: "11 个位置同时算出 Loss，下一步精确反传更新 Q/K/V 与 Embedding！" };
+        } else if (st === 8) this.trainNarrator = { title: `⑧ 穿过 Softmax 与 Q/K/V 反向传播 + AdamW 更新（lr = ${this.lr.toFixed(3)}）`, desc: "更新全部 8 组自注意力参数，并用新权重重算真实 Loss 对照！" };
+      },
+    };
+
+    // =========================================================================
+    // 7. Global State, 3D Morph Transition Manager & Camera
+    // =========================================================================
+    let activeStep = 0; // 0, 1, 2, 3
+    let animSpeed = 1.0;
+    let morph = null; // { fromId, toId, startMs, spec }
+    const MORPH_MS = 2300;
+    const INFER_ANIM_MS = 1600;
+    const stepAnimMs = () => 1220 / animSpeed;
+    const autoHoldMs = () => 820 / animSpeed;
+
+    const canvas = document.getElementById("scene3d");
+    const ctx = canvas.getContext("2d");
+    const cam = M.createCamera(canvas, STEP_META[0].cam);
+
+    function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+    function easeOutBack(t) { const c1 = 1.35, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+
+    function flushActiveStepPending() {
+      if (activeStep === 1) { S1.flushStage5(); S1.flushInfer(); }
+      else if (activeStep === 2) { S2.flushStage8(); S2.flushInfer(); }
+      else if (activeStep === 3) { S3.flushStage8(); S3.flushInfer(); }
+    }
+
+    function pauseActiveAuto() {
+      S0.mode = "idle";
+      if (S1.mode === "autoplay" || S1.mode === "fast") S1.mode = S1.stage > 0 ? "step" : "idle";
+      if (S2.mode === "autoplay" || S2.mode === "fast") S2.mode = S2.stage > 0 ? "step" : "idle";
+      if (S3.mode === "autoplay" || S3.mode === "fast") S3.mode = S3.stage > 0 ? "step" : "idle";
+    }
+
+    function switchStep(nextStep, withAnim = true) {
+      if (nextStep < 0 || nextStep > 3) return;
+      flushActiveStepPending();
+      pauseActiveAuto();
+      const prevStep = activeStep;
+      activeStep = nextStep;
+      const c = STEP_META[nextStep].cam;
+      cam.setPreset(c.yaw, c.pitch, c.dist, c.tx, c.tz);
+
+      if (withAnim && prevStep !== nextStep) {
+        const spec = getTransitionSpec(prevStep, nextStep);
+        morph = { fromId: prevStep, toId: nextStep, startMs: performance.now(), spec };
+        document.getElementById("diffBar").classList.add("morphing");
+      } else {
+        morph = null;
+        document.getElementById("morphBanner").classList.add("hidden");
+        document.getElementById("diffBar").classList.remove("morphing");
+      }
+      renderAllUi();
+    }
+
+    // =========================================================================
+    // 8. Morph-Aware 3D Module Renderer Proxy
+    //    Allows ANY Step's 3D scene to seamlessly collapse/morph/rise in 3D!
+    // =========================================================================
+    function makeSceneHelper(dl, project, eye, theme, morphRole = "normal", morphProg = 1, isOutgoing = false) {
+      const rgbErr = M.parseRgb(theme.error), rgbSuc = M.parseRgb(theme.success), rgbWarn = M.parseRgb(theme.warning), rgbPri = M.parseRgb(theme.primary);
+      function getModState(modKey) {
+        if (!morphRole || morphRole === "normal") return { scaleY: 1, alpha: 1, tintRgb: null, tintAmt: 0 };
+        const role = morphRole[modKey] || morphRole._default || "kept";
+        if (isOutgoing) {
+          const p = Math.min(1, morphProg / 0.54);
+          const e = easeInOut(p);
+          if (role === "removed") return { scaleY: Math.max(0.01, 1 - e), alpha: Math.max(0, 1 - p), tintRgb: rgbErr, tintAmt: 0.72 * Math.min(1, p * 1.8) };
+          if (role === "replaced") return { scaleY: Math.max(0.01, 1 - e), alpha: Math.max(0, 1 - p), tintRgb: rgbWarn, tintAmt: 0.75 * Math.min(1, p * 1.8) };
+          return { scaleY: 1, alpha: Math.max(0, 1 - easeInOut(Math.min(1, morphProg / 0.65))), tintRgb: rgbPri, tintAmt: 0.25 };
+        } else {
+          const p = Math.max(0, Math.min(1, (morphProg - 0.36) / 0.64));
+          if (p <= 0) return { scaleY: 0, alpha: 0, tintRgb: null, tintAmt: 0 };
+          if (role === "added") return { scaleY: Math.max(0.02, easeOutBack(p)), alpha: Math.min(1, p * 1.4), tintRgb: rgbSuc, tintAmt: (1 - p) * 0.7 };
+          if (role === "replaced") return { scaleY: Math.max(0.02, easeOutBack(p)), alpha: Math.min(1, p * 1.4), tintRgb: rgbWarn, tintAmt: (1 - p) * 0.75 };
+          return { scaleY: 1, alpha: easeInOut(Math.min(1, morphProg / 0.65)), tintRgb: null, tintAmt: 0 };
+        }
+      }
+      return {
+        box(modKey, x0, y0, z0, x1, y1, z1, rgb, alpha = 1, strokeCss = null) {
+          const st = getModState(modKey);
+          if (st.alpha <= 0.02 || st.scaleY <= 0.01) return;
+          const col = st.tintRgb ? M.lerpRgb(rgb, st.tintRgb, st.tintAmt) : rgb;
+          M.pushBox(dl, ctx, project, eye, x0, y0 * st.scaleY, z0, x1, y1 * st.scaleY, z1, col, alpha * st.alpha, strokeCss);
+        },
+        label(modKey, x, y, z, text, colorCss, font = "11px monospace", bias = -0.15) {
+          const st = getModState(modKey);
+          if (st.alpha <= 0.12) return;
+          M.pushLabel3D(dl, ctx, project, x, y * Math.min(1.1, Math.max(0.4, st.scaleY)), z, text, colorCss, font, bias, st.alpha);
+        },
+        pipe(modKey, a, b, colorCss, width = 1.8) {
+          const st = getModState(modKey);
+          if (st.alpha <= 0.05) return;
+          M.drawPipe3D(ctx, project, a, b, colorCss, width, st.alpha);
+        },
+        modAlpha(modKey) { return getModState(modKey).alpha; },
+      };
+    }
+
+    // =========================================================================
+    // 9. Per-Step 3D Scene Drawers (All 4 Steps Draw Real Live 3D Geometry!)
+    // =========================================================================
+    function drawStep00Scene(G, dl, project, theme, nowMs, isMorphing) {
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPri = M.parseRgb(theme.primary), rgbSuc = M.parseRgb(theme.success), rgbWarn = M.parseRgb(theme.warning), rgbErr = M.parseRgb(theme.error);
+      const isBuild = S0.viewMode === "train";
+      const st = isBuild ? S0.stage : 5;
+      const stT = (!isMorphing && isBuild && st > 0) ? Math.min(1, (nowMs - S0.stageStartMs) / stepAnimMs()) : 1;
+
+      G.pipe("vocab_dict", { x: -8.2, y: 0.4, z: 0 }, { x: -2.4, y: 0.4, z: 0 }, M.shade(rgbBorder, 1.1, 0.7), 2);
+      G.pipe("token_ids",  { x: -2.4, y: 0.4, z: 0 }, { x:  3.0, y: 0.4, z: 0 }, M.shade(rgbBorder, 1.1, 0.7), 2);
+      G.pipe("decode_out", { x:  3.0, y: 0.4, z: 0 }, { x:  8.2, y: 0.4, z: 0 }, M.shade(rgbBorder, 1.1, 0.7), 2);
+
+      // Module 1: Raw Input Characters
+      const inChars = isBuild ? CHARS : S0.testText.split("");
+      const inSpan = Math.min(0.85, 7.6 / Math.max(1, inChars.length));
+      for (let i = 0; i < inChars.length; i++) {
+        const cz = (i - (inChars.length - 1) * 0.5) * inSpan;
+        const ch = inChars[i], isOov = STOI[ch] === undefined;
+        const lit = !isBuild || st >= 1;
+        const col = !lit ? rgbCard : (isOov ? rgbErr : (ch === "明" || ch === "月" ? rgbWarn : rgbPri));
+        G.box("text_in", -8.7, 0, cz - 0.27, -7.7, lit ? 0.95 : 0.16, cz + 0.27, col, 0.92, theme.fg);
+        G.label("text_in", -8.2, (lit ? 1.32 : 0.48), cz, ch, isOov ? theme.error : theme.fg, "bold 11px sans-serif");
+      }
+      G.label("text_in", -8.2, 2.35, 0, isBuild ? "① 原始文本 (12字)" : `测试文本 (${inChars.length}字)`, theme.primary, "bold 11px sans-serif");
+
+      // Module 2: Vocab Dictionary V=10 (stoi / itos)
+      const dictLit = !isBuild || st >= 2;
+      const idLit = !isBuild || st >= 3;
+      for (let j = 0; j < V; j++) {
+        const vz = (j - 4.5) * 0.76;
+        const isHi = S0.highlightVocabId === j;
+        const col = !dictLit ? rgbCard : (isHi ? rgbWarn : M.lerpRgb(rgbCard, rgbSuc, 0.55));
+        G.box("vocab_dict", -3.2, 0, vz - 0.28, -1.6, dictLit ? (isHi ? 1.45 : 1.05) : 0.14, vz + 0.28, col, 0.94, isHi ? theme.fg : theme.border);
+        const lbl = idLit ? `${VOCAB[j]} ↔ ${j}` : (dictLit ? VOCAB[j] : "?");
+        G.label("vocab_dict", -2.4, (dictLit ? (isHi ? 1.85 : 1.42) : 0.45), vz, lbl, isHi ? theme.warning : theme.fg, "bold 11px monospace");
+      }
+      G.label("vocab_dict", -2.4, 2.85, 0, "词表字典 V=10 (stoi ↔ itos)", dictLit ? theme.success : theme.muted, "bold 11px sans-serif");
+
+      // Module 3: Encoded Integer IDs
+      const encLit = !isBuild || st >= 4;
+      for (let i = 0; i < inChars.length; i++) {
+        const cz = (i - (inChars.length - 1) * 0.5) * inSpan;
+        const id = STOI[inChars[i]], isOov = id === undefined;
+        const col = !encLit ? rgbCard : (isOov ? rgbErr : rgbPri);
+        G.box("token_ids", 2.5, 0, cz - 0.26, 3.5, encLit ? 0.85 : 0.14, cz + 0.26, col, 0.92, theme.border);
+        if (encLit) G.label("token_ids", 3.0, 1.22, cz, isOov ? "UNK!" : `#${id}`, isOov ? theme.error : theme.primary, "bold 11px monospace");
+      }
+      G.label("token_ids", 3.0, 2.35, 0, "④ Encode 整数 ID 序列", encLit ? theme.primary : theme.muted, "bold 11px sans-serif");
+
+      // Module 4: Decoded Output
+      const decLit = !isBuild || st >= 5;
+      for (let i = 0; i < inChars.length; i++) {
+        const cz = (i - (inChars.length - 1) * 0.5) * inSpan;
+        const id = STOI[inChars[i]], isOov = id === undefined;
+        const col = !decLit ? rgbCard : (isOov ? rgbErr : rgbSuc);
+        G.box("decode_out", 7.7, 0, cz - 0.26, 8.7, decLit ? 0.88 : 0.14, cz + 0.26, col, 0.92, theme.border);
+        if (decLit) G.label("decode_out", 8.2, 1.25, cz, isOov ? "?" : VOCAB[id], isOov ? theme.error : theme.success, "bold 11px sans-serif");
+      }
+      G.label("decode_out", 8.2, 2.35, 0, "⑤ Decode 无损还原", decLit ? theme.success : theme.muted, "bold 11px sans-serif");
+
+      // Active motion orbs (only when not morphing)
+      if (!isMorphing) {
+        if (isBuild && st === 2) {
+          for (let i = 0; i < 4; i++) {
+            const from = { x: -8.2, y: 1.0, z: (i - 1.5) * 1.4 };
+            const to = { x: -2.4, y: 1.1, z: (STOI[CHARS[i]] - 4.5) * 0.76 };
+            M.drawBezierArc3D(ctx, project, from, to, 1.8, stT, theme.success, 2.2);
+            const pt = M.evalArc(from, to, 1.8, stT);
+            M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.24, theme.success, theme.success, CHARS[i], "#000");
+          }
+        } else if (isBuild && st === 4) {
+          const idx = Math.min(CHARS.length - 1, Math.floor(stT * CHARS.length));
+          const tokId = DATA[idx];
+          const from = { x: -2.4, y: 1.2, z: (tokId - 4.5) * 0.76 };
+          const to = { x: 3.0, y: 1.0, z: (idx - (CHARS.length - 1) * 0.5) * inSpan };
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, 1.0, theme.primary, 2.5);
+          M.pushOrb(dl, ctx, project, to.x, to.y + 0.5, to.z, 0.28, theme.primary, theme.primary, String(tokId), "#fff");
+        } else if (isBuild && st === 5) {
+          const idx = Math.min(CHARS.length - 1, Math.floor(stT * CHARS.length));
+          const from = { x: 3.0, y: 1.1, z: (idx - (CHARS.length - 1) * 0.5) * inSpan };
+          const to = { x: 8.2, y: 1.1, z: (idx - (CHARS.length - 1) * 0.5) * inSpan };
+          M.drawBezierArc3D(ctx, project, from, to, 1.9, 1.0, theme.success, 2.5);
+          M.pushOrb(dl, ctx, project, to.x, to.y + 0.5, to.z, 0.28, theme.success, theme.success, CHARS[idx], "#000");
+        } else if (!isBuild && S0.lastFlight) {
+          const u = Math.min(1, (nowMs - S0.lastFlight.startMs) / (1100 / animSpeed));
+          if (u < 1) {
+            const f = S0.lastFlight;
+            const pA = { x: -8.2, y: 1.2, z: 0 }, pB = { x: -2.4, y: 1.3, z: f.isOov ? 0 : (f.tokId - 4.5) * 0.76 }, pC = { x: 3.0, y: 1.2, z: 0 }, pD = { x: 8.2, y: 1.2, z: 0 };
+            let cur;
+            if (f.isOov) {
+              cur = M.evalArc(pA, pB, 1.6, Math.min(1, u * 1.6));
+              M.drawBezierArc3D(ctx, project, pA, pB, 1.6, Math.min(1, u * 1.6), theme.error, 2.8, true);
+              M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.34, theme.error, theme.error, "!", "#fff");
+            } else if (u < 0.34) {
+              const p = u / 0.34; cur = M.evalArc(pA, pB, 1.6, p);
+              M.drawBezierArc3D(ctx, project, pA, pB, 1.6, p, theme.primary, 2.5);
+              M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.primary, theme.primary, f.char, "#fff");
+            } else if (u < 0.68) {
+              const p = (u - 0.34) / 0.34; cur = M.evalArc(pB, pC, 1.6, p);
+              M.drawBezierArc3D(ctx, project, pB, pC, 1.6, p, theme.warning, 2.5);
+              M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.warning, theme.warning, String(f.tokId), "#000");
+            } else {
+              const p = (u - 0.68) / 0.32; cur = M.evalArc(pC, pD, 1.6, p);
+              M.drawBezierArc3D(ctx, project, pC, pD, 1.6, p, theme.success, 2.5);
+              M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, f.char, "#000");
+            }
+          } else {
+            S0.lastFlight = null;
+          }
+        }
+      }
+    }
+
+    function drawStep01Scene(G, dl, project, theme, nowMs, isMorphing) {
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPri = M.parseRgb(theme.primary), rgbSuc = M.parseRgb(theme.success), rgbErr = M.parseRgb(theme.error), rgbWarn = M.parseRgb(theme.warning);
+      const isTrain = S1.viewMode === "train";
+      const [curX, curY] = S1_PAIRS[S1.selectedPairIdx];
+      const activeRow = isTrain ? curX : ((S1.inferAnim && !S1.inferAnim.committed) ? S1.inferAnim.fromId : S1.genIds[S1.genIds.length - 1]);
+      const stT = (!isMorphing && isTrain && S1.stage > 0) ? Math.min(1, (nowMs - S1.stageStartMs) / stepAnimMs()) : 1;
+
+      const CELL = 0.96, OX = -1.5 - (V - 1) * CELL * 0.5, OZ = -(V - 1) * CELL * 0.5;
+      const cellW = (r, c) => ({ x: OX + c * CELL, z: OZ + r * CELL });
+      const tokPos = { x: OX - 3.6, y: 0.9, z: 0 }, smX = OX + (V - 1) * CELL + 3.2, lossX = smX + 3.1;
+
+      // Module 1: Single Input Token Cube
+      G.box("input_1", tokPos.x - 0.6, 0, -0.6, tokPos.x + 0.6, 1.2, 0.6, isTrain ? rgbPri : rgbSuc, 0.94, theme.fg);
+      G.label("input_1", tokPos.x, 1.65, 0, `${VOCAB[activeRow]}:${activeRow}`, theme.fg, "bold 12px monospace");
+      G.label("input_1", tokPos.x, 0.15, 1.35, isTrain ? "单字输入 x" : "当前字", isTrain ? theme.primary : theme.success, "bold 11px sans-serif");
+
+      // Module 2: 10x10 Bigram Weight Matrix
+      for (let r = 0; r < V; r++) {
+        for (let c = 0; c < V; c++) {
+          const p = cellW(r, c), v = S1.visHeights[r * V + c];
+          const isRow = r === activeRow, isTgt = isTrain && isRow && c === curY;
+          const h = Math.max(0.10, Math.min(2.8, Math.abs(v) * 0.72 + 0.12));
+          let col = v > 0.02 ? M.lerpRgb(rgbCard, rgbSuc, Math.min(1, 0.28 + Math.abs(v) * 0.35))
+                  : (v < -0.02 ? M.lerpRgb(rgbCard, rgbErr, Math.min(1, 0.25 + Math.abs(v) * 0.35)) : rgbCard);
+          if (isRow) col = M.lerpRgb(col, rgbPri, 0.35);
+          if (isTgt) col = rgbSuc;
+          G.box("bigram_mat", p.x - 0.38, 0, p.z - 0.38, p.x + 0.38, h, p.z + 0.38, col, isRow ? 0.96 : 0.62, isTgt ? theme.fg : theme.border);
+        }
+        G.label("bigram_mat", OX - 1.1, 0.2, OZ + r * CELL, VOCAB[r], r === activeRow ? theme.primary : theme.muted, r === activeRow ? "bold 11px monospace" : "10px monospace");
+        G.label("bigram_mat", OX + r * CELL, 0.2, OZ - 1.05, VOCAB[r], theme.muted, "10px monospace");
+      }
+      G.label("bigram_mat", -1.5, 3.35, OZ - 1.2, "10×10 Bigram 查表权重矩阵", theme.fg, "bold 11px sans-serif");
+
+      // Module 3: 10 Softmax Probability Towers
+      const smLit = !isTrain || S1.hasSoftmax;
+      for (let j = 0; j < V; j++) {
+        const sz = OZ + j * CELL, p = S1.visProbs[j];
+        const bh = smLit ? Math.max(0.08, p * 4.5) : 0.08;
+        const isHi = isTrain ? (j === curY) : (S1.inferAnim && j === S1.inferAnim.nextId);
+        const col = !smLit ? rgbBorder : (isHi ? rgbSuc : rgbPri);
+        G.box("softmax", smX - 0.3, 0, sz - 0.26, smX + 0.3, bh, sz + 0.26, col, smLit ? 0.93 : 0.45, isHi ? theme.fg : theme.border);
+        G.label("softmax", smX + 0.95, 0.16, sz, smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`, isHi ? theme.success : theme.muted, isHi ? "bold 11px monospace" : "10px monospace");
+      }
+      G.label("softmax", smX, 4.95, 0, isTrain ? "训练 Softmax (T=1.0)" : `推理温度塔 (T=${S1.temp.toFixed(1)})`, isTrain ? theme.primary : theme.success, "bold 11px monospace");
+
+      // Module 4: Orange Loss Pillar (Training only)
+      if (isTrain) {
+        const lh = S1.hasLoss ? Math.max(0.14, Math.min(4.6, S1.visLoss * 1.45)) : 0.08;
+        G.box("loss", lossX - 0.65, 0, -0.65, lossX + 0.65, lh, 0.65, S1.hasLoss ? rgbWarn : rgbBorder, S1.hasLoss ? 0.93 : 0.5, S1.hasLoss ? theme.fg : theme.border);
+        G.label("loss", lossX, lh + 0.5, 0, S1.hasLoss ? `Loss ${S1.visLoss.toFixed(2)}` : "Loss: 0 (未计算)", S1.hasLoss ? theme.warning : theme.muted, "bold 11px monospace");
+      }
+
+      if (!isMorphing) {
+        if (isTrain && S1.stage === 1) {
+          const to = { x: OX, y: 0.9, z: OZ + curX * CELL };
+          M.drawBezierArc3D(ctx, project, tokPos, to, 1.8, stT, theme.primary, 2.5);
+          const pt = M.evalArc(tokPos, to, 1.8, stT);
+          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.28, theme.primary, theme.primary, VOCAB[curX], "#fff");
+        } else if (isTrain && S1.stage === 2) {
+          const scanC = stT * (V - 1);
+          M.pushOrb(dl, ctx, project, OX + scanC * CELL, 1.8, OZ + curX * CELL, 0.28, theme.primary, theme.primary, "→", "#fff");
+        } else if (isTrain && S1.stage === 5) {
+          const pTgt = cellW(curX, curY);
+          const pulse = Math.sin(nowMs * 0.012) * 0.14;
+          M.pushArrow3D(dl, ctx, project, pTgt.x, 1.2 + pulse, 2.7 + pulse, pTgt.z, theme.success, 3.0);
+          M.pushLabel3D(dl, ctx, project, pTgt.x, 3.1, pTgt.z, `拉高「${VOCAB[curY]}」`, theme.success, "bold 11px sans-serif");
+        } else if (!isTrain && S1.inferAnim) {
+          const u = Math.min(1, (nowMs - S1.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed));
+          const a = S1.inferAnim;
+          const cellPt = cellW(a.fromId, a.nextId);
+          const smPt = { x: smX, y: Math.max(0.5, S1.visProbs[a.nextId] * 4.5) + 0.5, z: OZ + a.nextId * CELL };
+          if (u < 0.48) {
+            const p = u / 0.48;
+            const cur = M.evalArc({ x: cellPt.x, y: 1.0, z: cellPt.z }, smPt, 2.2, p);
+            M.drawBezierArc3D(ctx, project, { x: cellPt.x, y: 1.0, z: cellPt.z }, smPt, 2.2, p, theme.warning, 2.8);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.32, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
+          } else {
+            const p = (u - 0.48) / 0.52;
+            const dst = { x: tokPos.x, y: 1.2, z: 0 };
+            const cur = M.evalArc(smPt, dst, 3.8, p);
+            M.drawBezierArc3D(ctx, project, smPt, dst, 3.8, p, theme.success, 2.8, true);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.34, theme.success, theme.success, VOCAB[a.nextId], "#000");
+          }
+        }
+      }
+    }
+
+    function drawStep02Scene(G, dl, project, theme, nowMs, isMorphing) {
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPri = M.parseRgb(theme.primary), rgbSuc = M.parseRgb(theme.success), rgbErr = M.parseRgb(theme.error), rgbWarn = M.parseRgb(theme.warning);
+      const isTrain = S2.viewMode === "train";
+      const s = S2_SAMPLES[S2.selectedSampleIdx];
+      const dispWinIds = isTrain ? s.ctxIds : ((S2.inferAnim && !S2.inferAnim.committed) ? S2.inferAnim.prevWinIds : S2.genIds.slice(-S2_CTX));
+      const stT = (!isMorphing && isTrain && S2.stage > 0) ? Math.min(1, (nowMs - S2.stageStartMs) / stepAnimMs()) : 1;
+
+      const POS = {
+        input: { x: -10.5, z: -0.6 }, emb: { x: -7.6, z: 2.2 }, xVec: { x: -7.2, z: -0.8 },
+        w1: { x: -4.2, z: 2.4 }, b1: { x: -2.4, z: 2.4 }, z1: { x: -3.2, z: -0.8 },
+        relu: { x: 0.2, z: -0.8 }, hVec: { x: 2.6, z: -0.8 }, w2: { x: 3.6, z: 2.4 },
+        b2: { x: 5.4, z: 2.4 }, sm: { x: 6.4, z: -0.8 }, loss: { x: 9.8, z: -0.8 },
+      };
+
+      const pipes = [
+        ["x_concat", POS.input, POS.xVec], ["mlp_params", POS.emb, POS.xVec],
+        ["z1_h", POS.xVec, POS.z1], ["mlp_params", POS.w1, POS.z1], ["mlp_params", POS.b1, POS.z1],
+        ["relu_gate", POS.z1, POS.relu], ["relu_gate", POS.relu, POS.hVec],
+        ["softmax", POS.hVec, POS.sm], ["mlp_params", POS.w2, POS.sm], ["mlp_params", POS.b2, POS.sm],
+      ];
+      if (isTrain) pipes.push(["loss", POS.sm, POS.loss]);
+      for (const [mk, a, b] of pipes) G.pipe(mk, { x: a.x, y: 0.45, z: a.z }, { x: b.x, y: 0.45, z: b.z }, M.shade(rgbBorder, 1.05, 0.65), 1.8);
+
+      // Module 1: 3-Char Window Cubes
+      const inCol = isTrain ? rgbPri : M.lerpRgb(rgbPri, rgbSuc, 0.28);
+      for (let slot = 0; slot < S2_CTX; slot++) {
+        const cz = POS.input.z + (slot - 1) * 1.35;
+        G.box("input_3", POS.input.x - 0.5, 0, cz - 0.48, POS.input.x + 0.5, 1.05, cz + 0.48, inCol, 0.93, theme.fg);
+        G.label("input_3", POS.input.x, 1.48, cz, `${VOCAB[dispWinIds[slot]]}:${dispWinIds[slot]}`, theme.fg, "bold 11px monospace");
+      }
+      G.label("input_3", POS.input.x, 0.14, POS.input.z + 2.35, isTrain ? "3字训练窗口" : "3字推理窗口", isTrain ? theme.primary : theme.success, "bold 11px sans-serif");
+
+      // Module 2: 5 Param Blocks
+      for (const pb of [
+        { id: 0, p: S2.model.emb, pos: POS.emb, label: "emb(10×4)" },
+        { id: 1, p: S2.model.w1, pos: POS.w1, label: "w1(12×8)" },
+        { id: 2, p: S2.model.b1, pos: POS.b1, label: "b1(1×8)" },
+        { id: 3, p: S2.model.w2, pos: POS.w2, label: "w2(8×10)" },
+        { id: 4, p: S2.model.b2, pos: POS.b2, label: "b2(1×10)" },
+      ]) {
+        let rms = 0; for (let i = 0; i < pb.p.data.length; i++) rms += pb.p.data[i] * pb.p.data[i];
+        rms = Math.sqrt(rms / pb.p.data.length);
+        const h = Math.max(0.45, Math.min(2.5, rms * 2.1 + 0.35));
+        const isSel = isTrain && S2.selectedNodeId === pb.id;
+        G.box("mlp_params", pb.pos.x - 0.6, 0, pb.pos.z - 0.52, pb.pos.x + 0.6, h, pb.pos.z + 0.52, isSel ? rgbPri : M.lerpRgb(rgbCard, rgbSuc, 0.38), 0.94, isSel ? theme.fg : theme.border);
+        G.label("mlp_params", pb.pos.x, h + 0.4, pb.pos.z, pb.label, theme.fg, "bold 10px monospace");
+        if (!isMorphing && isTrain && S2.stage === 8) {
+          let maxD = 0, topD = 0;
+          for (let i = 0; i < pb.p.lastDelta.length; i++) if (Math.abs(pb.p.lastDelta[i]) > maxD) { maxD = Math.abs(pb.p.lastDelta[i]); topD = pb.p.lastDelta[i]; }
+          const up = topD >= 0, col = up ? theme.success : theme.error, len = Math.min(1.5, 0.5 + maxD * 18);
+          M.pushArrow3D(dl, ctx, project, pb.pos.x, up ? h + 0.7 : h + 0.7 + len, up ? h + 0.7 + len : h + 0.7, pb.pos.z, col, 2.8);
+          M.pushLabel3D(dl, ctx, project, pb.pos.x, h + 1.05 + len, pb.pos.z, `Δw ${topD >= 0 ? "+" : ""}${topD.toFixed(3)}`, col, "bold 10px monospace");
+        }
+      }
+
+      // Module 3: ALL 12 real bars of x (3 chars × 4 dims)
+      const xLit = !isTrain || S2.fwdStage >= 2;
+      for (let slot = 0; slot < S2_CTX; slot++) {
+        const gz = POS.xVec.z + (slot - 1) * 1.38;
+        G.box("x_concat", POS.xVec.x - 0.36, 0, gz - 0.56, POS.xVec.x + 0.36, 0.06, gz + 0.56, rgbCard, 0.85, xLit ? theme.primary : theme.border);
+        for (let d = 0; d < S2_EMB; d++) {
+          const xz = gz + (d - 1.5) * 0.28, val = xLit ? S2.visX[slot * S2_EMB + d] : 0;
+          const bh = xLit ? Math.max(0.14, Math.min(2.1, Math.abs(val) * 1.45 + 0.2)) : 0.12;
+          const col = !xLit ? rgbCard : (val >= 0 ? M.lerpRgb(rgbCard, rgbPri, 0.78) : M.lerpRgb(rgbCard, rgbErr, 0.68));
+          G.box("x_concat", POS.xVec.x - 0.3, 0.06, xz - 0.105, POS.xVec.x + 0.3, 0.06 + bh, xz + 0.105, col, 0.94, theme.border);
+        }
+      }
+      G.label("x_concat", POS.xVec.x, 2.55, POS.xVec.z, "x (3×4=12维)", xLit ? theme.primary : theme.muted, "bold 11px monospace");
+
+      // Module 4: z1 & h
+      const zLit = !isTrain || S2.fwdStage >= 3, hLit = !isTrain || S2.fwdStage >= 4;
+      for (let k = 0; k < S2_H; k++) {
+        const zz = POS.z1.z + (k - 3.5) * 0.52, v = S2.visZ1[k], isSelN = isTrain && k === S2.selectedNeuron;
+        G.box("z1_h", POS.z1.x - 0.34, 0, zz - 0.19, POS.z1.x + 0.34, zLit ? Math.max(0.14, Math.min(2.6, Math.abs(v) * 0.9 + 0.18)) : 0.12, zz + 0.19, !zLit ? rgbCard : (v > 0 ? rgbSuc : rgbErr), isSelN ? 1 : 0.8, isSelN ? theme.fg : theme.border);
+        const hv = S2.visH[k];
+        G.box("z1_h", POS.hVec.x - 0.34, 0, zz - 0.19, POS.hVec.x + 0.34, hLit ? Math.max(0.08, Math.min(2.6, hv * 0.9 + 0.08)) : 0.1, zz + 0.19, !hLit ? rgbCard : (hv > 0.001 ? rgbSuc : rgbBorder), isSelN ? 1 : 0.8, isSelN ? theme.fg : theme.border);
+      }
+      G.label("z1_h", POS.z1.x, 2.85, POS.z1.z, "z1 = xW1+b1", zLit ? theme.fg : theme.muted, "bold 11px monospace");
+      G.label("z1_h", POS.hVec.x + 0.35, 3.05, POS.hVec.z + 0.9, "h = ReLU(z1)", hLit ? theme.success : theme.muted, "bold 11px monospace");
+
+      // Module 5: 3D ReLU Gate
+      let gateOpen = true, gateLbl = "ReLU 门";
+      if (isTrain) {
+        const sz = (S2.tape && S2.fwdStage >= 3) ? S2.tape.nodes[7].data[S2.selectedSampleIdx * S2_H + S2.selectedNeuron] : 1;
+        gateOpen = sz > 0; gateLbl = !zLit ? "ReLU 门" : (gateOpen ? `ReLU #${S2.selectedNeuron} 通(×1)` : `ReLU #${S2.selectedNeuron} 断(×0!)`);
+      } else {
+        let cnt = 0; for (let k = 0; k < S2_H; k++) if (S2.visZ1[k] > 0) cnt++;
+        gateOpen = cnt > 0; gateLbl = `ReLU (${cnt}/${S2_H} 通)`;
+      }
+      const gateRgb = !zLit ? rgbBorder : (gateOpen ? rgbSuc : rgbErr);
+      G.box("relu_gate", POS.relu.x - 0.22, 0, POS.relu.z - 1.9, POS.relu.x + 0.22, 2.7, POS.relu.z - 1.62, rgbBorder, 0.95, theme.fg);
+      G.box("relu_gate", POS.relu.x - 0.22, 0, POS.relu.z + 1.62, POS.relu.x + 0.22, 2.7, POS.relu.z + 1.9, rgbBorder, 0.95, theme.fg);
+      G.box("relu_gate", POS.relu.x - 0.22, 2.42, POS.relu.z - 1.9, POS.relu.x + 0.22, 2.75, POS.relu.z + 1.9, gateRgb, 0.95, theme.fg);
+      if (zLit && !gateOpen) G.box("relu_gate", POS.relu.x - 0.1, 0.05, POS.relu.z - 1.6, POS.relu.x + 0.1, 2.4, POS.relu.z + 1.6, rgbErr, 0.65, theme.error);
+      else if (zLit) G.box("relu_gate", POS.relu.x - 0.06, 0.05, POS.relu.z - 1.6, POS.relu.x + 0.06, 2.4, POS.relu.z + 1.6, rgbSuc, 0.16, theme.success);
+      G.label("relu_gate", POS.relu.x, 3.55, POS.relu.z, gateLbl, !zLit ? theme.muted : (gateOpen ? theme.success : theme.error), "bold 11px sans-serif");
+
+      // Module 6: 10 Softmax Probability Towers
+      const smLit = !isTrain || S2.fwdStage >= 6;
+      for (let j = 0; j < V; j++) {
+        const sz = POS.sm.z + (j - 4.5) * 0.62, p = S2.visProbs[j];
+        const isHi = isTrain ? (j === s.targetId) : (S2.inferAnim && j === S2.inferAnim.nextId);
+        G.box("softmax", POS.sm.x - 0.28, 0, sz - 0.22, POS.sm.x + 0.28, smLit ? Math.max(0.08, p * 4.5) : 0.08, sz + 0.22, !smLit ? rgbBorder : (isHi ? rgbSuc : rgbPri), smLit ? 0.92 : 0.45, isHi ? theme.fg : theme.border);
+        G.label("softmax", POS.sm.x + 0.85, 0.15, sz, smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`, isHi ? theme.success : theme.muted, isHi ? "bold 11px monospace" : "10px monospace");
+      }
+      G.label("softmax", POS.sm.x, 4.95, POS.sm.z, isTrain ? "训练概率塔 (T=1.0)" : `推理温度塔 (T=${S2.temp.toFixed(1)})`, isTrain ? theme.primary : theme.success, "bold 11px monospace");
+
+      // Module 7 & 8 (Train-Only): Sample Loss Pillar & Front 12-Slot Arena Tape
+      const tapeZ = 4.35;
+      if (isTrain) {
+        const lh = S2.fwdStage >= 6 ? Math.max(0.14, Math.min(4.6, S2.visLoss * 1.45)) : 0.08;
+        G.box("loss", POS.loss.x - 0.65, 0, POS.loss.z - 0.65, POS.loss.x + 0.65, lh, POS.loss.z + 0.65, S2.fwdStage >= 6 ? rgbWarn : rgbBorder, S2.fwdStage >= 6 ? 0.92 : 0.5, S2.fwdStage >= 6 ? theme.fg : theme.border);
+        G.label("loss", POS.loss.x, lh + 0.5, POS.loss.z, S2.fwdStage >= 6 ? `样本Loss ${S2.visLoss.toFixed(2)}` : "样本Loss: 0", S2.fwdStage >= 6 ? theme.warning : theme.muted, "bold 11px monospace");
+
+        const revMax = S2.fwdStage >= 6 ? 11 : ([-1, 4, 5, 7, 8, 10, 11, 11, 11][S2.stage] ?? -1);
+        const sn = ["emb", "w1", "b1", "w2", "b2", "x", "z1r", "z1", "h", "z2r", "log", "L"];
+        G.label("arena_tape", -10.8, 0.25, tapeZ, "Tape:", theme.muted, "bold 11px monospace");
+        for (let i = 0; i < 12; i++) {
+          const tx = -9.1 + i * 1.65, isFwd = i <= revMax, isSel = i === S2.selectedNodeId;
+          const col = S2.hasBwd ? rgbWarn : (isFwd ? (i <= 4 ? rgbSuc : rgbPri) : rgbCard);
+          const h = S2.hasBwd ? 0.58 : (isFwd ? 0.42 : 0.18);
+          G.box("arena_tape", tx - 0.58, 0, tapeZ - 0.45, tx + 0.58, h, tapeZ + 0.45, col, 0.9, isSel ? theme.fg : theme.border);
+          G.label("arena_tape", tx, h + 0.28, tapeZ, `[${i}]${sn[i]}`, isSel ? theme.fg : (S2.hasBwd ? theme.warning : (isFwd ? theme.primary : theme.muted)), "bold 10px monospace");
+        }
+      }
+
+      // Motion Orbs
+      if (!isMorphing) {
+        const ptOf = (p, y = 1.2) => ({ x: p.x, y, z: p.z });
+        if (isTrain && S2.stage === 1) {
+          for (let slot = 0; slot < S2_CTX; slot++) {
+            const from = { x: POS.input.x, y: 1.0, z: POS.input.z + (slot - 1) * 1.35 }, to = ptOf(POS.emb, 1.2);
+            M.drawBezierArc3D(ctx, project, from, to, 1.8, stT, theme.primary, 2.2, true);
+            const cur = M.evalArc(from, to, 1.8, stT);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.24, theme.primary, theme.primary, VOCAB[s.ctxIds[slot]], "#fff");
+          }
+        } else if (isTrain && S2.stage === 7) {
+          const wps = [POS.loss, POS.sm, POS.hVec, POS.relu, POS.z1, POS.xVec, POS.emb];
+          const sf = stT * (wps.length - 1), si = Math.min(wps.length - 2, Math.floor(sf)), su = sf - si;
+          const a = ptOf(wps[si], 1.5), b = ptOf(wps[si + 1], 1.5), hit = !gateOpen && si >= 3;
+          const cur = M.evalArc(a, b, 1.4, su);
+          M.drawBezierArc3D(ctx, project, a, b, 1.4, su, hit ? theme.error : theme.warning, 2.8, true);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, hit ? theme.error : theme.warning, hit ? theme.error : theme.warning, hit ? "0" : "∂", "#000");
+        } else if (!isTrain && S2.inferAnim) {
+          const u = Math.min(1, (nowMs - S2.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed)), a = S2.inferAnim;
+          if (u < 0.35) {
+            const p = u / 0.35;
+            for (let slot = 0; slot < S2_CTX; slot++) {
+              const from = { x: POS.input.x, y: 1.0, z: POS.input.z + (slot - 1) * 1.35 }, to = ptOf(POS.xVec, 1.2);
+              M.drawBezierArc3D(ctx, project, from, to, 1.6, p, theme.primary, 2.2);
+              const cur = M.evalArc(from, to, 1.6, p);
+              M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.24, theme.primary, theme.primary, VOCAB[a.prevWinIds[slot]], "#fff");
+            }
+          } else if (u < 0.72) {
+            const p = (u - 0.35) / 0.37, cur = M.evalArc(ptOf(POS.xVec, 1.4), ptOf(POS.sm, 1.5), 1.8, p);
+            M.drawBezierArc3D(ctx, project, ptOf(POS.xVec, 1.4), ptOf(POS.sm, 1.5), 1.8, p, theme.success, 2.6);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, "→", "#000");
+          } else {
+            const p = (u - 0.72) / 0.28;
+            const from = { x: POS.sm.x, y: Math.max(0.6, S2.visProbs[a.nextId] * 4.5) + 0.4, z: POS.sm.z + (a.nextId - 4.5) * 0.62 };
+            const to = { x: POS.input.x, y: 1.1, z: POS.input.z + 1.35 };
+            M.drawBezierArc3D(ctx, project, from, to, 4.3, p, theme.warning, 3.0, true);
+            const cur = M.evalArc(from, to, 4.3, p);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.35, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
+          }
+        }
+      }
+    }
+
+    function drawStep03Scene(G, dl, project, theme, nowMs, isMorphing) {
+      const rgbCard = M.parseRgb(theme.card), rgbBorder = M.parseRgb(theme.border);
+      const rgbPri = M.parseRgb(theme.primary), rgbSuc = M.parseRgb(theme.success), rgbErr = M.parseRgb(theme.error), rgbWarn = M.parseRgb(theme.warning);
+      const isTrain = S3.viewMode === "train";
+      const dispIds = isTrain ? S3_IN : ((S3.inferAnim && !S3.inferAnim.committed) ? S3.inferAnim.prevSeqIds : S3.genIds);
+      const T = dispIds.length, activeQ = isTrain ? S3.selectedPos : (T - 1);
+      const curCache = isTrain ? S3.cache : ((S3.inferAnim && !S3.inferAnim.committed) ? S3.inferAnim.cache : S3.forward(dispIds, null));
+      const stT = (!isMorphing && isTrain && S3.stage > 0) ? Math.min(1, (nowMs - S3.stageStartMs) / stepAnimMs()) : 1;
+
+      const POS = { seq: { x: -10.4, z: 0 }, qkv: { x: -6.8, z: 0 }, mat: { x: -0.6, z: 0 }, ctxV: { x: 5.2, z: 0 }, sm: { x: 8.4, z: 0 }, loss: { x: 11.4, z: 0 } };
+      G.pipe("qkv", POS.seq, POS.qkv, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("attn_mat", POS.qkv, POS.mat, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("ctx_h1", POS.mat, POS.ctxV, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      G.pipe("softmax", POS.ctxV, POS.sm, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+      if (isTrain) G.pipe("loss", POS.sm, POS.loss, M.shade(rgbBorder, 1.05, 0.6), 1.8);
+
+      // Module 1: Sequence + Position Cubes
+      const seqSpan = 0.68, seqZ = idx => (idx - (T - 1) * 0.5) * seqSpan;
+      for (let idx = 0; idx < T; idx++) {
+        const cz = seqZ(idx), isAct = idx === activeQ, isPast = idx < activeQ;
+        const bh = isAct ? 1.25 : (isPast ? 0.85 : 0.35);
+        const col = isAct ? (isTrain ? rgbPri : rgbSuc) : (isPast ? M.lerpRgb(rgbCard, rgbPri, 0.52) : rgbCard);
+        G.box("seq_pos", POS.seq.x - 0.44, 0, cz - 0.25, POS.seq.x + 0.44, bh, cz + 0.25, col, (!isTrain || idx <= activeQ) ? 0.94 : 0.42, isAct ? theme.fg : theme.border);
+        G.label("seq_pos", POS.seq.x - 0.85, bh + 0.15, cz, `${idx}:${VOCAB[dispIds[idx]]}`, isAct ? (isTrain ? theme.primary : theme.success) : (isPast ? theme.fg : theme.muted), isAct ? "bold 11px monospace" : "10px monospace");
+      }
+      G.label("seq_pos", POS.seq.x, 0.18, seqZ(T - 1) + 0.95, isTrain ? "词+位置编码 (11位)" : `历史序列 (${T}字)`, isTrain ? theme.primary : theme.success, "bold 11px sans-serif");
+
+      // Module 2: Q / K / V
+      const qkvLit = !isTrain || S3.computedStage >= 2;
+      for (const cd of [{ dx: -0.75, arr: curCache ? curCache.q : null, col: rgbPri, n: "Q" }, { dx: 0, arr: curCache ? curCache.k : null, col: rgbWarn, n: "K" }, { dx: 0.75, arr: curCache ? curCache.v : null, col: rgbSuc, n: "V" }]) {
+        for (let d = 0; d < 4; d++) {
+          const bz = (d - 1.5) * 0.55, val = (qkvLit && cd.arr) ? cd.arr[activeQ * S3_D + d] : 0;
+          G.box("qkv", POS.qkv.x + cd.dx - 0.22, 0, bz - 0.19, POS.qkv.x + cd.dx + 0.22, qkvLit ? Math.max(0.14, Math.min(2.1, Math.abs(val) * 1.15 + 0.18)) : 0.12, bz + 0.19, qkvLit ? cd.col : rgbCard, 0.9, theme.border);
+        }
+        G.label("qkv", POS.qkv.x + cd.dx, 2.35, -1.35, cd.n, qkvLit ? theme.fg : theme.muted, "bold 11px monospace");
+      }
+
+      // Module 3: 3D Causal Attention Matrix
+      const cellStep = T <= 6 ? 0.85 : 0.62;
+      const mOX = POS.mat.x - (T - 1) * cellStep * 0.5, mOZ = POS.mat.z - (T - 1) * cellStep * 0.5;
+      const cPos = (r, c) => ({ x: mOX + c * cellStep, z: mOZ + r * cellStep });
+      const showMask = !isTrain || S3.computedStage >= 4, matLit = !isTrain || S3.computedStage >= 3;
+      for (let r = 0; r < T; r++) {
+        for (let c = 0; c < T; c++) {
+          const cp = cPos(r, c), half = cellStep * 0.41, isActR = r === activeQ;
+          if (c > r) {
+            if (showMask) G.box("attn_mat", cp.x - half, 0, cp.z - half, cp.x + half, 0.07, cp.z + half, M.lerpRgb(rgbCard, rgbErr, 0.34), isActR ? 0.75 : 0.36, theme.error);
+            else G.box("attn_mat", cp.x - half, 0, cp.z - half, cp.x + half, matLit ? Math.max(0.1, S3.visAttn[r * S3_TMAX + c] * 1.4) : 0.08, cp.z + half, M.lerpRgb(rgbErr, rgbWarn, 0.4), isActR ? 0.75 : 0.36, theme.error);
+          } else {
+            const w = S3.visAttn[r * S3_TMAX + c], bh = matLit ? Math.max(0.1, w * 3.8) : 0.08;
+            const col = !matLit ? rgbCard : (isActR ? M.lerpRgb(rgbPri, rgbWarn, Math.min(1, w * 1.4)) : M.lerpRgb(rgbCard, rgbPri, 0.25 + w * 0.7));
+            G.box("attn_mat", cp.x - half, 0, cp.z - half, cp.x + half, bh, cp.z + half, col, isActR ? 0.96 : 0.65, isActR ? theme.fg : theme.border);
+          }
+        }
+      }
+      G.label("attn_mat", POS.mat.x, 4.15, POS.mat.z - 2.6, showMask ? `因果注意力矩阵 (${T}×${T} · 红区=-∞)` : "未掩码打分（右上角有偷看风险！）", showMask ? (isTrain ? theme.primary : theme.success) : theme.error, "bold 11px sans-serif");
+
+      // Attention beams
+      const beamAlpha = G.modAlpha("attn_mat");
+      if ((!isTrain || S3.computedStage >= 5) && curCache && beamAlpha > 0.2) {
+        const matW = S3.getHeadMat(curCache.attnWeights, T);
+        for (let j = 0; j <= activeQ; j++) {
+          const w = matW[activeQ * T + j]; if (w < 0.08) continue;
+          const cp = cPos(activeQ, j);
+          M.drawBezierArc3D(ctx, project, { x: cp.x, y: Math.max(0.3, S3.visAttn[activeQ * S3_TMAX + j] * 3.8), z: cp.z }, { x: POS.ctxV.x, y: 1.2, z: 0 }, 1.4 + w * 1.4, 1.0, isTrain ? theme.warning : theme.success, 1.0 + w * 3.2, false, beamAlpha);
+        }
+      }
+
+      // Module 4: h1 = h0 + Context·Wo
+      const h1Lit = !isTrain || S3.computedStage >= 6;
+      for (let d = 0; d < S3_D; d++) {
+        const hz = (d - 3.5) * 0.48, v = S3.visH1[d];
+        G.box("ctx_h1", POS.ctxV.x - 0.32, 0, hz - 0.17, POS.ctxV.x + 0.32, h1Lit ? Math.max(0.14, Math.min(2.5, Math.abs(v) * 0.95 + 0.16)) : 0.12, hz + 0.17, !h1Lit ? rgbCard : (v >= 0 ? rgbSuc : rgbErr), 0.9, theme.border);
+      }
+      G.label("ctx_h1", POS.ctxV.x, 2.75, 0, "h1 = h0 + Context·Wo", h1Lit ? theme.success : theme.muted, "bold 10px monospace");
+
+      // Module 5: 10 Softmax Towers
+      const smLit = !isTrain || S3.computedStage >= 7;
+      for (let j = 0; j < V; j++) {
+        const sz = (j - 4.5) * 0.62, p = S3.visProbs[j];
+        const isHi = isTrain ? (j === S3_TGT[S3.selectedPos]) : (S3.inferAnim && j === S3.inferAnim.nextId);
+        G.box("softmax", POS.sm.x - 0.28, 0, sz - 0.22, POS.sm.x + 0.28, smLit ? Math.max(0.08, p * 4.5) : 0.08, sz + 0.22, !smLit ? rgbBorder : (isHi ? rgbSuc : rgbPri), smLit ? 0.92 : 0.45, isHi ? theme.fg : theme.border);
+        G.label("softmax", POS.sm.x + 0.85, 0.15, sz, smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`, isHi ? theme.success : theme.muted, isHi ? "bold 11px monospace" : "10px monospace");
+      }
+      G.label("softmax", POS.sm.x, 4.95, 0, isTrain ? "训练概率塔 (T=1.0)" : `推理温度塔 (T=${S3.temp.toFixed(1)})`, isTrain ? theme.primary : theme.success, "bold 11px monospace");
+
+      // Module 6 (Train-Only): Loss Pillar
+      if (isTrain) {
+        const lh = S3.computedStage >= 7 ? Math.max(0.14, Math.min(4.6, S3.visLoss * 1.45)) : 0.08;
+        G.box("loss", POS.loss.x - 0.6, 0, -0.6, POS.loss.x + 0.6, lh, 0.6, S3.computedStage >= 7 ? rgbWarn : rgbBorder, S3.computedStage >= 7 ? 0.92 : 0.5, S3.computedStage >= 7 ? theme.fg : theme.border);
+        G.label("loss", POS.loss.x, lh + 0.5, 0, S3.computedStage >= 7 ? `pos[${S3.selectedPos}] Loss ${S3.visLoss.toFixed(2)}` : "位置Loss: 0", S3.computedStage >= 7 ? theme.warning : theme.muted, "bold 11px monospace");
+      }
+
+      // Motion Orbs
+      if (!isMorphing) {
+        const ptOf = (p, y = 1.3) => ({ x: p.x, y, z: p.z });
+        if (isTrain && (S3.stage === 3 || S3.stage === 4 || S3.stage === 5)) {
+          const sc = S3.stage === 3 ? stT * (T - 1) : stT * activeQ;
+          M.pushOrb(dl, ctx, project, mOX + sc * cellStep, 2.2, mOZ + activeQ * cellStep, 0.28, S3.stage === 4 ? theme.error : theme.primary, S3.stage === 4 ? theme.error : theme.primary, S3.stage === 4 ? "×" : "α", "#fff");
+        } else if (isTrain && S3.stage === 8) {
+          const wps = [POS.loss, POS.sm, POS.ctxV, POS.mat, POS.qkv, POS.seq];
+          const sf = stT * (wps.length - 1), si = Math.min(wps.length - 2, Math.floor(sf)), su = sf - si;
+          const cur = M.evalArc(ptOf(wps[si], 1.7), ptOf(wps[si + 1], 1.7), 1.5, su);
+          M.drawBezierArc3D(ctx, project, ptOf(wps[si], 1.7), ptOf(wps[si + 1], 1.7), 1.5, su, theme.warning, 2.8, true);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, theme.warning, theme.warning, "∂", "#000");
+        } else if (!isTrain && S3.inferAnim) {
+          const u = Math.min(1, (nowMs - S3.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed)), a = S3.inferAnim;
+          if (u < 0.56) {
+            const p = u / 0.56, cur = M.evalArc(ptOf(POS.qkv, 1.5), ptOf(POS.sm, 1.5), 1.8, p);
+            M.drawBezierArc3D(ctx, project, ptOf(POS.qkv, 1.5), ptOf(POS.sm, 1.5), 1.8, p, theme.success, 2.6);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, "→", "#000");
+          } else {
+            const p = (u - 0.56) / 0.44;
+            const from = { x: POS.sm.x, y: Math.max(0.6, S3.visProbs[a.nextId] * 4.5) + 0.4, z: (a.nextId - 4.5) * 0.62 };
+            const to = { x: POS.seq.x, y: 1.1, z: seqZ(T - 1) + 0.6 };
+            M.drawBezierArc3D(ctx, project, from, to, 4.6, p, theme.warning, 3.0, true);
+            const cur = M.evalArc(from, to, 4.6, p);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.35, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
+          }
+        }
+      }
+    }
+
+    function drawStepById(id, G, dl, project, theme, nowMs, isMorphing) {
+      if (id === 0) drawStep00Scene(G, dl, project, theme, nowMs, isMorphing);
+      else if (id === 1) drawStep01Scene(G, dl, project, theme, nowMs, isMorphing);
+      else if (id === 2) drawStep02Scene(G, dl, project, theme, nowMs, isMorphing);
+      else drawStep03Scene(G, dl, project, theme, nowMs, isMorphing);
+    }
+
+    // =========================================================================
+    // 10. Unified Animation Loop (State Machines + Interpolation + 3D Morph!)
+    // =========================================================================
+    function renderFrame(nowMs) {
+      cam.step();
+      const lerpRate = Math.min(0.45, 0.18 * Math.sqrt(animSpeed));
+      const progWrap = document.getElementById("stageProgressWrap"), progBar = document.getElementById("stageProgressBar");
+
+      // Advance active step state machine (paused while morphing so transition is silky!)
+      if (!morph) {
+        if (activeStep === 0) {
+          if (S0.viewMode === "train" && S0.mode === "autoplay") {
+            const el = nowMs - S0.stageStartMs;
+            progWrap.classList.remove("hidden"); progBar.style.width = `${((S0.stage - 1 + Math.min(1, el / stepAnimMs())) / 5) * 100}%`;
+            if (el >= stepAnimMs() + autoHoldMs()) {
+              if (S0.stage < 5) { S0.enterStage(S0.stage + 1, nowMs); renderAllUi(); }
+              else { S0.mode = "idle"; renderAllUi(); }
+            }
+          } else if (S0.viewMode === "train" && S0.stage > 0) {
+            progWrap.classList.remove("hidden"); progBar.style.width = `${(S0.stage / 5) * 100}%`;
+          } else progWrap.classList.add("hidden");
+        } else if (activeStep === 1) {
+          if (S1.viewMode === "train") {
+            const stT = S1.stage > 0 ? Math.min(1, (nowMs - S1.stageStartMs) / stepAnimMs()) : 0;
+            if (S1.mode === "step") {
+              progWrap.classList.remove("hidden"); progBar.style.width = `${(S1.stage / 5) * 100}%`;
+              if (S1.stage === 5 && stT >= 0.42 && !S1.stage5Applied) { S1.trainOneEpoch(); S1.stage5Applied = true; renderAllUi(); }
+            } else if (S1.mode === "autoplay") {
+              progWrap.classList.remove("hidden");
+              const el = nowMs - S1.stageStartMs; progBar.style.width = `${((S1.stage - 1 + Math.min(1, el / stepAnimMs())) / 5) * 100}%`;
+              if (S1.stage === 5 && stT >= 0.42 && !S1.stage5Applied) { S1.trainOneEpoch(); S1.stage5Applied = true; renderAllUi(); }
+              if (el >= stepAnimMs() + autoHoldMs()) {
+                if (S1.stage < 5) { S1.enterStage(S1.stage + 1, nowMs); renderAllUi(); }
+                else { S1.mode = "step"; renderAllUi(); }
+              }
+            } else if (S1.mode === "fast") {
+              progWrap.classList.remove("hidden");
+              if (nowMs - S1.lastFastTick >= 45 / animSpeed && S1.fastRemaining > 0) {
+                S1.trainOneEpoch(); S1.fastRemaining--; S1.lastFastTick = nowMs;
+                progBar.style.width = `${((50 - S1.fastRemaining) / 50) * 100}%`; renderAllUi();
+              }
+              if (S1.fastRemaining <= 0) { S1.mode = "idle"; S1.stage = 0; S1.trainNarrator = { title: `🎉 50 轮矩阵生长完成（Epoch ${S1.epoch}，Loss = ${S1.lastLossVal.toFixed(4)}）！`, desc: "快看下方「死穴对照」：两个「月」永远只能五五开——点顶部 Step 02 进化看 3 字窗口如何破局！" }; renderAllUi(); }
+            } else progWrap.classList.add("hidden");
+          } else if (S1.inferAnim) {
+            const u = Math.min(1, (nowMs - S1.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed));
+            progWrap.classList.remove("hidden"); progBar.style.width = `${u * 100}%`;
+            if (u >= 0.98 && !S1.inferAnim.committed) { S1.flushInfer(); renderAllUi(); }
+            if (u >= 1) { S1.inferAnim = null; progWrap.classList.add("hidden"); }
+          } else progWrap.classList.add("hidden");
+        } else if (activeStep === 2) {
+          if (S2.viewMode === "train") {
+            const stT = S2.stage > 0 ? Math.min(1, (nowMs - S2.stageStartMs) / stepAnimMs()) : 0;
+            if (S2.mode === "step") {
+              progWrap.classList.remove("hidden"); progBar.style.width = `${(S2.stage / 8) * 100}%`;
+              if (S2.stage === 8 && stT >= 0.42 && !S2.stage8Applied) { S2.stepAdamW(true); S2.stage8Applied = true; renderAllUi(); }
+            } else if (S2.mode === "autoplay") {
+              progWrap.classList.remove("hidden");
+              const el = nowMs - S2.stageStartMs; progBar.style.width = `${((S2.stage - 1 + Math.min(1, el / stepAnimMs())) / 8) * 100}%`;
+              if (S2.stage === 8 && stT >= 0.42 && !S2.stage8Applied) { S2.stepAdamW(true); S2.stage8Applied = true; renderAllUi(); }
+              if (el >= stepAnimMs() + autoHoldMs()) {
+                if (S2.stage < 8) { S2.enterStage(S2.stage + 1, nowMs); renderAllUi(); }
+                else { S2.mode = "step"; renderAllUi(); }
+              }
+            } else if (S2.mode === "fast") {
+              progWrap.classList.remove("hidden");
+              if (nowMs - S2.lastFastTick >= 50 / animSpeed && S2.fastRemaining > 0) {
+                S2.stepAdamW(false); S2.fastRemaining--; S2.lastFastTick = nowMs;
+                progBar.style.width = `${((40 - S2.fastRemaining) / 40) * 100}%`; renderAllUi();
+              }
+              if (S2.fastRemaining <= 0) { S2.mode = "idle"; S2.stage = 0; S2.trainNarrator = { title: `🎉 40 step 训练完成（Step ${S2.stepCount}，Batch Loss = ${S2.tape.nodes[11].data[0].toFixed(4)}）！`, desc: "「前明月→光」与「望明月→。」已彻底分开！点顶部 Step 03 看因果自注意力如何打破 3 字窗口限制！" }; renderAllUi(); }
+            } else progWrap.classList.add("hidden");
+          } else if (S2.inferAnim) {
+            const u = Math.min(1, (nowMs - S2.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed));
+            progWrap.classList.remove("hidden"); progBar.style.width = `${u * 100}%`;
+            if (u >= 0.98 && !S2.inferAnim.committed) { S2.flushInfer(); renderAllUi(); }
+            if (u >= 1) { S2.inferAnim = null; progWrap.classList.add("hidden"); }
+          } else progWrap.classList.add("hidden");
+        } else if (activeStep === 3) {
+          if (S3.viewMode === "train") {
+            const stT = S3.stage > 0 ? Math.min(1, (nowMs - S3.stageStartMs) / stepAnimMs()) : 0;
+            if (S3.mode === "step") {
+              progWrap.classList.remove("hidden"); progBar.style.width = `${(S3.stage / 8) * 100}%`;
+              if (S3.stage === 8 && stT >= 0.42 && !S3.stage8Applied) { S3.stepAdamW(); S3.stage8Applied = true; renderAllUi(); }
+            } else if (S3.mode === "autoplay") {
+              progWrap.classList.remove("hidden");
+              const el = nowMs - S3.stageStartMs; progBar.style.width = `${((S3.stage - 1 + Math.min(1, el / stepAnimMs())) / 8) * 100}%`;
+              if (S3.stage === 8 && stT >= 0.42 && !S3.stage8Applied) { S3.stepAdamW(); S3.stage8Applied = true; renderAllUi(); }
+              if (el >= stepAnimMs() + autoHoldMs()) {
+                if (S3.stage < 8) { S3.enterStage(S3.stage + 1, nowMs); renderAllUi(); }
+                else { S3.mode = "step"; renderAllUi(); }
+              }
+            } else if (S3.mode === "fast") {
+              progWrap.classList.remove("hidden");
+              if (nowMs - S3.lastFastTick >= 45 / animSpeed && S3.fastRemaining > 0) {
+                S3.stepAdamW(); S3.fastRemaining--; S3.lastFastTick = nowMs;
+                progBar.style.width = `${((60 - S3.fastRemaining) / 60) * 100}%`; renderAllUi();
+              }
+              if (S3.fastRemaining <= 0) { S3.mode = "idle"; S3.stage = 0; S3.trainNarrator = { title: `🎉 60 step 训练完成（Step ${S3.stepCount}，全序列 Loss = ${S3.cache.meanLoss.toFixed(4)}）！`, desc: "点下方「🎲 推理下一个字」，试试只给 1 个「床」字就能背完整首诗！" }; renderAllUi(); }
+            } else progWrap.classList.add("hidden");
+          } else if (S3.inferAnim) {
+            const u = Math.min(1, (nowMs - S3.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed));
+            progWrap.classList.remove("hidden"); progBar.style.width = `${u * 100}%`;
+            if (u >= 0.98 && !S3.inferAnim.committed) { S3.flushInfer(); renderAllUi(); }
+            if (u >= 1) { S3.inferAnim = null; progWrap.classList.add("hidden"); }
+          } else progWrap.classList.add("hidden");
+        }
+      }
+
+      // Smooth interpolation of all steps' visual buffers
+      // Step 01
+      for (let i = 0; i < V * V; i++) S1.visHeights[i] += (S1.table[i] - S1.visHeights[i]) * lerpRate;
+      const s1Row = S1.viewMode === "train" ? S1_PAIRS[S1.selectedPairIdx][0] : S1.genIds[S1.genIds.length - 1];
+      const s1P = (S1.viewMode === "infer" || S1.hasSoftmax) ? softmaxRow(S1.getRow(s1Row), S1.viewMode === "infer" ? S1.temp : 1.0) : null;
+      for (let j = 0; j < V; j++) S1.visProbs[j] += ((s1P ? s1P[j] : 0) - S1.visProbs[j]) * lerpRate;
+      S1.visLoss += ((S1.hasLoss ? S1.lastLossVal : 0) - S1.visLoss) * lerpRate;
+
+      // Step 02
+      let s2x = null, s2z = null, s2h = null, s2p = null;
+      if (S2.viewMode === "train") {
+        if (S2.tape && S2.fwdStage >= 2) s2x = S2.tape.nodes[5].data.subarray(S2.selectedSampleIdx * S2_IN, (S2.selectedSampleIdx + 1) * S2_IN);
+        if (S2.tape && S2.fwdStage >= 3) s2z = S2.tape.nodes[7].data.subarray(S2.selectedSampleIdx * S2_H, (S2.selectedSampleIdx + 1) * S2_H);
+        if (S2.tape && S2.fwdStage >= 4) s2h = S2.tape.nodes[8].data.subarray(S2.selectedSampleIdx * S2_H, (S2.selectedSampleIdx + 1) * S2_H);
+        if (S2.tape && S2.fwdStage >= 6) s2p = softmaxRow(S2.tape.nodes[10].data.subarray(S2.selectedSampleIdx * V, (S2.selectedSampleIdx + 1) * V), 1.0);
+      } else {
+        const w = (S2.inferAnim && !S2.inferAnim.committed) ? S2.inferAnim.prevWinIds : S2.genIds.slice(-S2_CTX);
+        const f = S2.inferForward(w);
+        s2x = f.x; s2z = f.z1; s2h = f.h; s2p = softmaxRow(f.logits, S2.temp);
+      }
+      for (let i = 0; i < S2_IN; i++) S2.visX[i] += ((s2x ? s2x[i] : 0) - S2.visX[i]) * lerpRate;
+      for (let k = 0; k < S2_H; k++) { S2.visZ1[k] += ((s2z ? s2z[k] : 0) - S2.visZ1[k]) * lerpRate; S2.visH[k] += ((s2h ? s2h[k] : 0) - S2.visH[k]) * lerpRate; }
+      for (let j = 0; j < V; j++) S2.visProbs[j] += ((s2p ? s2p[j] : 0) - S2.visProbs[j]) * lerpRate;
+      S2.visLoss += (((S2.tape && S2.fwdStage >= 6) ? S2.tape.nodes[11].sampleLosses[S2.selectedSampleIdx] : 0) - S2.visLoss) * lerpRate;
+
+      // Step 03
+      let s3p = null, s3h1 = null, s3mat = null, s3T = S3_SEQ;
+      if (S3.viewMode === "train") {
+        if (S3.cache && S3.computedStage >= 5) s3mat = S3.getHeadMat(S3.cache.attnWeights, S3_SEQ);
+        else if (S3.cache && S3.computedStage >= 3) {
+          const raw = S3.getHeadMat(S3.cache.rawScores, S3_SEQ);
+          s3mat = new Float32Array(S3_SEQ * S3_SEQ);
+          for (let r = 0; r < S3_SEQ; r++) for (let c = 0; c < S3_SEQ; c++) s3mat[r * S3_SEQ + c] = (S3.computedStage >= 4 && c > r) ? 0 : Math.max(0.06, Math.min(0.95, 0.35 + raw[r * S3_SEQ + c] * 0.35));
+        }
+        if (S3.cache && S3.computedStage >= 6) s3h1 = S3.cache.h1.subarray(S3.selectedPos * S3_D, (S3.selectedPos + 1) * S3_D);
+        if (S3.cache && S3.computedStage >= 7) s3p = softmaxRow(S3.cache.logits.subarray(S3.selectedPos * V, (S3.selectedPos + 1) * V), 1.0);
+      } else {
+        const ids = (S3.inferAnim && !S3.inferAnim.committed) ? S3.inferAnim.prevSeqIds : S3.genIds;
+        s3T = ids.length;
+        const c = (S3.inferAnim && !S3.inferAnim.committed) ? S3.inferAnim.cache : S3.forward(ids, null);
+        s3mat = S3.getHeadMat(c.attnWeights, s3T);
+        s3h1 = c.h1.subarray((s3T - 1) * S3_D, s3T * S3_D);
+        s3p = softmaxRow(c.logits.subarray((s3T - 1) * V, s3T * V), S3.temp);
+      }
+      for (let j = 0; j < V; j++) S3.visProbs[j] += ((s3p ? s3p[j] : 0) - S3.visProbs[j]) * lerpRate;
+      for (let d = 0; d < S3_D; d++) S3.visH1[d] += ((s3h1 ? s3h1[d] : 0) - S3.visH1[d]) * lerpRate;
+      for (let r = 0; r < S3_TMAX; r++)
+        for (let c = 0; c < S3_TMAX; c++) {
+          const tv = (s3mat && r < s3T && c < s3T) ? s3mat[r * s3T + c] : 0;
+          S3.visAttn[r * S3_TMAX + c] += (tv - S3.visAttn[r * S3_TMAX + c]) * lerpRate;
+        }
+      S3.visLoss += (((S3.cache && S3.computedStage >= 7) ? S3.cache.posLosses[S3.selectedPos] : 0) - S3.visLoss) * lerpRate;
+
+      // --- Begin 3D Rendering ---
+      const theme = M.getThemeColors();
+      const { W, H } = M.beginFrame(canvas, ctx, theme);
+      const { project, eye } = M.makeProjector(W, H, cam, 1.15, 0.47);
+      const rgbBorder = M.parseRgb(theme.border), rgbSuc = M.parseRgb(theme.success);
+      const curInfer = (activeStep === 0 && S0.viewMode === "infer") || (activeStep === 1 && S1.viewMode === "infer") || (activeStep === 2 && S2.viewMode === "infer") || (activeStep === 3 && S3.viewMode === "infer");
+
+      // Floor grid
+      ctx.strokeStyle = curInfer ? M.shade(rgbSuc, 0.8, 0.16) : M.shade(rgbBorder, 1, 0.25);
+      ctx.lineWidth = 1;
+      for (let gx = -12; gx <= 12; gx += 2.2) {
+        const a = project(gx, 0, -5.2), b = project(gx, 0, 5.8);
+        if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+      }
+      for (let gz = -5.2; gz <= 5.8; gz += 1.83) {
+        const a = project(-12, 0, gz), b = project(12, 0, gz);
+        if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+      }
+
+      const dl = [];
+      const morphBanner = document.getElementById("morphBanner");
+      if (morph) {
+        const u = Math.min(1, (nowMs - morph.startMs) / (MORPH_MS / animSpeed));
+        morphBanner.classList.remove("hidden");
+        document.getElementById("morphTitle").textContent = morph.spec.title;
+        document.getElementById("morphSub").textContent = u < 0.45
+          ? "阶段 1/2：红色拆除不再需要的旧组件 · 金色光束替换升级结构"
+          : "阶段 2/2：绿色升起全新核心组件 · 蓝色保留延续部件就位";
+        document.getElementById("morphProgFill").style.width = `${(u * 100).toFixed(1)}%`;
+
+        // Draw Outgoing Step (shrinking removed / morphing replaced / cross-fading kept)
+        if (u < 0.68) {
+          const gOut = makeSceneHelper(dl, project, eye, theme, morph.spec.outRole, u, true);
+          drawStepById(morph.fromId, gOut, dl, project, theme, nowMs, true);
+          for (const co of morph.spec.calloutsOut) {
+            M.pushLabel3D(dl, ctx, project, co.x, co.y + u * 1.2, co.z, co.text, theme.error, "bold 12px sans-serif", -0.5, Math.max(0, 1 - u * 1.6));
+          }
+        }
+        // Draw Incoming Step (rising added / landing replaced / settling kept)
+        if (u > 0.30) {
+          const gIn = makeSceneHelper(dl, project, eye, theme, morph.spec.inRole, u, false);
+          drawStepById(morph.toId, gIn, dl, project, theme, nowMs, true);
+          const ca = Math.min(1, (u - 0.35) * 2.4) * (u > 0.88 ? (1 - u) / 0.12 : 1);
+          for (const ci of morph.spec.calloutsIn) {
+            const col = ci.kind === "rep" ? theme.warning : theme.success;
+            M.pushLabel3D(dl, ctx, project, ci.x, ci.y, ci.z, ci.text, col, "bold 12px sans-serif", -0.5, Math.max(0, ca));
+          }
+        }
+        // Golden morph transformation arcs connecting old -> new!
+        const arcProg = Math.min(1, Math.max(0, (u - 0.12) / 0.62));
+        const arcAlpha = u < 0.78 ? 0.92 : Math.max(0, (1 - u) / 0.22);
+        for (const arc of morph.spec.arcs) {
+          M.drawBezierArc3D(ctx, project, arc.from, arc.to, 3.0, arcProg, theme.warning, 3.0, true, arcAlpha);
+          if (arcProg > 0.05 && arcProg < 0.98) {
+            const pt = M.evalArc(arc.from, arc.to, 3.0, arcProg);
+            M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.34, theme.warning, theme.warning, "↻", "#000");
+            M.pushLabel3D(dl, ctx, project, pt.x, pt.y + 0.65, pt.z, arc.label, theme.warning, "bold 11px sans-serif", -0.6, arcAlpha);
+          }
+        }
+
+        if (u >= 1) {
+          morph = null;
+          morphBanner.classList.add("hidden");
+          document.getElementById("diffBar").classList.remove("morphing");
+        }
+      } else {
+        morphBanner.classList.add("hidden");
+        const gNormal = makeSceneHelper(dl, project, eye, theme, "normal", 1, false);
+        drawStepById(activeStep, gNormal, dl, project, theme, nowMs, false);
+      }
+
+      M.flushDrawList(dl);
+      ctx.restore();
+      requestAnimationFrame(renderFrame);
+    }
+
+    // =========================================================================
+    // 11. Unified UI Rendering for Active Step
+    // =========================================================================
+    function renderDiffBar() {
+      const bar = document.getElementById("diffBar");
+      const diff = (morph && morph.spec.diff) ? morph.spec.diff : (activeStep === 0 ? STEP_META[0].diffBase : STEP_META[activeStep].diffFromPrev);
+      let html = `<strong style="color:var(--foreground)">${diff.title}</strong>`;
+      if (diff.added.length) html += `<span class="diff-pill add">+ 多了：${diff.added.join(" · ")}</span>`;
+      if (diff.removed.length) html += `<span class="diff-pill rem">- 少了：${diff.removed.join(" · ")}</span>`;
+      if (diff.replaced.length) html += `<span class="diff-pill rep">↻ 替换：${diff.replaced.join(" · ")}</span>`;
+      if (diff.kept.length) html += `<span class="diff-pill keep">✓ 保留：${diff.kept.join(" · ")}</span>`;
+      bar.innerHTML = html;
+    }
+
+    function renderStepChrome() {
+      document.querySelectorAll(".evo-tab").forEach(el => {
+        const st = parseInt(el.dataset.step, 10);
+        el.classList.toggle("active", st === activeStep);
+        el.setAttribute("aria-selected", String(st === activeStep));
+      });
+      document.getElementById("btnPrevStep").disabled = activeStep === 0;
+      document.getElementById("btnPrevStep").textContent = activeStep > 0 ? `← 上一 Step (0${activeStep - 1})` : "← 上一 Step";
+      document.getElementById("btnNextEvo").disabled = activeStep === 3;
+      document.getElementById("btnNextEvo").textContent = activeStep < 3 ? `下一 Step (0${activeStep + 1}) →` : "下一 Step (已达 03)";
+      document.getElementById("btnReplayMorph").disabled = activeStep === 0;
+
+      // Show/Hide Step-specific strips & inspectors
+      document.getElementById("stripStep00").classList.toggle("hidden", activeStep !== 0);
+      document.getElementById("stripTrainInfer").classList.toggle("hidden", activeStep === 0);
+      document.getElementById("headSelectWrap").classList.toggle("hidden", activeStep !== 3);
+      for (let i = 0; i <= 3; i++) document.getElementById(`inspStep0${i}`).classList.toggle("hidden", activeStep !== i);
+
+      // Train buttons visibility
+      document.getElementById("btnTrain1").classList.toggle("hidden", activeStep === 0);
+      document.getElementById("btnTrainFast").classList.toggle("hidden", activeStep === 0);
+      if (activeStep === 1) { document.getElementById("btnTrain1").textContent = "+1 推进 1 轮"; document.getElementById("btnTrainFast").textContent = "⚡ 50 轮矩阵生长"; }
+      else if (activeStep === 2) { document.getElementById("btnTrain1").textContent = "+1 训练 step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速训练 40 step"; }
+      else if (activeStep === 3) { document.getElementById("btnTrain1").textContent = "+1 训练 step"; document.getElementById("btnTrainFast").textContent = "⚡ 快速训练 60 step"; }
+
+      // Mode switch labels & state
+      const curView = [S0.viewMode, S1.viewMode, S2.viewMode, S3.viewMode][activeStep];
+      const isTrain = curView === "train";
+      const btnT = document.getElementById("btnModeTrain"), btnI = document.getElementById("btnModeInfer");
+      btnT.textContent = activeStep === 0 ? "🔵 建表流程" : "🔵 训练模式";
+      btnI.textContent = activeStep === 0 ? "🟢 编解码实验" : "🟢 推理模式";
+      btnT.className = `mode-btn${isTrain ? " active-train" : ""}`;
+      btnI.className = `mode-btn${!isTrain ? " active-infer" : ""}`;
+      document.getElementById("stageProgressBar").style.background = isTrain ? "var(--primary)" : "var(--success)";
+
+      // Stage Pills
+      const pills = document.getElementById("stagePills"), iPills = document.getElementById("inferPills");
+      pills.classList.toggle("hidden", !isTrain);
+      iPills.classList.toggle("hidden", isTrain);
+      const stObj = [S0, S1, S2, S3][activeStep];
+      pills.innerHTML = stObj.stageNames.map((nm, idx) => {
+        const sNum = idx + 1;
+        const cls = sNum === stObj.stage ? "stage-pill active" : (stObj.stage > 0 && sNum < stObj.stage ? "stage-pill done" : "stage-pill");
+        return `<span class="${cls}">${nm}</span>${idx < stObj.stageNames.length - 1 ? '<span class="muted">→</span>' : ""}`;
+      }).join("");
+
+      const inferLabels = [
+        ["① 输入文字", "② 查表 stoi", "③ 输出 IDs", "④ itos 还原"],
+        ["① 当前字查行", "② 温度概率塔", "③ 金色骰子落塔", "④ 跳至下一行"],
+        ["① 末尾3字输入", "② MLP纯前向", "③ 温度掷骰抽字", "④ 窗口右滑"],
+        ["① 全部历史+位置", "② 末字Q扫描历史K", "③ 温度掷骰抽字", "④ 追加进序列(1字起步!)"],
+      ][activeStep];
+      iPills.innerHTML = inferLabels.map((nm, idx) => `<span class="infer-pill">${nm}</span>${idx < 3 ? '<span class="muted">→</span>' : ""}`).join("");
+
+      // Next Step Button & AutoPlay Button
+      const maxSt = stObj.stageNames.length;
+      const nextSt = stObj.stage >= maxSt ? 1 : stObj.stage + 1;
+      document.getElementById("btnNextAction").textContent = `${stObj.stage >= maxSt ? "⏭ 下一轮：" : "⏭ 下一步："}${stObj.stageNames[nextSt - 1]} (${nextSt}/${maxSt})`;
+      document.getElementById("btnAutoPlay").textContent = stObj.mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
+    }
+
+    function renderCorpusAndHuds() {
+      const cWrap = document.getElementById("corpusChars"), cLeg = document.getElementById("corpusLegend");
+      cWrap.innerHTML = "";
+      CHARS.forEach((ch, idx) => {
+        const sp = document.createElement("span");
+        sp.className = "corpus-char mono"; sp.textContent = ch;
+        if (activeStep === 0) {
+          if (ch === "明" || ch === "月") sp.classList.add("ctx");
+        } else if (activeStep === 1) {
+          if (idx === S1.selectedPairIdx) sp.classList.add("query");
+          else if (idx === S1.selectedPairIdx + 1) sp.classList.add("tgt");
+        } else if (activeStep === 2) {
+          const s = S2_SAMPLES[S2.selectedSampleIdx];
+          if (idx >= s.start && idx < s.start + S2_CTX) sp.classList.add("ctx");
+          else if (idx === s.start + S2_CTX) sp.classList.add("tgt");
+        } else {
+          if (idx < S3.selectedPos) sp.classList.add("hist");
+          else if (idx === S3.selectedPos) sp.classList.add("query");
+          else if (idx === S3.selectedPos + 1) sp.classList.add("tgt");
+          else sp.classList.add("future");
+        }
+        cWrap.appendChild(sp);
+      });
+      cLeg.textContent = [
+        "（蓝框=重复出现的「明」「月」，去重后 V=10）",
+        "（蓝=当前字 x · 绿=下一个字 y）",
+        "（蓝框=3字输入窗口 x · 绿=target）",
+        "（深蓝=Query · 浅蓝=可见历史 · 绿=target · 虚框=未来掩码）",
+      ][activeStep];
+
+      // Top-Left HUD & Top-Right Legend & Bottom Narrator
+      const tl = document.getElementById("hudTopLeft"), tr = document.getElementById("hudTopRight");
+      const stObj = [S0, S1, S2, S3][activeStep];
+      const n = stObj.viewMode === "train" ? stObj.trainNarrator : stObj.inferNarrator;
+      document.getElementById("narratorTitle").textContent = n.title;
+      document.getElementById("narratorDesc").textContent = n.desc;
+
+      if (activeStep === 0) {
+        tl.innerHTML = S0.viewMode === "train"
+          ? `<div><strong style="color:var(--primary)">🔵 Step 00 建表流程</strong> | 原文 12 字 → 唯一词表 <strong>V = 10</strong></div><div class="muted">字符级分词：每个汉字映射唯一整数 0..9</div>`
+          : `<div><strong style="color:var(--success)">🟢 编解码实验</strong> | 当前测试串: <strong>「${S0.testText}」</strong></div><div class="muted">尝试点击词表内字或词表外生僻字「人」观察 3D 飞行轨迹</div>`;
+        tr.innerHTML = `<span><span class="dot" style="background:var(--primary)"></span>输入/IDs</span><span><span class="dot" style="background:var(--success)"></span>词表/还原</span><span><span class="dot" style="background:var(--error)"></span>词表外OOV</span>`;
+      } else if (activeStep === 1) {
+        const [x, y] = S1_PAIRS[S1.selectedPairIdx];
+        tl.innerHTML = S1.viewMode === "train"
+          ? `<div><strong style="color:var(--primary)">🔵 Step 01 训练</strong> | Epoch: <strong>${S1.epoch}</strong> | 全量Loss: <strong>${S1.hasLoss ? S1.lastLossVal.toFixed(4) : "未计算 (0)"}</strong></div><div class="muted">样本: <strong>${VOCAB[x]}(${x}) → ${VOCAB[y]}(${y})</strong> | 10×10 静态查表</div>`
+          : `<div><strong style="color:var(--success)">🟢 Step 01 推理（无Loss·不改权重）</strong> | 权重 Epoch ${S1.epoch}</div><div class="muted">当前字: <strong>「${VOCAB[S1.genIds[S1.genIds.length - 1]]}」</strong> | 温度 T = ${S1.temp.toFixed(1)}</div>`;
+        tr.innerHTML = `<span><span class="dot" style="background:var(--success)"></span>正权重/目标</span><span><span class="dot" style="background:var(--error)"></span>负权重</span><span><span class="dot" style="background:var(--primary)"></span>概率塔</span><span><span class="dot" style="background:var(--warning)"></span>Loss/骰子</span>`;
+      } else if (activeStep === 2) {
+        const s = S2_SAMPLES[S2.selectedSampleIdx];
+        const bLoss = S2.tape && S2.fwdStage >= 6 ? S2.tape.nodes[11].data[0].toFixed(4) : "未计算 (0)";
+        const sLoss = S2.tape && S2.fwdStage >= 6 ? S2.tape.nodes[11].sampleLosses[S2.selectedSampleIdx].toFixed(4) : "未计算 (0)";
+        const ba = S2.lastReport ? `Step ${S2.lastReport.step} Batch ${S2.lastReport.beforeBatch.toFixed(3)} → ${S2.lastReport.afterBatch.toFixed(3)}` : "尚无更新记录";
+        tl.innerHTML = S2.viewMode === "train"
+          ? `<div><strong style="color:var(--primary)">🔵 Step 02 训练</strong> | Step: <strong>${S2.stepCount}</strong> | Batch Loss: <strong>${bLoss}</strong></div><div class="muted">样本: <strong>${s.ctxText}→${s.targetChar}</strong> | 样本Loss: <strong style="color:var(--warning)">${sLoss}</strong> | ${ba}</div>`
+          : `<div><strong style="color:var(--success)">🟢 Step 02 推理（无Tape·无Loss·不改权重）</strong> | Step ${S2.stepCount}</div><div class="muted">3字窗口: <strong>「${S2.genIds.slice(-S2_CTX).map(i => VOCAB[i]).join("")}」</strong> | 温度 T = ${S2.temp.toFixed(1)}</div>`;
+        tr.innerHTML = `<span><span class="dot" style="background:var(--primary)"></span>x(12维)/概率</span><span><span class="dot" style="background:var(--success)"></span>ReLU通/目标</span><span><span class="dot" style="background:var(--error)"></span>ReLU断</span><span><span class="dot" style="background:var(--warning)"></span>Tape/Loss</span>`;
+      } else {
+        const seqLoss = S3.cache && S3.computedStage >= 7 ? S3.cache.meanLoss.toFixed(4) : "未计算 (0)";
+        const posLoss = S3.cache && S3.computedStage >= 7 ? S3.cache.posLosses[S3.selectedPos].toFixed(4) : "未计算 (0)";
+        const ba = S3.lastReport ? `Step ${S3.lastReport.step} ${S3.lastReport.beforeSeq.toFixed(3)} → ${S3.lastReport.afterSeq.toFixed(3)}` : "尚无更新记录";
+        tl.innerHTML = S3.viewMode === "train"
+          ? `<div><strong style="color:var(--primary)">🔵 Step 03 训练</strong> | Step: <strong>${S3.stepCount}</strong> | 全序列Loss: <strong>${seqLoss}</strong></div><div class="muted">Query: <strong>pos[${S3.selectedPos}]「${CHARS.slice(0, S3.selectedPos + 1).join("")}」→${CHARS[S3.selectedPos + 1]}</strong> | 位置Loss: <strong style="color:var(--warning)">${posLoss}</strong> | ${ba}</div>`
+          : `<div><strong style="color:var(--success)">🟢 Step 03 推理（1字起步·无Loss·不改权重）</strong> | Step ${S3.stepCount}</div><div class="muted">历史序列(${S3.genIds.length}/12): <strong>「${S3.genIds.map(i => VOCAB[i]).join("")}」</strong> | T = ${S3.temp.toFixed(1)}</div>`;
+        tr.innerHTML = `<span><span class="dot" style="background:var(--primary)"></span>注意力山峰</span><span><span class="dot" style="background:var(--success)"></span>Value/目标</span><span><span class="dot" style="background:var(--error)"></span>掩码(-∞)</span><span><span class="dot" style="background:var(--warning)"></span>光束/Loss</span>`;
+      }
+    }
+
+    function renderStep00Panels() {
+      const charBtns = document.getElementById("s0CharBtns");
+      charBtns.innerHTML = "";
+      VOCAB.forEach((ch, id) => {
+        const b = document.createElement("button");
+        b.className = "mono"; b.style.padding = "2px 7px"; b.textContent = ch;
+        b.onclick = () => {
+          S0.viewMode = "infer";
+          if (S0.testText.length >= 10) S0.testText = S0.testText.slice(1);
+          S0.testText += ch;
+          S0.highlightVocabId = id;
+          S0.lastFlight = { startMs: performance.now(), char: ch, tokId: id, isOov: false };
+          S0.inferNarrator = { title: `🟢 Encode：「${ch}」查词表 → ID = ${id} → Decode 还原为「${ch}」`, desc: "3D 舞台上蓝球飞入词表命中对应方块，变身金色整数 ID 后再由绿球无损还原！" };
+          renderAllUi();
+        };
+        charBtns.appendChild(b);
+      });
+
+      const inChips = document.getElementById("s0InputChips");
+      inChips.innerHTML = "";
+      const encArr = [], decArr = [];
+      let hasOov = false;
+      for (const ch of S0.testText.split("")) {
+        const sp = document.createElement("span");
+        const id = STOI[ch];
+        sp.className = id === undefined ? "chip oov" : "chip win";
+        sp.textContent = ch; inChips.appendChild(sp);
+        if (id === undefined) { hasOov = true; encArr.push("UNK"); decArr.push("?"); }
+        else { encArr.push(id); decArr.push(VOCAB[id]); }
+      }
+      document.getElementById("s0EncodedIds").textContent = `[${encArr.join(", ")}]`;
+      document.getElementById("s0DecodedTxt").textContent = `「${decArr.join("")}」`;
+      document.getElementById("s0OovNote").textContent = hasOov ? "⚠️ 检测到词表外生僻字 (OOV)！所以工业界用 UTF-8 字节级 BPE 避免未知字符。" : "100% 无损编解码";
+
+      // Vocab dictionary inspector
+      const vGrid = document.getElementById("s0VocabGrid");
+      vGrid.innerHTML = "";
+      VOCAB.forEach((ch, id) => {
+        const d = document.createElement("div");
+        d.className = `vocab-cell${S0.highlightVocabId === id ? " lit" : ""}`;
+        d.innerHTML = `<strong style="font-size:14px;">「${ch}」</strong><span style="color:var(--primary)">ID ${id}</span>`;
+        d.onclick = () => {
+          S0.highlightVocabId = id;
+          S0.lastFlight = { startMs: performance.now(), char: ch, tokId: id, isOov: false };
+          renderAllUi();
+        };
+        vGrid.appendChild(d);
+      });
+      document.getElementById("s0FullPoemIds").textContent = `[${DATA.join(", ")}]`;
+    }
+
+    function renderTrainInferStripsAndInspectors() {
+      if (activeStep === 0) return;
+
+      const sBtns = document.getElementById("sampleButtons");
+      const sLbl = document.getElementById("sampleStripLabel");
+      const lrSlider = document.getElementById("lrSlider"), lrVal = document.getElementById("lrVal");
+      const genSel = document.getElementById("genStartSelect");
+      const tempSlider = document.getElementById("tempSlider"), tempVal = document.getElementById("tempVal");
+
+      sBtns.innerHTML = "";
+      if (activeStep === 1) {
+        sLbl.textContent = "🔵 训练样本 (x→y)（黄框为两个「月」冲突样本）：";
+        lrSlider.min = "1"; lrSlider.max = "25"; lrSlider.step = "0.5"; lrSlider.value = String(S1.lr); lrVal.textContent = S1.lr.toFixed(1);
+        S1_PAIRS.forEach(([x, y], idx) => {
+          const b = document.createElement("button");
+          b.className = "mono"; b.style.padding = "2px 6px";
+          if (idx === S1.selectedPairIdx) b.classList.add("primary");
+          else if (VOCAB[x] === "月") b.style.borderColor = "var(--warning)";
+          b.textContent = `${VOCAB[x]}→${VOCAB[y]}`;
+          b.onclick = () => { S1.viewMode = "train"; S1.selectedPairIdx = idx; renderAllUi(); };
+          sBtns.appendChild(b);
+        });
+
+        genSel.innerHTML = VOCAB.map((ch, id) => `<option value="${id}" ${id === S1.genStartId ? "selected" : ""}>「${ch}」(ID ${id})</option>`).join("");
+        tempSlider.value = String(S1.temp); tempVal.textContent = S1.temp.toFixed(1);
+        document.getElementById("inferStripTitle").textContent = "🟢 Step 01 自回归接龙（仅看最后 1 字）";
+        document.getElementById("inferWeightTag").textContent = `共享权重 Epoch ${S1.epoch}`;
+        document.getElementById("genTapeLabel").textContent = "接龙序列（绿=当前查表字）：";
+
+        // Inspector 01
+        const [cx, cy] = S1_PAIRS[S1.selectedPairIdx];
+        const cp = softmaxRow(S1.getRow(cx), 1.0)[cy];
+        document.getElementById("s1InspectLine").textContent = `「${VOCAB[cx]} → ${VOCAB[cy]}」权重 = ${S1.table[cx * V + cy].toFixed(2)}，预测概率 = ${(cp * 100).toFixed(1)}%`;
+        const moonP = softmaxRow(S1.getRow(STOI["月"]), 1.0);
+        document.getElementById("s1MoonContrast").textContent = `实测「月」这一行：P(光) = ${(moonP[STOI["光"]] * 100).toFixed(1)}%  vs  P(。) = ${(moonP[STOI["。"]] * 100).toFixed(1)}%（无论训多少轮，两项永远互相扯后腿！）`;
+      } else if (activeStep === 2) {
+        sLbl.textContent = "🔵 观察样本（切换不改权重，黄框对比两个「月」）：";
+        lrSlider.min = "0.005"; lrSlider.max = "0.08"; lrSlider.step = "0.005"; lrSlider.value = String(S2.lr); lrVal.textContent = S2.lr.toFixed(3);
+        S2_SAMPLES.forEach((s, idx) => {
+          const b = document.createElement("button");
+          b.className = "mono"; b.style.padding = "2px 6px";
+          if (idx === S2.selectedSampleIdx) b.classList.add("primary");
+          else if (idx === 1 || idx === 8) b.style.borderColor = "var(--warning)";
+          b.textContent = `${s.ctxText}→${s.targetChar}`;
+          b.onclick = () => { S2.viewMode = "train"; S2.flushStage8(); S2.selectedSampleIdx = idx; renderAllUi(); };
+          sBtns.appendChild(b);
+        });
+
+        genSel.innerHTML = S2_SAMPLES.map((s, idx) => `<option value="${idx}" ${idx === S2.genStartIdx ? "selected" : ""}>「${s.ctxText}」(样本#${idx})</option>`).join("");
+        tempSlider.value = String(S2.temp); tempVal.textContent = S2.temp.toFixed(1);
+        document.getElementById("inferStripTitle").textContent = "🟢 Step 02 三字滑窗接龙（固定看最后 3 字）";
+        document.getElementById("inferWeightTag").textContent = `共享权重 Step ${S2.stepCount}`;
+        document.getElementById("genTapeLabel").textContent = "接龙序列（蓝/绿=末尾3字窗）：";
+        renderStep02Inspector();
+      } else if (activeStep === 3) {
+        sLbl.textContent = "🔵 观察 Query 位置（切换不改权重，黄框对比两个「月」）：";
+        lrSlider.min = "0.005"; lrSlider.max = "0.08"; lrSlider.step = "0.005"; lrSlider.value = String(S3.lr); lrVal.textContent = S3.lr.toFixed(3);
+        for (let i = 0; i < S3_SEQ; i++) {
+          const b = document.createElement("button");
+          b.className = "mono"; b.style.padding = "2px 6px";
+          if (i === S3.selectedPos) b.classList.add("primary");
+          else if (i === 3 || i === 10) b.style.borderColor = "var(--warning)";
+          b.textContent = `[${i}]${CHARS[i]}→${CHARS[i + 1]}`;
+          b.onclick = () => { S3.viewMode = "train"; S3.flushStage8(); S3.selectedPos = i; renderAllUi(); };
+          sBtns.appendChild(b);
+        }
+
+        const opts = [["床", "「床」(仅1字起步!)"], ["床前明月", "「床前明月」(第1个「月」)"], ["床前明月光，举头望明月", "「床前明月光，举头望明月」(第2个「月」)"], ["举头望", "「举头望」"]];
+        genSel.innerHTML = opts.map(([v, l]) => `<option value="${v}" ${v === S3.genStartStr ? "selected" : ""}>${l}</option>`).join("");
+        tempSlider.value = String(S3.temp); tempVal.textContent = S3.temp.toFixed(1);
+        document.getElementById("inferStripTitle").textContent = "🟢 Step 03 自注意力接龙（1字即可起步，回望全历史！）";
+        document.getElementById("inferWeightTag").textContent = `共享权重 Step ${S3.stepCount}`;
+        document.getElementById("genTapeLabel").textContent = "生长中的全序列（末字扫描全部历史）：";
+        renderStep03Inspector();
+      }
+
+      // Render genTape + Roulette for active Step (1, 2, or 3)
+      const tapeEl = document.getElementById("genTape"), rBar = document.getElementById("inferRoulette"), ro = document.getElementById("genReadout");
+      tapeEl.innerHTML = ""; rBar.innerHTML = "";
+      let ids, probs, lastDice = null;
+      if (activeStep === 1) {
+        ids = S1.genIds; probs = softmaxRow(S1.getRow(ids[ids.length - 1]), S1.temp);
+        lastDice = S1.lastDraw ? S1.lastDraw.dice : null;
+        ro.textContent = S1.lastDraw ? `「${VOCAB[S1.lastDraw.fromId]}」骰子 r=${S1.lastDraw.dice.toFixed(2)} → 抽中「${VOCAB[S1.lastDraw.nextId]}」(${(S1.lastDraw.prob * 100).toFixed(1)}%)` : "点「🎲 推理下一个字」看金色骰子在 10×10 矩阵上跳跃！";
+      } else if (activeStep === 2) {
+        ids = S2.genIds; probs = softmaxRow(S2.inferForward(ids.slice(-S2_CTX)).logits, S2.temp);
+        lastDice = S2.lastDraw ? S2.lastDraw.dice : null;
+        ro.textContent = S2.lastDraw ? `「${S2.lastDraw.prevWinText}」r=${S2.lastDraw.dice.toFixed(2)} → 抽中「${VOCAB[S2.lastDraw.nextId]}」(${(S2.lastDraw.prob * 100).toFixed(1)}%) → 新窗「${S2.lastDraw.newWinText}」` : "点「🎲 推理下一个字」看 3 字滑窗穿过 MLP 抽字并回流！";
+      } else {
+        ids = S3.genIds; const f = S3.forward(ids, null); probs = softmaxRow(f.logits.subarray((ids.length - 1) * V, ids.length * V), S3.temp);
+        lastDice = S3.lastDraw ? S3.lastDraw.dice : null;
+        ro.textContent = S3.lastDraw ? `「${S3.lastDraw.prevSeqStr}」r=${S3.lastDraw.dice.toFixed(2)} → 抽中「${VOCAB[S3.lastDraw.nextId]}」(${(S3.lastDraw.prob * 100).toFixed(1)}%) → 序列「${S3.lastDraw.seqStr}」` : "只需 1 个「床」字！点「🎲 推理下一个字」看自注意力边长边背诗！";
+      }
+      const winStart = activeStep === 1 ? ids.length - 1 : (activeStep === 2 ? Math.max(0, ids.length - S2_CTX) : 0);
+      ids.forEach((id, i) => {
+        const sp = document.createElement("span"); sp.className = "chip";
+        if (i === ids.length - 1) sp.classList.add("latest");
+        else if (i >= winStart) sp.classList.add("win");
+        sp.textContent = VOCAB[id]; tapeEl.appendChild(sp);
+      });
+      const pal = ["#4f8cff", "#22c55e", "#f59e0b", "#a855f7", "#ec4899", "#06b6d4"];
+      for (let j = 0; j < V; j++) {
+        const seg = document.createElement("div");
+        seg.style.cssText = `width:${probs[j] * 100}%;background:${pal[j % pal.length]};color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;`;
+        seg.className = "mono"; seg.title = `「${VOCAB[j]}」 ${(probs[j] * 100).toFixed(1)}%`;
+        if (probs[j] >= 0.08) seg.textContent = `${VOCAB[j]} ${(probs[j] * 100).toFixed(0)}%`;
+        rBar.appendChild(seg);
+      }
+      if (lastDice !== null) {
+        const mk = document.createElement("div"); mk.className = "roulette-marker"; mk.style.left = `${lastDice * 100}%`; rBar.appendChild(mk);
+      }
+    }
+
+    function renderStep02Inspector() {
+      const grid = document.getElementById("s2TapeGrid"); grid.innerHTML = "";
+      const revMax = S2.fwdStage >= 6 ? 11 : ([-1, 4, 5, 7, 8, 10, 11, 11, 11][S2.stage] ?? -1);
+      const metas = [
+        { id: 0, n: "emb", sh: "(10,4)", op: "Param" }, { id: 1, n: "w1", sh: "(12,8)", op: "Param" },
+        { id: 2, n: "b1", sh: "(1,8)", op: "Param" },   { id: 3, n: "w2", sh: "(8,10)", op: "Param" },
+        { id: 4, n: "b2", sh: "(1,10)", op: "Param" },  { id: 5, n: "x", sh: "(9,12)", op: "Embed" },
+        { id: 6, n: "z1_raw", sh: "(9,8)", op: "MatMul" }, { id: 7, n: "z1", sh: "(9,8)", op: "Add" },
+        { id: 8, n: "h", sh: "(9,8)", op: "ReLU" },     { id: 9, n: "z2_raw", sh: "(9,10)", op: "MatMul" },
+        { id: 10, n: "logits", sh: "(9,10)", op: "Add" }, { id: 11, n: "loss", sh: "(1,1)", op: "CE" },
+      ];
+      metas.forEach(it => {
+        const b = document.createElement("button"); b.className = "tape-slot";
+        if (it.id <= 4) b.classList.add("param-kind");
+        if (it.id <= revMax) b.classList.add("fwd");
+        if (S2.hasBwd) b.classList.add("bwd");
+        if (it.id === S2.selectedNodeId) b.classList.add("selected");
+        b.innerHTML = `<div style="font-weight:700;">[${it.id}] ${it.n}</div><div class="muted">${it.op} ${it.sh}</div>`;
+        b.onclick = () => { S2.selectedNodeId = it.id; renderStep02Inspector(); };
+        grid.appendChild(b);
+      });
+      document.getElementById("s2TapeBadge").textContent = S2.stage === 7 ? "倒序反传 11 → 0" : (S2.stage === 8 ? "AdamW 更新 0..4" : (S2.fwdStage >= 6 ? "已记录 12 节点" : "等待前向压栈"));
+
+      const meta = metas[S2.selectedNodeId], node = S2.tape ? S2.tape.nodes[S2.selectedNodeId] : null;
+      const isP = S2.selectedNodeId <= 4, visV = isP || (node && S2.selectedNodeId <= revMax), s = S2_SAMPLES[S2.selectedSampleIdx];
+      document.getElementById("s2NdTitle").textContent = `TensorId(${meta.id}) · ${meta.n}`;
+      document.getElementById("s2NdMeta").textContent = node ? `op: ${node.opLabel} | shape: (${node.rows}, ${node.cols})` : `op: ${meta.op} | shape: ${meta.sh}`;
+      document.getElementById("s2NdDeps").textContent = (!node || !node.parents.length) ? (isP ? "依赖：无（叶子参数）" : "依赖：待前向构建") : `依赖：${node.parents.map(pid => `TensorId(${pid}) ${S2.tape.nodes[pid].name}`).join(", ")}`;
+      document.getElementById("s2NdRule").textContent = node ? `规则：${node.ruleText}` : "规则：点「⏭ 下一步」写入计算图";
+
+      const vEl = document.getElementById("s2NdVals"), gEl = document.getElementById("s2NdGrads"), dWrap = document.getElementById("s2NdDeltaWrap"), dEl = document.getElementById("s2NdDeltas");
+      vEl.innerHTML = ""; gEl.innerHTML = ""; dEl.innerHTML = "";
+      const pList = [S2.model.emb, S2.model.w1, S2.model.b1, S2.model.w2, S2.model.b2];
+
+      if (S2.selectedNodeId === 5 && visV && node) {
+        document.getElementById("s2NdValLabel").textContent = `前向值 data（「${s.ctxText}」拼接 3×4 = 12 维）：`;
+        const off = S2.selectedSampleIdx * S2_IN, gw = document.createElement("div"); gw.className = "embed-groups";
+        for (let sl = 0; sl < S2_CTX; sl++) {
+          const vals = []; for (let j = 0; j < S2_EMB; j++) { const v = node.data[off + sl * S2_EMB + j]; vals.push(`${v >= 0 ? "+" : ""}${v.toFixed(2)}`); }
+          const gd = document.createElement("div"); gd.className = "embed-group";
+          gd.innerHTML = `<div class="muted">第${sl + 1}字「${VOCAB[s.ctxIds[sl]]}」</div><div>[${vals.join(", ")}]</div>`;
+          gw.appendChild(gd);
+        }
+        vEl.appendChild(gw);
+        if (S2.hasBwd) for (let i = 0; i < S2_IN; i++) { const g = node.grad[off + i], c = document.createElement("span"); c.className = "val-cell"; c.style.color = "var(--warning)"; c.textContent = `x[${i}]:${g >= 0 ? "+" : ""}${g.toFixed(3)}`; gEl.appendChild(c); }
+        else gEl.innerHTML = `<span class="muted">尚未反传</span>`;
+        dWrap.classList.add("hidden");
+      } else {
+        document.getElementById("s2NdValLabel").textContent = isP ? "参数值 data（展开前几格）：" : `前向值 data（「${s.ctxText}」行）：`;
+        let sD = null, sG = null, sL = null;
+        if (isP) {
+          const p = pList[S2.selectedNodeId], cnt = Math.min(8, p.data.length);
+          sD = p.data.subarray(0, cnt); sG = node ? node.grad.subarray(0, cnt) : null; sL = Array.from({ length: cnt }, (_, j) => `[${j}]`);
+        } else if (node && S2.selectedNodeId >= 6 && S2.selectedNodeId <= 10) {
+          const cols = node.cols, rs = S2.selectedSampleIdx * cols, cnt = Math.min(10, cols);
+          sD = node.data.subarray(rs, rs + cnt); sG = node.grad.subarray(rs, rs + cnt);
+          sL = S2.selectedNodeId === 10 ? VOCAB.slice(0, cnt) : Array.from({ length: cnt }, (_, j) => `#${j}`);
+        } else if (node && S2.selectedNodeId === 11) { sD = node.data; sG = node.grad; sL = ["loss"]; }
+        if (visV && sD) for (let i = 0; i < sD.length; i++) { const v = sD[i], c = document.createElement("span"); c.className = "val-cell"; c.style.color = v > 0 ? "var(--success)" : "var(--error)"; c.textContent = `${sL[i]}:${v >= 0 ? "+" : ""}${v.toFixed(2)}`; vEl.appendChild(c); }
+        else vEl.innerHTML = `<span class="muted">待前向计算</span>`;
+        if (S2.hasBwd && sG) for (let i = 0; i < sG.length; i++) { const g = sG[i], c = document.createElement("span"); c.className = "val-cell"; c.style.color = "var(--warning)"; c.textContent = `${sL[i]}:${g >= 0 ? "+" : ""}${g.toFixed(3)}`; gEl.appendChild(c); }
+        else gEl.innerHTML = `<span class="muted">尚未反传</span>`;
+        if (isP && S2.hasUpdated) {
+          dWrap.classList.remove("hidden");
+          const p = pList[S2.selectedNodeId], cnt = Math.min(8, p.lastDelta.length);
+          for (let i = 0; i < cnt; i++) { const dv = p.lastDelta[i], c = document.createElement("span"); c.className = "val-cell"; c.style.color = dv > 0 ? "var(--success)" : "var(--error)"; c.textContent = `${sL[i]}:${dv >= 0 ? "+" : ""}${dv.toFixed(3)}`; dEl.appendChild(c); }
+        } else dWrap.classList.add("hidden");
+      }
+
+      // ReLU inspector
+      const nb = document.getElementById("s2NeuronBtns"); nb.innerHTML = "";
+      document.getElementById("s2ReluSample").textContent = s.ctxText;
+      document.getElementById("s2ReluIdx").textContent = `#${S2.selectedNeuron}`;
+      const hasZ = S2.tape && S2.fwdStage >= 3;
+      for (let k = 0; k < S2_H; k++) {
+        const b = document.createElement("button"); b.className = "neuron-btn";
+        if (k === S2.selectedNeuron) b.classList.add("selected");
+        if (hasZ) { const zv = S2.tape.nodes[7].data[S2.selectedSampleIdx * S2_H + k]; b.classList.add(zv > 0 ? "open" : "closed"); b.textContent = `#${k} ${zv > 0 ? "通" : "断"}`; }
+        else b.textContent = `#${k}`;
+        b.onclick = () => { S2.selectedNeuron = k; renderStep02Inspector(); };
+        nb.appendChild(b);
+      }
+      const rb = document.getElementById("s2ReluBadge");
+      if (hasZ) {
+        const z = S2.tape.nodes[7].data[S2.selectedSampleIdx * S2_H + S2.selectedNeuron], h = S2.fwdStage >= 4 ? S2.tape.nodes[8].data[S2.selectedSampleIdx * S2_H + S2.selectedNeuron] : null;
+        rb.textContent = z > 0 ? `#${S2.selectedNeuron} 开启 (×1)` : `#${S2.selectedNeuron} 关闭 (×0)`;
+        rb.style.color = z > 0 ? "var(--success)" : "var(--error)";
+        document.getElementById("s2ReluZ").textContent = z.toFixed(3);
+        document.getElementById("s2ReluH").textContent = h !== null ? h.toFixed(3) : "待④步";
+        document.getElementById("s2ReluDh").textContent = S2.hasBwd ? S2.tape.nodes[8].grad[S2.selectedSampleIdx * S2_H + S2.selectedNeuron].toFixed(3) : "待⑦步";
+        document.getElementById("s2ReluDz").textContent = S2.hasBwd ? S2.tape.nodes[7].grad[S2.selectedSampleIdx * S2_H + S2.selectedNeuron].toFixed(3) : "待⑦步";
+      } else {
+        rb.textContent = "等待③④步"; rb.style.color = "var(--muted-foreground)";
+        ["s2ReluZ", "s2ReluH", "s2ReluDh", "s2ReluDz"].forEach(id => document.getElementById(id).textContent = "--");
+      }
+
+      if (S2.tape && S2.fwdStage >= 6) {
+        const fmt = idx => {
+          const sm = S2_SAMPLES[idx], p = softmaxRow(S2.tape.nodes[10].data.subarray(idx * V, (idx + 1) * V), 1.0);
+          return `「${sm.ctxText}→${sm.targetChar}」：P(光)=${(p[STOI["光"]] * 100).toFixed(1)}% | P(。)=${(p[STOI["。"]] * 100).toFixed(1)}%`;
+        };
+        document.getElementById("s2ContrastA").textContent = fmt(1);
+        document.getElementById("s2ContrastB").textContent = fmt(8);
+      }
+    }
+
+    function renderStep03Inspector() {
+      const tbl = document.getElementById("s3AttnTable");
+      document.getElementById("s3HeadBadge").textContent = S3.selectedHead === -1 ? "2头平均" : `Head ${S3.selectedHead}`;
+      document.getElementById("s3QTitle").textContent = `pos[${S3.selectedPos}]「${CHARS[S3.selectedPos]}」`;
+      const hasA = S3.cache && S3.computedStage >= 5, matW = hasA ? S3.getHeadMat(S3.cache.attnWeights, S3_SEQ) : null;
+      const matS = S3.cache && S3.computedStage >= 3 ? S3.getHeadMat(S3.cache.rawScores, S3_SEQ) : null;
+
+      let html = `<thead><tr><th>Q\\K</th>${CHARS.slice(0, S3_SEQ).map((c, j) => `<th>${j}:${c}</th>`).join("")}</tr></thead><tbody>`;
+      for (let i = 0; i < S3_SEQ; i++) {
+        html += `<tr class="q-row${i === S3.selectedPos ? " active-row" : ""}" data-pos="${i}"><th>${i}:${CHARS[i]}</th>`;
+        for (let j = 0; j < S3_SEQ; j++) {
+          if (j > i) html += `<td class="masked">×</td>`;
+          else if (hasA) {
+            const w = matW[i * S3_SEQ + j], a = Math.min(0.85, 0.08 + w * 0.9);
+            html += `<td style="background:rgba(79,140,255,${a.toFixed(2)});color:${w > 0.42 ? "#fff" : "var(--foreground)"};">${(w * 100).toFixed(0)}%</td>`;
+          } else html += `<td class="muted">--</td>`;
+        }
+        html += `</tr>`;
+      }
+      tbl.innerHTML = html + "</tbody>";
+      tbl.querySelectorAll("tr.q-row").forEach(tr => { tr.onclick = () => { S3.viewMode = "train"; S3.selectedPos = parseInt(tr.dataset.pos, 10); renderAllUi(); }; });
+
+      const sl = document.getElementById("s3ScoreList"); sl.innerHTML = "";
+      if (!matS) sl.innerHTML = `<div class="muted">等待第 ③～⑤ 步或点「+1 训练 step」后显示真实打分与注意力权重。</div>`;
+      else for (let j = 0; j <= S3.selectedPos; j++) {
+        const sc = matS[S3.selectedPos * S3_SEQ + j], w = hasA ? matW[S3.selectedPos * S3_SEQ + j] : 0;
+        const r = document.createElement("div"); r.className = "score-row";
+        r.innerHTML = `<span>[${j}]「${CHARS[j]}」</span><span class="muted">s=${sc >= 0 ? "+" : ""}${sc.toFixed(2)}</span><div class="score-bar-track"><div class="score-bar-fill" style="width:${(w * 100).toFixed(1)}%"></div></div><strong style="text-align:right;">${hasA ? (w * 100).toFixed(0) + "%" : "--"}</strong>`;
+        sl.appendChild(r);
+      }
+
+      if (S3.cache && S3.computedStage >= 7) {
+        const fmt = pos => {
+          const p = softmaxRow(S3.cache.logits.subarray(pos * V, (pos + 1) * V), 1.0);
+          let bj = 0; for (let j = 1; j <= pos; j++) if (matW[pos * S3_SEQ + j] > matW[pos * S3_SEQ + bj]) bj = j;
+          return `pos[${pos}] (目标「${CHARS[pos + 1]}」) → P(光)=${(p[STOI["光"]] * 100).toFixed(1)}% | P(。)=${(p[STOI["。"]] * 100).toFixed(1)}% | 最关注[${bj}]「${CHARS[bj]}」(${(matW[pos * S3_SEQ + bj] * 100).toFixed(0)}%)`;
+        };
+        document.getElementById("s3Contrast3").textContent = fmt(3);
+        document.getElementById("s3Contrast10").textContent = fmt(10);
+      }
+    }
+
+    function renderAllUi() {
+      renderDiffBar();
+      renderStepChrome();
+      renderCorpusAndHuds();
+      if (activeStep === 0) renderStep00Panels();
+      else renderTrainInferStripsAndInspectors();
+    }
+
+    // Scalar Chain Rule Modal (Step 02)
+    function renderScalarModal() {
+      const x = parseFloat(document.getElementById("scX").value), w1 = parseFloat(document.getElementById("scW1").value);
+      const b1 = parseFloat(document.getElementById("scB1").value), w2 = parseFloat(document.getElementById("scW2").value), target = 3.0;
+      document.getElementById("scXV").textContent = x.toFixed(1); document.getElementById("scW1V").textContent = w1.toFixed(1);
+      document.getElementById("scB1V").textContent = b1.toFixed(1); document.getElementById("scW2V").textContent = w2.toFixed(1);
+      const m = x * w1, z = m + b1, h = Math.max(0, z), pred = h * w2, diff = pred - target, loss = diff * diff;
+      const dPred = 2 * diff, dW2 = dPred * h, dH = dPred * w2, dZ = z > 0 ? dH : 0, dB1 = dZ, dW1 = dZ * x;
+      const ns = [{ k: "m=x·w1", v: m, g: dZ }, { k: "z=m+b1", v: z, g: dZ }, { k: z > 0 ? "ReLU(通)" : "ReLU(断)", v: h, g: dH }, { k: "pred=h·w2", v: pred, g: dPred }, { k: "L=(p-3)²", v: loss, g: 1 }];
+      document.getElementById("scalarFlow").innerHTML = ns.map((n, i) => `<div class="scalar-node"><div class="muted">${n.k}</div><div style="color:var(--primary)">val=${n.v.toFixed(2)}</div><div style="color:var(--warning)">grad=${n.g.toFixed(2)}</div></div>${i < ns.length - 1 ? '<span class="muted">→</span>' : ""}`).join("");
+      document.getElementById("scalarChainText").innerHTML = `<div>dPred=${dPred.toFixed(3)} · dw2=${dW2.toFixed(3)} · dH=${dH.toFixed(3)} · dZ=${dZ.toFixed(3)} · db1=${dB1.toFixed(3)} · dw1=${dW1.toFixed(3)}</div>`;
+    }
+
+    // =========================================================================
+    // 12. Global Event Wiring & Boot
+    // =========================================================================
+    document.querySelectorAll(".evo-tab").forEach(btn => {
+      btn.onclick = () => switchStep(parseInt(btn.dataset.step, 10), true);
+    });
+    document.getElementById("btnPrevStep").onclick = () => { if (activeStep > 0) switchStep(activeStep - 1, true); };
+    document.getElementById("btnNextEvo").onclick = () => { if (activeStep < 3) switchStep(activeStep + 1, true); };
+    document.getElementById("btnReplayMorph").onclick = () => {
+      if (activeStep === 0) return;
+      const prev = activeStep - 1;
+      const spec = getTransitionSpec(prev, activeStep);
+      morph = { fromId: prev, toId: activeStep, startMs: performance.now(), spec };
+      document.getElementById("diffBar").classList.add("morphing");
+      renderDiffBar();
+    };
+
+    document.getElementById("btnModeTrain").onclick = () => {
+      flushActiveStepPending();
+      [S0, S1, S2, S3][activeStep].viewMode = "train";
+      renderAllUi();
+    };
+    document.getElementById("btnModeInfer").onclick = () => {
+      flushActiveStepPending(); pauseActiveAuto();
+      [S0, S1, S2, S3][activeStep].viewMode = "infer";
+      renderAllUi();
+    };
+
+    document.getElementById("btnNextAction").onclick = () => {
+      morph = null;
+      const st = [S0, S1, S2, S3][activeStep];
+      st.viewMode = "train"; st.mode = "step";
+      const next = st.stage >= st.stageNames.length ? 1 : st.stage + 1;
+      st.enterStage(next, performance.now());
+      renderAllUi();
+    };
+
+    document.getElementById("btnAutoPlay").onclick = () => {
+      morph = null;
+      const st = [S0, S1, S2, S3][activeStep];
+      st.viewMode = "train";
+      if (st.mode === "autoplay") { st.mode = "step"; renderAllUi(); }
+      else { st.mode = "autoplay"; st.enterStage(st.stage >= st.stageNames.length || st.stage === 0 ? 1 : st.stage, performance.now()); renderAllUi(); }
+    };
+
+    document.getElementById("btnTrain1").onclick = () => {
+      morph = null;
+      if (activeStep === 1) { S1.viewMode = "train"; S1.flushStage5(); S1.mode = "idle"; S1.stage = 0; S1.trainOneEpoch(); S1.trainNarrator = { title: `+1 轮完成（Epoch ${S1.epoch}，全量 Loss = ${S1.lastLossVal.toFixed(4)}）`, desc: "10×10 矩阵柱子已真实生长，下方「死穴对照」实时更新。" }; }
+      else if (activeStep === 2) { S2.viewMode = "train"; S2.flushStage8(); S2.mode = "idle"; S2.stage = 0; S2.stepAdamW(false); S2.trainNarrator = { title: `+1 训练 step 完成（Step ${S2.stepCount}，Batch Loss ${S2.lastReport.beforeBatch.toFixed(3)} → ${S2.lastReport.afterBatch.toFixed(3)}）`, desc: "已用新权重重算真实 Loss，下方推理滑窗已同步。" }; }
+      else if (activeStep === 3) { S3.viewMode = "train"; S3.flushStage8(); S3.mode = "idle"; S3.stage = 0; S3.stepAdamW(); S3.trainNarrator = { title: `+1 训练 step 完成（Step ${S3.stepCount}，全序列 Loss ${S3.lastReport.beforeSeq.toFixed(3)} → ${S3.lastReport.afterSeq.toFixed(3)}）`, desc: "因果自注意力热力图与长程对照已实时更新！" }; }
+      renderAllUi();
+    };
+
+    document.getElementById("btnTrainFast").onclick = () => {
+      morph = null;
+      if (activeStep === 1) { S1.viewMode = "train"; S1.flushStage5(); S1.mode = "fast"; S1.fastRemaining = 50; S1.lastFastTick = performance.now(); }
+      else if (activeStep === 2) { S2.viewMode = "train"; S2.flushStage8(); S2.mode = "fast"; S2.stage = 8; S2.stage8Applied = true; S2.fastRemaining = 40; S2.lastFastTick = performance.now(); }
+      else if (activeStep === 3) { S3.viewMode = "train"; S3.flushStage8(); S3.mode = "fast"; S3.stage = 8; S3.stage8Applied = true; S3.fastRemaining = 60; S3.lastFastTick = performance.now(); }
+      renderAllUi();
+    };
+
+    document.getElementById("btnResetStep").onclick = () => {
+      morph = null;
+      if (activeStep === 0) S0.init();
+      else if (activeStep === 1) S1.init();
+      else if (activeStep === 2) S2.init(false);
+      else S3.init();
+      renderAllUi();
+    };
+
+    // Step 00 OOV & Clear
+    document.getElementById("btnS0Oov").onclick = () => {
+      S0.viewMode = "infer";
+      if (!S0.testText.includes("人")) S0.testText = (S0.testText.length >= 10 ? S0.testText.slice(1) : S0.testText) + "人";
+      S0.highlightVocabId = -1;
+      S0.lastFlight = { startMs: performance.now(), char: "人", tokId: -1, isOov: true };
+      S0.inferNarrator = { title: "⚠️ 词表外字符 OOV：「人」不在 V=10 词表里，查表撞红墙报错 UNK！", desc: "这就是为什么 GPT / DeepSeek 采用 UTF-8 字节级 BPE 分词器——任何生僻字都能拆成已知字节绝不崩溃！" };
+      renderAllUi();
+    };
+    document.getElementById("btnS0Clear").onclick = () => { S0.testText = "床前明月"; S0.highlightVocabId = -1; renderAllUi(); };
+
+    // Shared Inference Controls (Steps 1, 2, 3)
+    document.getElementById("btnGenNext").onclick = () => {
+      morph = null;
+      const now = performance.now();
+      if (activeStep === 1) {
+        S1.flushStage5(); S1.flushInfer(); S1.viewMode = "infer";
+        const fromId = S1.genIds[S1.genIds.length - 1], probs = softmaxRow(S1.getRow(fromId), S1.temp);
+        const r = Math.random(); let cdf = 0, nextId = V - 1; for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
+        S1.inferAnim = { startMs: now, fromId, nextId, prob: probs[nextId], dice: r, probs, committed: false };
+      } else if (activeStep === 2) {
+        S2.flushStage8(); S2.flushInfer(); S2.viewMode = "infer";
+        const win = S2.genIds.slice(-S2_CTX), fwd = S2.inferForward(win), probs = softmaxRow(fwd.logits, S2.temp);
+        const r = Math.random(); let cdf = 0, nextId = V - 1; for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
+        S2.inferAnim = { startMs: now, prevWinIds: [...win], prevWinText: win.map(i => VOCAB[i]).join(""), nextId, prob: probs[nextId], dice: r, probs, committed: false };
+      } else if (activeStep === 3) {
+        S3.flushStage8(); S3.flushInfer(); S3.viewMode = "infer";
+        const ids = [...S3.genIds], cache = S3.forward(ids, null), probs = softmaxRow(cache.logits.subarray((ids.length - 1) * V, ids.length * V), S3.temp);
+        const r = Math.random(); let cdf = 0, nextId = V - 1; for (let j = 0; j < V; j++) { cdf += probs[j]; if (r < cdf) { nextId = j; break; } }
+        S3.inferAnim = { startMs: now, prevSeqIds: ids, prevSeqStr: ids.map(i => VOCAB[i]).join(""), nextId, prob: probs[nextId], dice: r, probs, cache, committed: false };
+      }
+      renderAllUi();
+    };
+
+    document.getElementById("btnGenReset").onclick = () => {
+      if (activeStep === 1) { S1.inferAnim = null; S1.genIds = [S1.genStartId]; S1.lastDraw = null; S1.viewMode = "infer"; }
+      else if (activeStep === 2) { S2.inferAnim = null; S2.genIds = [...S2_SAMPLES[S2.genStartIdx].ctxIds]; S2.lastDraw = null; S2.viewMode = "infer"; }
+      else if (activeStep === 3) { S3.inferAnim = null; S3.genIds = S3.genStartStr.split("").map(ch => STOI[ch]); S3.lastDraw = null; S3.viewMode = "infer"; }
+      renderAllUi();
+    };
+
+    document.getElementById("genStartSelect").onchange = e => {
+      if (activeStep === 1) { S1.genStartId = parseInt(e.target.value, 10); S1.genIds = [S1.genStartId]; S1.lastDraw = null; S1.inferAnim = null; S1.viewMode = "infer"; }
+      else if (activeStep === 2) { S2.genStartIdx = parseInt(e.target.value, 10); S2.genIds = [...S2_SAMPLES[S2.genStartIdx].ctxIds]; S2.lastDraw = null; S2.inferAnim = null; S2.viewMode = "infer"; }
+      else if (activeStep === 3) { S3.genStartStr = e.target.value; S3.genIds = S3.genStartStr.split("").map(ch => STOI[ch]); S3.lastDraw = null; S3.inferAnim = null; S3.viewMode = "infer"; }
+      renderAllUi();
+    };
+
+    document.getElementById("lrSlider").oninput = e => {
+      const val = parseFloat(e.target.value);
+      if (activeStep === 1) S1.lr = val; else if (activeStep === 2) S2.lr = val; else if (activeStep === 3) S3.lr = val;
+      document.getElementById("lrVal").textContent = activeStep === 1 ? val.toFixed(1) : val.toFixed(3);
+    };
+
+    document.getElementById("tempSlider").oninput = e => {
+      const val = parseFloat(e.target.value);
+      if (activeStep === 1) { S1.temp = val; S1.viewMode = "infer"; }
+      else if (activeStep === 2) { S2.temp = val; S2.viewMode = "infer"; }
+      else if (activeStep === 3) { S3.temp = val; S3.viewMode = "infer"; }
+      renderAllUi();
+    };
+
+    document.getElementById("headSelect").onchange = e => { S3.selectedHead = parseInt(e.target.value, 10); renderAllUi(); };
+    document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
+    document.getElementById("camIso").onclick = () => { const c = STEP_META[activeStep].cam; cam.setPreset(c.yaw, c.pitch, c.dist, c.tx, c.tz); };
+    document.getElementById("camTop").onclick = () => cam.setPreset(0.0, 1.38, 28.0, 0.2, 0.2);
+    document.getElementById("camFront").onclick = () => cam.setPreset(0.0, 0.22, 26.5, 0.2, 0.2);
+    document.getElementById("camOrbit").onclick = () => { cam.autoOrbit = !cam.autoOrbit; };
+
+    document.getElementById("btnDeadRelu").onclick = () => {
+      S2.init(true); S2.viewMode = "train";
+      S2.trainNarrator = { title: "💀 已构造 Dead ReLU（b1 = -3.2，使 z1 全部 ≤ 0）", desc: "一路点「⏭ 下一步」到第 ④ 步看红门自动关闭，第 ⑦ 步看反传梯度归零！" };
+      renderAllUi();
+    };
+    const scalarDlg = document.getElementById("scalarModal");
+    document.getElementById("btnScalarModal").onclick = () => { renderScalarModal(); if (scalarDlg.showModal) scalarDlg.showModal(); else scalarDlg.setAttribute("open", ""); };
+    document.getElementById("btnCloseScalar").onclick = () => { if (scalarDlg.close) scalarDlg.close(); else scalarDlg.removeAttribute("open"); };
+    ["scW1", "scB1", "scW2", "scX"].forEach(id => document.getElementById(id).oninput = renderScalarModal);
+
+    // Boot all 4 steps
+    S0.init(); S1.init(); S2.init(false); S3.init();
+    renderAllUi();
+    requestAnimationFrame(renderFrame);
+  </script>
+</body>
+</html>
