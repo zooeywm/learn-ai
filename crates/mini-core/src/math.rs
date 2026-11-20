@@ -27,7 +27,11 @@ pub fn sample_from_logits(logits: &[f32], temperature: f32, rng: &mut Rng) -> us
             return id;
         }
     }
-    probs.len() - 1
+    // 累加误差可能让 cdf 略小于 1，末尾被屏蔽的 token 概率为零。
+    probs
+        .iter()
+        .rposition(|&p| p > 0.0)
+        .expect("采样至少需要一个正概率候选")
 }
 
 #[cfg(test)]

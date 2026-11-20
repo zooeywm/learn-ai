@@ -8,4 +8,5 @@ members = [
     "crates/step04-minigpt",
     "crates/step05-sft-chat",
     "crates/step06-modern-llm",
+    "crates/step07-tokenizer",
 ]

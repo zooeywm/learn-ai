@@ -1,0 +1,19 @@
+[package]
+name = "step07-tokenizer"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[features]
+openai = ["dep:tiktoken-rs"]
+
+[dependencies]
+step06-modern-llm = { path = "../step06-modern-llm" }
+tiktoken-rs = { version = "0.12.1", optional = true }
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"

@@ -397,7 +397,7 @@
       <div class="row">
         <div class="flex">
           <span class="badge mono">Learn AI · 单文件 3D 全景演化</span>
-          <h1>从零手搓 LLM：Step 00 → Step 06 现代大模型全景演化演示</h1>
+          <h1>从零手搓 LLM：Step 00 → Step 06 大模型全景演化演示</h1>
         </div>
         <div class="flex">
           <button id="btnPrevStep">← 上一 Step</button>
@@ -409,8 +409,8 @@
       <div class="evo-stepper" role="tablist" aria-label="演化关卡切换">
         <button class="evo-tab active" data-step="0" role="tab">
           <div class="evo-tab-num mono">STEP 00 · 入口基石</div>
-          <div class="evo-tab-title">Tokenizer 分词词表</div>
-          <div class="evo-tab-sub">拆字去重 V=10 → Encode/Decode</div>
+          <div class="evo-tab-title">Tokenizer 分词</div>
+          <div class="evo-tab-sub">字符级分词 · 字节级 BPE</div>
         </button>
         <button class="evo-tab" data-step="1" role="tab">
           <div class="evo-tab-num mono">STEP 01 · 最简模型</div>
@@ -440,7 +440,7 @@
         <button class="evo-tab" data-step="6" role="tab">
           <div class="evo-tab-num mono">STEP 06 · 现代底座</div>
           <div class="evo-tab-title">LLaMA / DeepSeek</div>
-          <div class="evo-tab-sub">RMSNorm+RoPE+GQA+SwiGLU</div>
+          <div class="evo-tab-sub">RMSNorm · RoPE · GQA · SwiGLU</div>
         </button>
       </div>
 
@@ -452,8 +452,15 @@
     <!-- CARD 2: UNIFIED SINGLE 3D STAGE (Morphs seamlessly across Steps!)   -->
     <!-- =================================================================== -->
     <div class="card">
+      <div id="tokenizerModeBar" class="row xs">
+        <div class="mode-switch" role="group" aria-label="分词方式">
+          <button id="btnCharTokenizer" class="mode-btn active-train" aria-pressed="true">字符级分词</button>
+          <button id="btnBpeTokenizer" class="mode-btn" aria-pressed="false">字节级 BPE</button>
+        </div>
+      </div>
+
       <!-- Top Action Bar for Active Step -->
-      <div class="row">
+      <div id="stepActionBar" class="row">
         <div class="flex">
           <span class="xs muted">共享短语料：</span>
           <div id="corpusChars" class="flex" style="gap:4px;"></div>
@@ -468,9 +475,20 @@
         </div>
       </div>
 
+      <div id="bpeActionBar" class="row hidden">
+        <div class="flex">
+          <strong>训练 BPE 词表</strong>
+          <span class="muted xs">演示语料 · 明月明月明月 / 床前明月 / 举头望明月</span>
+        </div>
+        <div class="flex">
+          <button id="btnBpeNext" class="primary">统计相邻对</button>
+          <button id="btnBpeReset">重置</button>
+        </div>
+      </div>
+
       <!-- Mode Switch + Stage Ribbon + Head/Speed/Camera -->
-      <div class="row xs divider">
-        <div class="flex" style="gap:8px;">
+      <div class="row xs divider" style="justify-content:flex-end;">
+        <div id="modelViewControls" class="flex" style="gap:8px; margin-right:auto;">
           <div class="mode-switch" role="tablist">
             <button id="btnModeTrain" class="mode-btn active-train" role="tab">🔵 训练模式</button>
             <button id="btnModeInfer" class="mode-btn" role="tab">🟢 推理模式</button>
@@ -529,6 +547,23 @@
             <div id="stageProgressWrap" class="prog-track hidden"><div id="stageProgressBar" class="prog-fill"></div></div>
           </div>
           <div id="narratorDesc" class="muted" style="margin-top:3px;"></div>
+        </div>
+      </div>
+
+      <div id="bpeReadout" class="divider hidden">
+        <div class="grid-2">
+          <div class="subpanel xs">
+            <strong>当前语料与相邻对</strong>
+            <div id="bpeCorpus" class="mono tape-box"></div>
+            <div id="bpePairs" class="mono tape-box" aria-live="polite"></div>
+          </div>
+          <div class="subpanel xs">
+            <label for="bpeInput"><strong>试试新文本</strong></label>
+            <input type="text" id="bpeInput" value="明月 🦀" maxlength="80"
+                   style="display:block;width:100%;margin:6px 0;padding:6px 8px;color:inherit;background:var(--content);border:1px solid var(--border);border-radius:6px;">
+            <div id="bpeTokens" class="mono tape-box" style="overflow-wrap:anywhere;"></div>
+            <div id="bpeDecoded" class="mono tape-box" style="overflow-wrap:anywhere;"></div>
+          </div>
         </div>
       </div>
 
@@ -1207,8 +1242,8 @@
         id: 0, name: "Step 00 · Tokenizer",
         cam: { yaw: -0.35, pitch: 0.45, dist: 23.5, tx: 0.0, tz: 0.0 },
         diffBase: {
-          title: "🏁 起点 Step 00：所有大模型的第 0 步——把汉字翻译成整数 ID",
-          added: ["原始文本拆字", "去重排序建词表 V=10", "stoi / itos 双向查表", "Encode / Decode"],
+          title: "Step 00 · 从文本到 token ID",
+          added: ["字符级分词与词表查找", "UTF-8 字节拆分与 BPE 合并", "编码与还原"],
           removed: [], replaced: [], kept: [],
         },
       },
@@ -1216,7 +1251,7 @@
         id: 1, name: "Step 01 · Bigram",
         cam: { yaw: -0.60, pitch: 0.55, dist: 25.5, tx: 1.2, tz: 0.0 },
         diffFromPrev: {
-          title: "Step 00 Tokenizer ──▶ Step 01 Bigram：第一次让数字学会「预测下一个字」",
+          title: "Step 01 Bigram 使用 Step 00 的字符词表预测下一个字",
           added: ["10×10 Bigram 权重矩阵", "Softmax 概率塔", "橙色 Loss 能量柱", "SGD 反向梯度推拉"],
           removed: ["纯 Decode 还原演示槽"],
           replaced: ["整句 Encode 序列 → 单字 (x→y) 查表输入"],
@@ -1284,7 +1319,7 @@
     function getTransitionSpec(fromId, toId) {
       const forward = toId > fromId;
       // Detailed bespoke module classification for adjacent evolutionary transitions
-      if (fromId === 0 && toId === 1) {
+      if (fromId === 0 && toId === 1 && !isBpeView(0)) {
         return {
           title: "✨ 架构升级：Step 00 Tokenizer ──▶ Step 01 Bigram",
           outRole: { text_in: "replaced", token_ids: "replaced", decode_out: "removed", vocab_dict: "kept" },
@@ -1341,7 +1376,7 @@
         };
       }
       // Bespoke reverse transitions (clicking ← 上一 Step!)
-      if (fromId === 1 && toId === 0) {
+      if (fromId === 1 && toId === 0 && !isBpeView(0)) {
         return {
           title: "⏪ 退回对照：Step 01 Bigram ──▶ Step 00 Tokenizer",
           outRole: { input_1: "replaced", bigram_mat: "removed", softmax: "removed", loss: "removed" },
@@ -1489,13 +1524,14 @@
       }
       // General fallback (reverse or multi-step jump)
       const targetDiff = toId === 0 ? STEP_META[0].diffBase : STEP_META[toId].diffFromPrev;
+      const stepName = id => isBpeView(id) ? "Step 00 · 字节级 BPE" : STEP_META[id].name;
       return {
-        title: `${forward ? "✨ 架构跨越升级" : "⏪ 架构回看对比"}：${STEP_META[fromId].name} ──▶ ${STEP_META[toId].name}`,
+        title: `${forward ? "✨ 架构跨越升级" : "⏪ 架构回看对比"}：${stepName(fromId)} ──▶ ${stepName(toId)}`,
         outRole: { _default: "removed", softmax: (fromId >= 1 && toId >= 1) ? "kept" : "removed", loss: (fromId >= 1 && toId >= 1) ? "kept" : "removed" },
         inRole:  { _default: "added", softmax: (fromId >= 1 && toId >= 1) ? "kept" : "added", loss: (fromId >= 1 && toId >= 1) ? "kept" : "added" },
-        arcs: [{ from: { x: -4, y: 1.5, z: 0 }, to: { x: 0, y: 1.8, z: 0 }, label: `↻ 切换至 ${STEP_META[toId].name}` }],
+        arcs: [{ from: { x: -4, y: 1.5, z: 0 }, to: { x: 0, y: 1.8, z: 0 }, label: `↻ 切换至 ${stepName(toId)}` }],
         calloutsOut: [],
-        calloutsIn: [{ x: 0, y: 4.0, z: 0, text: `+ 进入 ${STEP_META[toId].name}`, kind: "add" }],
+        calloutsIn: [{ x: 0, y: 4.0, z: 0, text: `+ 进入 ${stepName(toId)}`, kind: "add" }],
         diff: targetDiff,
       };
     }
@@ -3355,7 +3391,9 @@
     // =========================================================================
     // 7. Global State, 3D Morph Transition Manager & Camera
     // =========================================================================
-    let activeStep = 0; // 0, 1, 2, 3
+    let activeStep = 0;
+    let bpeMode = false;
+    const bpeCamera = { yaw: -0.32, pitch: 0.48, dist: 24.5, tx: 0, tz: 0 };
     let animSpeed = 1.0;
     let morph = null; // { fromId, toId, startMs, spec }
     const MORPH_MS = 2300;
@@ -3366,6 +3404,13 @@
     const canvas = document.getElementById("scene3d");
     const ctx = canvas.getContext("2d");
     const cam = M.createCamera(canvas, STEP_META[0].cam);
+
+    function isBpeView(step) { return step === 0 && bpeMode; }
+
+    function setStepCamera(step) {
+      const c = isBpeView(step) ? bpeCamera : STEP_META[step].cam;
+      cam.setPreset(c.yaw, c.pitch, c.dist, c.tx, c.tz);
+    }
 
     function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
     function easeOutBack(t) { const c1 = 1.35, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
@@ -3390,13 +3435,12 @@
     }
 
     function switchStep(nextStep, withAnim = true) {
-      if (nextStep < 0 || nextStep > 6) return;
+      if (nextStep < 0 || nextStep >= STEP_META.length) return;
       flushActiveStepPending();
       pauseActiveAuto();
       const prevStep = activeStep;
       activeStep = nextStep;
-      const c = STEP_META[nextStep].cam;
-      cam.setPreset(c.yaw, c.pitch, c.dist, c.tx, c.tz);
+      setStepCamera(nextStep);
 
       if (withAnim && prevStep !== nextStep) {
         const spec = getTransitionSpec(prevStep, nextStep);
@@ -4674,14 +4718,149 @@
       }
     }
 
+    const BPE_DEMO_CORPUS = ["明月明月明月", "床前明月", "举头望明月"];
+    const bpeEncoder = new TextEncoder();
+    const bpeDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+    const bpeByteIds = text => Array.from(bpeEncoder.encode(text), byte => byte + 4);
+    const bpeHex = bytes => bytes.map(byte => byte.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+    const bpeDemo = { tokens: [], chunks: [], merges: [], pairs: null, animation: null };
+
+    function resetBpeDemo() {
+      bpeDemo.tokens = [[], [], [], [], ...Array.from({ length: 256 }, (_, byte) => [byte])];
+      bpeDemo.chunks = BPE_DEMO_CORPUS.map(bpeByteIds);
+      bpeDemo.merges = [];
+      bpeDemo.pairs = null;
+      bpeDemo.animation = null;
+    }
+
+    function countBpePairs() {
+      const counts = new Map();
+      for (const ids of bpeDemo.chunks) {
+        for (let i = 1; i < ids.length; i++) {
+          const left = ids[i - 1], right = ids[i];
+          if (bpeDemo.tokens[left].length + bpeDemo.tokens[right].length > 9) continue;
+          const key = `${left}:${right}`;
+          if (!counts.has(key)) counts.set(key, { left, right, count: 0 });
+          counts.get(key).count++;
+        }
+      }
+      return [...counts.values()].sort((a, b) => b.count - a.count || a.left - b.left || a.right - b.right);
+    }
+
+    function applyBpeMerge(ids, { left, right, id }) {
+      const result = [];
+      for (let i = 0; i < ids.length; i++) {
+        if (ids[i] === left && ids[i + 1] === right) {
+          result.push(id);
+          i++;
+        } else {
+          result.push(ids[i]);
+        }
+      }
+      return result;
+    }
+
+    function advanceBpeDemo() {
+      if (bpeDemo.pairs === null) {
+        bpeDemo.pairs = countBpePairs();
+        bpeDemo.animation = null;
+      } else {
+        const winning = bpeDemo.pairs[0];
+        if (!winning || winning.count < 2) return;
+        const merge = { ...winning, id: bpeDemo.tokens.length };
+        bpeDemo.tokens.push([...bpeDemo.tokens[merge.left], ...bpeDemo.tokens[merge.right]]);
+        bpeDemo.chunks = bpeDemo.chunks.map(ids => applyBpeMerge(ids, merge));
+        bpeDemo.merges.push(merge);
+        bpeDemo.pairs = null;
+        bpeDemo.animation = { ...merge, startMs: performance.now() };
+      }
+      renderBpeUi();
+    }
+
+    function bpeTokenText(id) {
+      const bytes = bpeDemo.tokens[id];
+      try {
+        return JSON.stringify(bpeDecoder.decode(Uint8Array.from(bytes)));
+      } catch {
+        return bpeHex(bytes);
+      }
+    }
+
+    function renderBpeUi() {
+      const pairs = bpeDemo.pairs, winner = pairs?.[0], animation = bpeDemo.animation;
+      const finished = pairs !== null && (!winner || winner.count < 2);
+      const next = document.getElementById("btnBpeNext");
+      next.disabled = finished;
+      next.textContent = pairs === null ? "统计相邻对" : "合并最多的一对";
+      document.getElementById("hudTopLeft").textContent =
+        `256 个字节 · ${bpeDemo.merges.length} 次合并 · V=${bpeDemo.tokens.length}`;
+      document.getElementById("hudTopRight").textContent = "拖拽可旋转视角";
+      document.getElementById("stageProgressWrap").classList.add("hidden");
+      document.getElementById("narratorTitle").textContent = finished ? "合并完成" :
+        pairs ? "统计相邻 token 对" : animation ? `合并为新 token #${animation.id}` : "把文本拆成 UTF-8 字节";
+      document.getElementById("narratorDesc").textContent = finished ? "剩余相邻对出现不到两次，可以用已学规则试新文本。" :
+        pairs ? "金色块标出出现最多的一对。次数相同时，选 ID 较小的一对。" :
+        animation ? "把语料里的这一对按从左到右合并，下一轮重新统计。" :
+        "每个字节起初有一个 ID。汉字「明」的三个字节是 E6 98 8E。";
+      document.getElementById("bpeCorpus").textContent =
+        `首行 · ${bpeDemo.chunks[0].map(bpeTokenText).join(" · ")}`;
+      document.getElementById("bpePairs").textContent = pairs
+        ? pairs.slice(0, 4).map(({ left, right, count }) => `#${left} + #${right} × ${count}`).join("  /  ") || "没有相邻对"
+        : animation ? `#${animation.left} + #${animation.right} → #${animation.id} · ${bpeTokenText(animation.id)}` : "点击「统计相邻对」";
+      const input = document.getElementById("bpeInput").value;
+      const ids = bpeDemo.merges.reduce(applyBpeMerge, bpeByteIds(input));
+      const decoded = bpeDecoder.decode(Uint8Array.from(ids.flatMap(id => bpeDemo.tokens[id])));
+      document.getElementById("bpeTokens").textContent =
+        `${bpeEncoder.encode(input).length} 字节 → ${ids.length} 个 token · [${ids.join(", ")}]`;
+      document.getElementById("bpeDecoded").textContent = `还原 ${JSON.stringify(decoded)}`;
+    }
+
+    function drawBpeScene(G, theme, nowMs) {
+      const blue = M.parseRgb(theme.primary), amber = M.parseRgb(theme.warning), green = M.parseRgb(theme.success);
+      const winner = bpeDemo.pairs?.[0];
+      const animation = bpeDemo.animation;
+      const ids = bpeDemo.chunks[0];
+      const spacing = Math.min(1.45, 19 / ids.length);
+      G.label("byte_row", 0, 0.2, 5.1, "首行语料的 token 序列", theme.primary, "bold 12px sans-serif");
+      ids.forEach((id, index) => {
+        const match = winner && winner.count >= 2 &&
+          ((id === winner.left && ids[index + 1] === winner.right) ||
+           (id === winner.right && ids[index - 1] === winner.left));
+        const x = (index - (ids.length - 1) / 2) * spacing;
+        const y = id >= 260 ? 0.82 : 0.56;
+        G.box("byte_row", x - spacing * 0.40, 0, 1.4, x + spacing * 0.40, y, 2.3,
+          match ? amber : id >= 260 ? green : blue, 0.94, theme.border);
+        G.label("byte_row", x, y + 0.34, 1.85, id < 260 ? bpeHex([id - 4]) : `#${id}`,
+          match ? theme.warning : theme.fg, "bold 10px monospace");
+      });
+      const pair = animation || (winner?.count >= 2 ? winner : null);
+      if (!pair) return;
+      const u = animation ? easeInOut(Math.min(1, Math.max(0, (nowMs - animation.startMs) * animSpeed / 650))) : 0;
+      const z = -2.3;
+      G.label("pair", 0, 3.8, z, animation ? `#${pair.left} + #${pair.right} → #${pair.id}` :
+        `最高频相邻对 · ${pair.count} 次`, theme.warning, "bold 13px monospace");
+      if (u < 0.86) {
+        [pair.left, pair.right].forEach((id, index) => {
+          const x = (index === 0 ? -1 : 1) * (2.2 - u * 1.9);
+          G.box("pair", x - 0.85, 0, z - 0.62, x + 0.85, 1.4, z + 0.62, amber, 1, theme.border);
+          G.label("pair", x, 1.82, z, `#${id} · ${bpeTokenText(id)}`, theme.fg, "bold 11px monospace");
+        });
+      } else {
+        const y = 0.65 + 1.45 * (u - 0.86) / 0.14;
+        G.box("pair", -1.65, 0, z - 0.7, 1.65, y, z + 0.7, green, 1, theme.border);
+        G.label("pair", 0, 3.0, z, bpeTokenText(pair.id), theme.success, "bold 13px monospace", -0.8);
+      }
+    }
+
     function drawStepById(id, G, dl, project, theme, nowMs, isMorphing) {
-      if (id === 0) drawStep00Scene(G, dl, project, theme, nowMs, isMorphing);
+      if (isBpeView(id)) drawBpeScene(G, theme, nowMs);
+      else if (id === 0) drawStep00Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 1) drawStep01Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 2) drawStep02Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 3) drawStep03Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 4) drawStep04Scene(G, dl, project, theme, nowMs, isMorphing);
       else if (id === 5) drawStep05Scene(G, dl, project, theme, nowMs, isMorphing);
-      else drawStep06Scene(G, dl, project, theme, nowMs, isMorphing);
+      else if (id === 6) drawStep06Scene(G, dl, project, theme, nowMs, isMorphing);
     }
 
     // =========================================================================
@@ -4694,7 +4873,9 @@
 
       // Advance active step state machine (paused while morphing so transition is silky!)
       if (!morph) {
-        if (activeStep === 0) {
+        if (isBpeView(activeStep)) {
+          progWrap.classList.add("hidden");
+        } else if (activeStep === 0) {
           if (S0.viewMode === "train" && S0.mode === "autoplay") {
             const el = nowMs - S0.stageStartMs;
             progWrap.classList.remove("hidden"); progBar.style.width = `${((S0.stage - 1 + Math.min(1, el / stepAnimMs())) / 5) * 100}%`;
@@ -5037,7 +5218,7 @@
       const { W, H } = M.beginFrame(canvas, ctx, theme);
       const { project, eye } = M.makeProjector(W, H, cam, 1.15, 0.47);
       const rgbBorder = M.parseRgb(theme.border), rgbSuc = M.parseRgb(theme.success);
-      const curInfer = [S0, S1, S2, S3, S4, S5, S6][activeStep].viewMode === "infer";
+      const curInfer = !isBpeView(activeStep) && [S0, S1, S2, S3, S4, S5, S6][activeStep].viewMode === "infer";
 
       // Floor grid
       ctx.strokeStyle = curInfer ? M.shade(rgbSuc, 0.8, 0.16) : M.shade(rgbBorder, 1, 0.25);
@@ -5130,15 +5311,30 @@
       });
       document.getElementById("btnPrevStep").disabled = activeStep === 0;
       document.getElementById("btnPrevStep").textContent = activeStep > 0 ? `← 上一 Step (0${activeStep - 1})` : "← 上一 Step";
-      document.getElementById("btnNextEvo").disabled = activeStep === 6;
-      document.getElementById("btnNextEvo").textContent = activeStep < 6 ? `下一 Step (0${activeStep + 1}) →` : "🏆 已通关现代大模型 (06)";
+      const lastStep = STEP_META.length - 1;
+      document.getElementById("btnNextEvo").disabled = activeStep === lastStep;
+      document.getElementById("btnNextEvo").textContent = activeStep < lastStep ? `下一 Step (0${activeStep + 1}) →` : "已到 Step 06";
       document.getElementById("btnReplayMorph").disabled = activeStep === 0;
 
       // Show/Hide Step-specific strips & inspectors
-      document.getElementById("stripStep00").classList.toggle("hidden", activeStep !== 0);
+      const isBpe = isBpeView(activeStep);
+      document.getElementById("tokenizerModeBar").classList.toggle("hidden", activeStep !== 0);
+      for (const [id, selected] of [["btnCharTokenizer", !isBpe], ["btnBpeTokenizer", isBpe]]) {
+        const button = document.getElementById(id);
+        button.classList.toggle("active-train", selected);
+        button.setAttribute("aria-pressed", String(selected));
+      }
+      document.getElementById("stripStep00").classList.toggle("hidden", activeStep !== 0 || isBpe);
+      document.getElementById("stepActionBar").classList.toggle("hidden", isBpe);
+      document.getElementById("modelViewControls").classList.toggle("hidden", isBpe);
+      document.getElementById("bpeActionBar").classList.toggle("hidden", !isBpe);
+      document.getElementById("bpeReadout").classList.toggle("hidden", !isBpe);
       document.getElementById("stripTrainInfer").classList.toggle("hidden", activeStep === 0);
       document.getElementById("headSelectWrap").classList.toggle("hidden", activeStep !== 3);
-      for (let i = 0; i <= 6; i++) document.getElementById(`inspStep0${i}`).classList.toggle("hidden", activeStep !== i);
+      for (let i = 0; i < STEP_META.length; i++) {
+        document.getElementById(`inspStep0${i}`).classList.toggle("hidden", activeStep !== i || isBpe);
+      }
+      if (isBpe) return;
 
       // Train buttons visibility
       document.getElementById("btnTrain1").classList.toggle("hidden", activeStep === 0);
@@ -5898,6 +6094,10 @@
     function renderAllUi() {
       renderDiffBar();
       renderStepChrome();
+      if (isBpeView(activeStep)) {
+        renderBpeUi();
+        return;
+      }
       renderCorpusAndHuds();
       if (activeStep === 0) renderStep00Panels();
       else renderTrainInferStripsAndInspectors();
@@ -5923,7 +6123,7 @@
       btn.onclick = () => switchStep(parseInt(btn.dataset.step, 10), true);
     });
     document.getElementById("btnPrevStep").onclick = () => { if (activeStep > 0) switchStep(activeStep - 1, true); };
-    document.getElementById("btnNextEvo").onclick = () => { if (activeStep < 6) switchStep(activeStep + 1, true); };
+    document.getElementById("btnNextEvo").onclick = () => { if (activeStep < STEP_META.length - 1) switchStep(activeStep + 1, true); };
     document.getElementById("btnReplayMorph").onclick = () => {
       if (activeStep === 0) return;
       const prev = activeStep - 1;
@@ -6099,7 +6299,7 @@
     document.getElementById("btnS4Blk1").onclick = () => { S4.selectedBlock = 1; renderAllUi(); };
     document.getElementById("headSelect").onchange = e => { S3.selectedHead = parseInt(e.target.value, 10); renderAllUi(); };
     document.getElementById("speedSelect").onchange = e => { animSpeed = parseFloat(e.target.value); };
-    document.getElementById("camIso").onclick = () => { const c = STEP_META[activeStep].cam; cam.setPreset(c.yaw, c.pitch, c.dist, c.tx, c.tz); };
+    document.getElementById("camIso").onclick = () => setStepCamera(activeStep);
     document.getElementById("camTop").onclick = () => cam.setPreset(0.0, 1.38, 28.0, 0.2, 0.2);
     document.getElementById("camFront").onclick = () => cam.setPreset(0.0, 0.22, 26.5, 0.2, 0.2);
     document.getElementById("camOrbit").onclick = () => { cam.autoOrbit = !cam.autoOrbit; };
@@ -6114,8 +6314,20 @@
     document.getElementById("btnCloseScalar").onclick = () => { if (scalarDlg.close) scalarDlg.close(); else scalarDlg.removeAttribute("open"); };
     ["scW1", "scB1", "scW2", "scX"].forEach(id => document.getElementById(id).oninput = renderScalarModal);
 
-    // Boot all 7 steps (Step 00 -> Step 06 Modern LLaMA/DeepSeek LLM)
+    function selectTokenizerMode(useBpe) {
+      if (activeStep !== 0 || bpeMode === useBpe) return;
+      bpeMode = useBpe;
+      switchStep(0, false);
+    }
+
+    document.getElementById("btnCharTokenizer").onclick = () => selectTokenizerMode(false);
+    document.getElementById("btnBpeTokenizer").onclick = () => selectTokenizerMode(true);
+    document.getElementById("btnBpeNext").onclick = advanceBpeDemo;
+    document.getElementById("btnBpeReset").onclick = () => { resetBpeDemo(); renderBpeUi(); };
+    document.getElementById("bpeInput").oninput = renderBpeUi;
+
     S0.init(); S1.init(); S2.init(false); S3.init(); S4.init(); S5.init(); S6.init();
+    resetBpeDemo();
     renderAllUi();
     requestAnimationFrame(renderFrame);
   </script>

@@ -6,7 +6,7 @@
 
 | 阶段 | 代码目录 | 学习笔记 | 核心内容 | 状态 |
 | :--- | :--- | :--- | :--- | :--- |
-| **全景单文件 3D 演示** | `notes/learn-ai-visualizer.html` | 单文件离线版 | **Step 00 Tokenizer → Step 01 Bigram → Step 02 Autograd/MLP → Step 03 自注意力 → Step 04 Mini-GPT → Step 05 SFT + KV Cache → Step 06 现代底座（RMSNorm/RoPE/GQA/SwiGLU）** 全景串联，支持「上一 Step / 下一 Step」双向 3D 架构迭代过渡动画 | 已完成 |
+| **全景单文件 3D 演示** | `notes/learn-ai-visualizer.html` | 单文件离线版 | **Step 00 分词（字符级与字节级 BPE）→ Step 01 Bigram → Step 02 Autograd/MLP → Step 03 自注意力 → Step 04 Mini-GPT → Step 05 SFT + KV Cache → Step 06 现代底座**，支持双向 3D 架构过渡 | 已完成 |
 | **共享基础库** | `crates/mini-core` | — | 复用的 `Rng` / `Tokenizer` / `softmax` / `sample_from_logits` / `load_poems` / `load_sft_dataset` | 已就绪 |
 | **Step 01** | `crates/step01-bigram` | `notes/01-bigram.md` | Bigram 查表模型、交叉熵 Loss、手推梯度、SGD、温度采样 | 已完成 |
 | **Step 02** | `crates/step02-autograd` | `notes/02-autograd.md` | 矩阵张量、Arena Tape 计算图与自动求导（Autograd）、数值梯度单测、3 字上下文多层神经语言模型 | 已完成 |
@@ -14,11 +14,12 @@
 | **Step 04** | `crates/step04-minigpt` | `notes/04-minigpt.md` | 完整 2 层 Pre-Norm Transformer（LayerNorm / GELU FFN / 残差高速路 / 梯度裁剪 / Warmup 余弦学习率 / AdamW） | 已完成 |
 | **Step 05** | `crates/step05-sft-chat` | `notes/05-sft-chat.md` | SFT 指令微调（`data/sft_poems.jsonl` + Assistant-Only Loss Mask）、Prefill/Decode KV Cache 加速（39x+）、二进制模型权重存档（`.mgpt`）与控制台流式对话交互（REPL） | 已完成 |
 | **Step 06** | `crates/step06-modern-llm` | `notes/06-modern-llm.md` | 现代工业界大模型四大核心升级（**RMSNorm + RoPE 旋转位置编码 + GQA 省 50% KV Cache + SwiGLU 门控前馈**），支持 `.mllm` 存档与 `/debug` 概率透视交互 | 已完成 |
+| **Step 07** | `crates/step07-tokenizer` | `notes/07-tokenizer.md` | 326 首唐诗、1,152 词表的字节级 BPE、约 52.6 万参数的古诗助手，支持续句、背诵、作者问答与 CPU decode 基准 | 已完成 |
 
 ## 常用命令
 
 ```bash
-# 运行全部 19 个单元测试
+# 运行 workspace 测试
 cargo test
 
 # 运行第 1~4 关（Bigram -> Autograd -> Attention -> Mini-GPT）
@@ -34,4 +35,15 @@ cargo run --release -p step05-sft-chat -- chat
 # 运行第 6 关（现代 LLaMA/DeepSeek 骨架：RMSNorm+RoPE+GQA+SwiGLU 训练存档 & 控制台对话）
 cargo run --release -p step06-modern-llm
 cargo run --release -p step06-modern-llm -- chat
+
+# 第 7 关（训练本地 BPE、预训练、SFT、存档）
+cargo run --release -p step07-tokenizer -- train
+# 进入对话，诗句片段可直接查本地原文
+cargo run --release -p step07-tokenizer -- chat
+# 单独观察模型生成，输入 /debug 看分词和生成概率
+cargo run --release -p step07-tokenizer -- chat --raw
+# 在本机实测当前存档的 decode 吞吐
+cargo run --release -p step07-tokenizer -- bench
+# 用 GPT-4o 的 o200k_base 对照分词
+cargo run --release -p step07-tokenizer --features openai -- inspect '床前明月光，hello world 🦀'
 ```

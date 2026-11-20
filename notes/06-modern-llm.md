@@ -1,7 +1,6 @@
 # Step 06：现代工业界 LLM 四大核心升级（RMSNorm + RoPE + GQA + SwiGLU）
 
-> 对应源码：[`crates/step06-modern-llm/src/main.rs`](../crates/step06-modern-llm/src/main.rs)  
-> 3D 交互演进演示（单文件离线版，支持 Step 00 → Step 06 全景切换）：[`notes/learn-ai-visualizer.html`](learn-ai-visualizer.html)
+现代底座见 [`crates/step06-modern-llm/src/lib.rs`](../crates/step06-modern-llm/src/lib.rs)。[单文件 3D 演进演示](learn-ai-visualizer.html)
 
 ## 一、从 GPT-2（2019）到 LLaMA 3 / DeepSeek / Qwen（2024~2026）
 
