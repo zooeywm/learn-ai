@@ -1,7 +1,7 @@
 # Step 03：Embedding + 位置编码 + 因果多头自注意力（Causal Multi-Head Self-Attention）
 
 > **配套可运行代码**：[crates/step03-attention/src/main.rs](../crates/step03-attention/src/main.rs)  
-> **配套 3D 离线动画**：[notes/03-attention-visualizer.html](./03-attention-visualizer.html)（双击浏览器离线打开，支持训练/推理单舞台一键切换）
+> **配套 3D 离线动画**：[notes/learn-ai-visualizer.html](./learn-ai-visualizer.html)（单文件离线版，切到 **Step 03** 体验因果自注意力 3D 建模与训练/推理一键切换）
 
 ---
 

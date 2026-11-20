@@ -1,7 +1,7 @@
 # Step 02：纯 Rust 矩阵张量与自动求导引擎（Arena-Tape Autograd）
 
 > **本关代码**：`crates/step02-autograd/src/main.rs`  
-> **3D 互动动画**：`notes/02-autograd-visualizer.html`（直接用浏览器打开，可单步拆解计算图前向传播、Arena Tape 逆序反向传播、链式法则与 ReLU 梯度门控）  
+> **3D 互动动画**：[notes/learn-ai-visualizer.html](./learn-ai-visualizer.html)（单文件离线版，切到 **Step 02** 可单步拆解计算图前向传播、Arena Tape 逆序反向传播、链式法则与 ReLU 梯度门控）  
 > **运行命令**：
 > ```bash
 > cargo test -p step02-autograd
@@ -141,6 +141,6 @@ for id in (0..=loss_id.0).rev() {             // 天然逆拓扑序！
 
 ## 6. 我的疑问与补充
 
-> （读完笔记、跑完代码或玩完 `02-autograd-visualizer.html` 后，把问题和心得记在这里，随时发给我讨论！）
+> （读完笔记、跑完代码或玩完 `learn-ai-visualizer.html` 的 Step 02 后，把问题和心得记在这里，随时发给我讨论！）
 >
 > - [ ] 
