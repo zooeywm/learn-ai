@@ -2044,68 +2044,137 @@
 
       const CELL = 0.96, OX = -1.5 - (V - 1) * CELL * 0.5, OZ = -(V - 1) * CELL * 0.5;
       const cellW = (r, c) => ({ x: OX + c * CELL, z: OZ + r * CELL });
-      const tokPos = { x: OX - 3.6, y: 0.9, z: 0 }, smX = OX + (V - 1) * CELL + 3.2, lossX = smX + 3.1;
+      const tokBase = { x: OX - 3.6, y: 1.2, z: 0 }, smX = OX + (V - 1) * CELL + 3.2, lossX = smX + 3.1;
 
-      // Module 1: Single Input Token Cube
-      G.box("input_1", tokPos.x - 0.6, 0, -0.6, tokPos.x + 0.6, 1.2, 0.6, isTrain ? rgbPri : rgbSuc, 0.94, theme.fg);
-      G.label("input_1", tokPos.x, 1.65, 0, `${VOCAB[activeRow]}:${activeRow}`, theme.fg, "bold 12px monospace");
-      G.label("input_1", tokPos.x, 0.15, 1.35, isTrain ? "单字输入 x" : "当前字", isTrain ? theme.primary : theme.success, "bold 11px sans-serif");
+      // Module 1: Pedestal + Bobbing / Flying Input Token Cube (Full Step 01 Stage 1 animation!)
+      G.box("input_1", tokBase.x - 0.78, 0, -0.78, tokBase.x + 0.78, 0.24, 0.78, rgbBorder, 0.9, theme.border);
+      const bobY = Math.sin(nowMs * 0.004) * 0.14;
+      let tokCube = { x: tokBase.x, y: 1.15 + bobY, z: 0 };
+      if (!isMorphing && isTrain && S1.stage === 1) {
+        const dst = { x: OX - 0.75, y: 0.78, z: OZ + curX * CELL };
+        const u = Math.min(1, stT * 1.15);
+        tokCube = M.evalArc({ x: tokBase.x, y: 1.15, z: 0 }, dst, 2.35, u);
+        if (u >= 1) tokCube.y += bobY * 0.6;
+        M.drawBezierArc3D(ctx, project, { x: tokBase.x, y: 1.15, z: 0 }, dst, 2.35, u, theme.primary, 2.5, true);
+      }
+      G.box("input_1", tokCube.x - 0.5, tokCube.y - 0.5, tokCube.z - 0.5, tokCube.x + 0.5, tokCube.y + 0.5, tokCube.z + 0.5, isTrain ? rgbPri : rgbSuc, 0.95, theme.fg);
+      G.label("input_1", tokCube.x, tokCube.y + 0.85, tokCube.z, `「${VOCAB[activeRow]}」→ ID:${activeRow}`, theme.fg, "bold 12px monospace", -0.4);
+      G.label("input_1", tokBase.x, 0.15, 1.45, isTrain ? "① Tokenizer" : "当前字", isTrain ? theme.primary : theme.success, "bold 11px sans-serif");
 
-      // Module 2: 10x10 Bigram Weight Matrix
+      // Module 2: 10x10 Bigram Weight Matrix (Positive grows UP green, Negative sinks DOWN red!)
+      const lrScale = 0.55 + (S1.lr / 25.0) * 1.85, lrStrokeW = 2.1 + (S1.lr / 25.0) * 2.8;
+      const deltaPreview = -S1.lr * S1.fullLossAndGrads().grads[curX * V + curY];
       for (let r = 0; r < V; r++) {
         for (let c = 0; c < V; c++) {
           const p = cellW(r, c), v = S1.visHeights[r * V + c];
           const isRow = r === activeRow, isTgt = isTrain && isRow && c === curY;
-          const h = Math.max(0.10, Math.min(2.8, Math.abs(v) * 0.72 + 0.12));
-          let col = v > 0.02 ? M.lerpRgb(rgbCard, rgbSuc, Math.min(1, 0.28 + Math.abs(v) * 0.35))
-                  : (v < -0.02 ? M.lerpRgb(rgbCard, rgbErr, Math.min(1, 0.25 + Math.abs(v) * 0.35)) : rgbCard);
-          if (isRow) col = M.lerpRgb(col, rgbPri, 0.35);
-          if (isTgt) col = rgbSuc;
-          G.box("bigram_mat", p.x - 0.38, 0, p.z - 0.38, p.x + 0.38, h, p.z + 0.38, col, isRow ? 0.96 : 0.62, isTgt ? theme.fg : theme.border);
+          const y0 = v < -0.05 ? Math.max(-1.0, v * 0.35) : 0;
+          const y1 = v >= -0.05 ? Math.max(0.14, Math.min(3.1, v * 0.88 + 0.14)) : 0.06;
+          const mag = Math.min(1, Math.abs(v) / 3.2);
+          let col = rgbCard;
+          if (v > 0.03) col = M.lerpRgb(rgbCard, rgbSuc, 0.25 + mag * 0.75);
+          else if (v < -0.03) col = M.lerpRgb(rgbCard, rgbErr, 0.25 + mag * 0.75);
+          if (isRow && Math.abs(v) < 0.05) col = M.lerpRgb(rgbCard, rgbPri, 0.36);
+          const stroke = isTgt ? theme.fg : (isRow ? theme.primary : M.shade(rgbBorder, 1, 0.55));
+          G.box("bigram_mat", p.x - 0.36, y0, p.z - 0.36, p.x + 0.36, y1, p.z + 0.36, col, isRow || Math.abs(v) > 0.12 ? 0.96 : 0.75, stroke);
+
+          // Stage 5: Green UP arrow on target + 9 Red DOWN push arrows on the other 9 columns!
+          if (!isMorphing && isTrain && S1.stage === 5 && r === curX) {
+            const pulse = Math.sin(nowMs * 0.012) * 0.18;
+            if (c === curY) {
+              const tipY = y1 + 0.3 + lrScale * 1.05 + pulse;
+              M.pushArrow3D(dl, ctx, project, p.x, y1 + 0.22 + pulse, tipY, p.z, theme.success, lrStrokeW);
+              M.pushLabel3D(dl, ctx, project, p.x, tipY + 0.42, p.z, `↑ +${Math.abs(deltaPreview).toFixed(2)} (lr=${S1.lr.toFixed(1)})`, theme.success, "bold 11px monospace", -0.5);
+            } else {
+              M.pushArrow3D(dl, ctx, project, p.x, y1 + 0.25 + lrScale * 0.62 - pulse * 0.4, y1 + 0.18 - pulse * 0.4, p.z, theme.error, Math.max(1.8, lrStrokeW * 0.7));
+            }
+          }
         }
-        G.label("bigram_mat", OX - 1.1, 0.2, OZ + r * CELL, VOCAB[r], r === activeRow ? theme.primary : theme.muted, r === activeRow ? "bold 11px monospace" : "10px monospace");
-        G.label("bigram_mat", OX + r * CELL, 0.2, OZ - 1.05, VOCAB[r], theme.muted, "10px monospace");
+        G.label("bigram_mat", OX - 1.05, 0.15, OZ + r * CELL, VOCAB[r], r === activeRow ? theme.primary : theme.muted, r === activeRow ? "bold 12px sans-serif" : "10px sans-serif");
+        G.label("bigram_mat", OX + r * CELL, 0.15, OZ + V * CELL - 0.1, VOCAB[r], isTrain && r === curY ? theme.success : theme.muted, isTrain && r === curY ? "bold 12px sans-serif" : "10px sans-serif");
       }
-      G.label("bigram_mat", -1.5, 3.35, OZ - 1.2, "10×10 Bigram 查表权重矩阵", theme.fg, "bold 11px sans-serif");
+      G.label("bigram_mat", -1.5, 3.35, OZ - 1.15, "10×10 Bigram 查表权重矩阵", theme.fg, "bold 11px sans-serif");
 
       // Module 3: 10 Softmax Probability Towers
       const smLit = !isTrain || S1.hasSoftmax;
       for (let j = 0; j < V; j++) {
         const sz = OZ + j * CELL, p = S1.visProbs[j];
-        const bh = smLit ? Math.max(0.08, p * 4.5) : 0.08;
+        const bh = smLit ? Math.max(0.08, p * 4.6) : 0.08;
         const isHi = isTrain ? (j === curY) : (S1.inferAnim && j === S1.inferAnim.nextId);
         const col = !smLit ? rgbBorder : (isHi ? rgbSuc : rgbPri);
-        G.box("softmax", smX - 0.3, 0, sz - 0.26, smX + 0.3, bh, sz + 0.26, col, smLit ? 0.93 : 0.45, isHi ? theme.fg : theme.border);
-        G.label("softmax", smX + 0.95, 0.16, sz, smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`, isHi ? theme.success : theme.muted, isHi ? "bold 11px monospace" : "10px monospace");
+        G.box("softmax", smX - 0.34, 0, sz - 0.34, smX + 0.34, bh, sz + 0.34, col, smLit ? 0.93 : 0.45, isHi ? theme.fg : theme.border);
+        G.label("softmax", smX + 0.98, 0.16, sz, smLit ? `${VOCAB[j]} ${(p * 100).toFixed(0)}%` : `${VOCAB[j]} --`, isHi ? theme.success : theme.muted, isHi ? "bold 11px monospace" : "10px monospace");
       }
-      G.label("softmax", smX, 4.95, 0, isTrain ? "训练 Softmax (T=1.0)" : `推理温度塔 (T=${S1.temp.toFixed(1)})`, isTrain ? theme.primary : theme.success, "bold 11px monospace");
+      G.label("softmax", smX, 4.95, 0, isTrain ? "③ Softmax 概率塔 (T=1.0)" : `推理温度塔 (T=${S1.temp.toFixed(1)})`, isTrain ? theme.primary : theme.success, "bold 11px monospace");
 
       // Module 4: Orange Loss Pillar (Training only)
       if (isTrain) {
-        const lh = S1.hasLoss ? Math.max(0.14, Math.min(4.6, S1.visLoss * 1.45)) : 0.08;
+        const lh = S1.hasLoss ? Math.max(0.14, Math.min(4.6, S1.visLoss * 1.75)) : 0.08;
         G.box("loss", lossX - 0.65, 0, -0.65, lossX + 0.65, lh, 0.65, S1.hasLoss ? rgbWarn : rgbBorder, S1.hasLoss ? 0.93 : 0.5, S1.hasLoss ? theme.fg : theme.border);
         G.label("loss", lossX, lh + 0.5, 0, S1.hasLoss ? `Loss ${S1.visLoss.toFixed(2)}` : "Loss: 0 (未计算)", S1.hasLoss ? theme.warning : theme.muted, "bold 11px monospace");
       }
 
+      // Full Stage 2 / 3 / 4 / 5 + Inference 3D Animations!
       if (!isMorphing) {
-        if (isTrain && S1.stage === 1) {
-          const to = { x: OX, y: 0.9, z: OZ + curX * CELL };
-          M.drawBezierArc3D(ctx, project, tokPos, to, 1.8, stT, theme.primary, 2.5);
-          const pt = M.evalArc(tokPos, to, 1.8, stT);
-          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.28, theme.primary, theme.primary, VOCAB[curX], "#fff");
-        } else if (isTrain && S1.stage === 2) {
-          const scanC = stT * (V - 1);
-          M.pushOrb(dl, ctx, project, OX + scanC * CELL, 1.8, OZ + curX * CELL, 0.28, theme.primary, theme.primary, "→", "#fff");
+        if (isTrain && S1.stage === 2) {
+          // 10 parallel staggered Bezier arcs from row curX -> 10 Softmax towers
+          for (let j = 0; j < V; j++) {
+            const fc = cellW(curX, j);
+            const fromP = { x: fc.x, y: Math.max(0.25, S1.visHeights[curX * V + j] * 0.88 + 0.3), z: fc.z };
+            const toP = { x: smX, y: Math.max(0.25, S1.visProbs[j] * 4.6), z: OZ + j * CELL };
+            const u = Math.max(0, Math.min(1, (stT - j * 0.04) / 0.6));
+            M.drawBezierArc3D(ctx, project, fromP, toP, 1.8 + (j % 3) * 0.3, u, j === curY ? theme.success : M.shade(rgbPri, 1.1, 0.72), j === curY ? 2.6 : 1.4);
+            if (u > 0.01) {
+              const pt = M.evalArc(fromP, toP, 1.8 + (j % 3) * 0.3, u);
+              M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, u < 0.99 ? 0.21 : 0.14, j === curY ? theme.success : theme.primary, j === curY ? theme.success : theme.primary);
+            }
+          }
+        } else if (isTrain && S1.stage === 3) {
+          // Glowing 3D Softmax normalization scan-ring sweeping upward!
+          const ringY = 0.25 + stT * 2.6;
+          const zMin = OZ - 0.56, zMax = OZ + (V - 1) * CELL + 0.56;
+          const corners = [project(smX - 0.56, ringY, zMin), project(smX + 0.56, ringY, zMin), project(smX + 0.56, ringY, zMax), project(smX - 0.56, ringY, zMax)];
+          if (corners.every(Boolean)) {
+            const midP = project(smX, ringY, 0);
+            dl.push({
+              depth: midP ? midP.depth - 0.3 : 10,
+              draw: () => {
+                ctx.save(); ctx.beginPath();
+                ctx.moveTo(corners[0].x, corners[0].y); ctx.lineTo(corners[1].x, corners[1].y);
+                ctx.lineTo(corners[2].x, corners[2].y); ctx.lineTo(corners[3].x, corners[3].y); ctx.closePath();
+                ctx.fillStyle = M.shade(rgbPri, 1.15, 0.16); ctx.fill();
+                ctx.strokeStyle = theme.primary; ctx.lineWidth = 2.4; ctx.shadowColor = theme.primary; ctx.shadowBlur = 12; ctx.stroke();
+                ctx.restore();
+              },
+            });
+          }
+          M.pushLabel3D(dl, ctx, project, smX, ringY + 0.6, 0, "全部 10 塔并行归一：Σ p_j = 100%", theme.primary, "bold 12px sans-serif", -0.5);
+        } else if (isTrain && S1.stage === 4) {
+          // Golden "L" orb flying from target probability tower to orange Loss pillar
+          const fromSm = { x: smX, y: Math.max(0.4, S1.visProbs[curY] * 4.6), z: OZ + curY * CELL };
+          const toLoss = { x: lossX, y: Math.max(0.4, S1.visLoss * 1.75), z: 0 };
+          M.drawBezierArc3D(ctx, project, fromSm, toLoss, 1.8, stT, theme.warning, 3.0);
+          const pt = M.evalArc(fromSm, toLoss, 1.8, stT);
+          M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, 0.27, theme.warning, theme.warning, "L", "#000");
         } else if (isTrain && S1.stage === 5) {
-          const pTgt = cellW(curX, curY);
-          const pulse = Math.sin(nowMs * 0.012) * 0.14;
-          M.pushArrow3D(dl, ctx, project, pTgt.x, 1.2 + pulse, 2.7 + pulse, pTgt.z, theme.success, 3.0);
-          M.pushLabel3D(dl, ctx, project, pTgt.x, 3.1, pTgt.z, `拉高「${VOCAB[curY]}」`, theme.success, "bold 11px sans-serif");
+          // 10 backward gradient dashed arcs + orbs flying from Softmax -> row curX!
+          const u = Math.min(1, stT * 1.4);
+          for (let j = 0; j < V; j++) {
+            const fromSm = { x: smX, y: Math.max(0.4, S1.visProbs[j] * 4.6), z: OZ + j * CELL };
+            const tc = cellW(curX, j);
+            const toP = { x: tc.x, y: Math.max(0.3, S1.visHeights[curX * V + j] * 0.88 + 0.4), z: tc.z };
+            const col = j === curY ? theme.success : theme.error;
+            M.drawBezierArc3D(ctx, project, fromSm, toP, 2.5, u, M.shade(j === curY ? rgbSuc : rgbErr, 1, 0.78), j === curY ? 2.8 : 1.3, true);
+            if (u < 0.98) {
+              const pt = M.evalArc(fromSm, toP, 2.5, u);
+              M.pushOrb(dl, ctx, project, pt.x, pt.y, pt.z, j === curY ? 0.24 : 0.15, col, col);
+            }
+          }
         } else if (!isTrain && S1.inferAnim) {
           const u = Math.min(1, (nowMs - S1.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed));
           const a = S1.inferAnim;
           const cellPt = cellW(a.fromId, a.nextId);
-          const smPt = { x: smX, y: Math.max(0.5, S1.visProbs[a.nextId] * 4.5) + 0.5, z: OZ + a.nextId * CELL };
+          const smPt = { x: smX, y: Math.max(0.5, S1.visProbs[a.nextId] * 4.6) + 0.5, z: OZ + a.nextId * CELL };
           if (u < 0.48) {
             const p = u / 0.48;
             const cur = M.evalArc({ x: cellPt.x, y: 1.0, z: cellPt.z }, smPt, 2.2, p);
@@ -2113,7 +2182,7 @@
             M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.32, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
           } else {
             const p = (u - 0.48) / 0.52;
-            const dst = { x: tokPos.x, y: 1.2, z: 0 };
+            const dst = { x: tokBase.x, y: 1.2, z: 0 };
             const cur = M.evalArc(smPt, dst, 3.8, p);
             M.drawBezierArc3D(ctx, project, smPt, dst, 3.8, p, theme.success, 2.8, true);
             M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.34, theme.success, theme.success, VOCAB[a.nextId], "#000");
@@ -2249,7 +2318,7 @@
         }
       }
 
-      // Motion Orbs
+      // Full Stage 1..7 + Inference 4-Phase Motion Orbs (Step 02)
       if (!isMorphing) {
         const ptOf = (p, y = 1.2) => ({ x: p.x, y, z: p.z });
         if (isTrain && S2.stage === 1) {
@@ -2259,7 +2328,36 @@
             const cur = M.evalArc(from, to, 1.8, stT);
             M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.24, theme.primary, theme.primary, VOCAB[s.ctxIds[slot]], "#fff");
           }
+        } else if (isTrain && S2.stage === 2) {
+          const cur = M.evalArc(ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stT);
+          M.drawBezierArc3D(ctx, project, ptOf(POS.emb, 1.2), ptOf(POS.xVec, 1.2), 1.8, stT, theme.success, 2.6);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.success, theme.success, "x", "#fff");
+        } else if (isTrain && S2.stage === 3) {
+          for (const src of [POS.xVec, POS.w1, POS.b1]) {
+            M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stT, theme.primary, 2.0);
+            const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.z1, 1.3), 1.6, stT);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
+          }
+        } else if (isTrain && S2.stage === 4) {
+          const cur = M.evalArc(ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stT);
+          M.drawBezierArc3D(ctx, project, ptOf(POS.z1, 1.2), ptOf(POS.hVec, 1.2), 1.5, stT, gateOpen ? theme.success : theme.error, 2.6);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, gateOpen ? theme.success : theme.error, gateOpen ? theme.success : theme.error, gateOpen ? "通" : "0");
+        } else if (isTrain && S2.stage === 5) {
+          for (const src of [POS.hVec, POS.w2, POS.b2]) {
+            M.drawBezierArc3D(ctx, project, ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stT, theme.primary, 2.0);
+            const cur = M.evalArc(ptOf(src, 1.1), ptOf(POS.sm, 1.4), 1.7, stT);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.2, theme.primary, theme.primary);
+          }
+        } else if (isTrain && S2.stage === 6) {
+          const targetZ = POS.sm.z + (s.targetId - 4.5) * 0.62;
+          const fromSm = { x: POS.sm.x, y: Math.max(0.5, S2.visProbs[s.targetId] * 4.5), z: targetZ };
+          const toLoss = { x: POS.loss.x, y: Math.max(0.5, S2.visLoss * 1.45), z: POS.loss.z };
+          M.drawBezierArc3D(ctx, project, fromSm, toLoss, 1.8, stT, theme.warning, 2.8);
+          const cur = M.evalArc(fromSm, toLoss, 1.8, stT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
         } else if (isTrain && S2.stage === 7) {
+          const revIdx = 11 * (1 - stT);
+          M.pushOrb(dl, ctx, project, -9.1 + revIdx * 1.65, 1.15, tapeZ, 0.24, theme.warning, theme.warning, "←", "#000");
           const wps = [POS.loss, POS.sm, POS.hVec, POS.relu, POS.z1, POS.xVec, POS.emb];
           const sf = stT * (wps.length - 1), si = Math.min(wps.length - 2, Math.floor(sf)), su = sf - si;
           const a = ptOf(wps[si], 1.5), b = ptOf(wps[si + 1], 1.5), hit = !gateOpen && si >= 3;
@@ -2268,20 +2366,26 @@
           M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, hit ? theme.error : theme.warning, hit ? theme.error : theme.warning, hit ? "0" : "∂", "#000");
         } else if (!isTrain && S2.inferAnim) {
           const u = Math.min(1, (nowMs - S2.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed)), a = S2.inferAnim;
-          if (u < 0.35) {
-            const p = u / 0.35;
+          if (u < 0.28) {
+            const p = u / 0.28;
             for (let slot = 0; slot < S2_CTX; slot++) {
               const from = { x: POS.input.x, y: 1.0, z: POS.input.z + (slot - 1) * 1.35 }, to = ptOf(POS.xVec, 1.2);
               M.drawBezierArc3D(ctx, project, from, to, 1.6, p, theme.primary, 2.2);
               const cur = M.evalArc(from, to, 1.6, p);
               M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.24, theme.primary, theme.primary, VOCAB[a.prevWinIds[slot]], "#fff");
             }
-          } else if (u < 0.72) {
-            const p = (u - 0.35) / 0.37, cur = M.evalArc(ptOf(POS.xVec, 1.4), ptOf(POS.sm, 1.5), 1.8, p);
+          } else if (u < 0.56) {
+            const p = (u - 0.28) / 0.28, cur = M.evalArc(ptOf(POS.xVec, 1.4), ptOf(POS.sm, 1.5), 1.8, p);
             M.drawBezierArc3D(ctx, project, ptOf(POS.xVec, 1.4), ptOf(POS.sm, 1.5), 1.8, p, theme.success, 2.6);
             M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, "→", "#000");
+          } else if (u < 0.78) {
+            const p = (u - 0.56) / 0.22;
+            const targetZ = POS.sm.z + (a.nextId - 4.5) * 0.62, targetY = Math.max(0.5, S2.visProbs[a.nextId] * 4.5) + 0.55;
+            const sweepZ = POS.sm.z - 2.8 + (targetZ - (POS.sm.z - 2.8)) * p, dropY = 3.9 - (3.9 - targetY) * p;
+            M.pushOrb(dl, ctx, project, POS.sm.x, dropY, sweepZ, 0.34, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
+            M.pushLabel3D(dl, ctx, project, POS.sm.x, dropY + 0.65, sweepZ, `🎲 抽中「${VOCAB[a.nextId]}」`, theme.success, "bold 12px sans-serif", -0.5);
           } else {
-            const p = (u - 0.72) / 0.28;
+            const p = (u - 0.78) / 0.22;
             const from = { x: POS.sm.x, y: Math.max(0.6, S2.visProbs[a.nextId] * 4.5) + 0.4, z: POS.sm.z + (a.nextId - 4.5) * 0.62 };
             const to = { x: POS.input.x, y: 1.1, z: POS.input.z + 1.35 };
             M.drawBezierArc3D(ctx, project, from, to, 4.3, p, theme.warning, 3.0, true);
@@ -2385,12 +2489,34 @@
         G.label("loss", POS.loss.x, lh + 0.5, 0, S3.computedStage >= 7 ? `pos[${S3.selectedPos}] Loss ${S3.visLoss.toFixed(2)}` : "位置Loss: 0", S3.computedStage >= 7 ? theme.warning : theme.muted, "bold 11px monospace");
       }
 
-      // Motion Orbs
+      // Full Stage 1..8 + Inference 4-Phase Motion Orbs (Step 03)
       if (!isMorphing) {
         const ptOf = (p, y = 1.3) => ({ x: p.x, y, z: p.z });
-        if (isTrain && (S3.stage === 3 || S3.stage === 4 || S3.stage === 5)) {
+        if (isTrain && S3.stage === 1) {
+          const from = { x: POS.seq.x, y: 1.2, z: seqZ(activeQ) }, to = ptOf(POS.qkv, 1.3);
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, stT, theme.primary, 2.5, true);
+          const cur = M.evalArc(from, to, 1.8, stT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.primary, theme.primary, CHARS[activeQ], "#fff");
+        } else if (isTrain && S3.stage === 2) {
+          const from = ptOf(POS.qkv, 1.4), to = { x: POS.mat.x, y: 1.3, z: cPos(activeQ, Math.floor(activeQ / 2)).z };
+          M.drawBezierArc3D(ctx, project, from, to, 1.6, stT, theme.warning, 2.4);
+          const cur = M.evalArc(from, to, 1.6, stT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "QKV", "#000");
+        } else if (isTrain && (S3.stage === 3 || S3.stage === 4 || S3.stage === 5)) {
           const sc = S3.stage === 3 ? stT * (T - 1) : stT * activeQ;
           M.pushOrb(dl, ctx, project, mOX + sc * cellStep, 2.2, mOZ + activeQ * cellStep, 0.28, S3.stage === 4 ? theme.error : theme.primary, S3.stage === 4 ? theme.error : theme.primary, S3.stage === 4 ? "×" : "α", "#fff");
+        } else if (isTrain && S3.stage === 6) {
+          const from = { x: POS.mat.x, y: 1.8, z: cPos(activeQ, activeQ).z }, to = ptOf(POS.ctxV, 1.4);
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, stT, theme.success, 2.8);
+          const cur = M.evalArc(from, to, 1.8, stT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, "h1", "#000");
+        } else if (isTrain && S3.stage === 7) {
+          const targetZ = (S3_TGT[S3.selectedPos] - 4.5) * 0.62;
+          const from = { x: POS.sm.x, y: Math.max(0.5, S3.visProbs[S3_TGT[S3.selectedPos]] * 4.5), z: targetZ };
+          const to = { x: POS.loss.x, y: Math.max(0.5, S3.visLoss * 1.45), z: 0 };
+          M.drawBezierArc3D(ctx, project, from, to, 1.8, stT, theme.warning, 2.8);
+          const cur = M.evalArc(from, to, 1.8, stT);
+          M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.warning, theme.warning, "L", "#000");
         } else if (isTrain && S3.stage === 8) {
           const wps = [POS.loss, POS.sm, POS.ctxV, POS.mat, POS.qkv, POS.seq];
           const sf = stT * (wps.length - 1), si = Math.min(wps.length - 2, Math.floor(sf)), su = sf - si;
@@ -2399,12 +2525,23 @@
           M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.3, theme.warning, theme.warning, "∂", "#000");
         } else if (!isTrain && S3.inferAnim) {
           const u = Math.min(1, (nowMs - S3.inferAnim.startMs) / (INFER_ANIM_MS / animSpeed)), a = S3.inferAnim;
-          if (u < 0.56) {
-            const p = u / 0.56, cur = M.evalArc(ptOf(POS.qkv, 1.5), ptOf(POS.sm, 1.5), 1.8, p);
+          if (u < 0.28) {
+            const p = u / 0.28, from = { x: POS.seq.x, y: 1.2, z: seqZ(activeQ) }, to = ptOf(POS.qkv, 1.3);
+            M.drawBezierArc3D(ctx, project, from, to, 1.7, p, theme.primary, 2.4);
+            const cur = M.evalArc(from, to, 1.7, p);
+            M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.26, theme.primary, theme.primary, VOCAB[dispIds[activeQ]], "#fff");
+          } else if (u < 0.56) {
+            const p = (u - 0.28) / 0.28, cur = M.evalArc(ptOf(POS.qkv, 1.5), ptOf(POS.sm, 1.5), 1.8, p);
             M.drawBezierArc3D(ctx, project, ptOf(POS.qkv, 1.5), ptOf(POS.sm, 1.5), 1.8, p, theme.success, 2.6);
             M.pushOrb(dl, ctx, project, cur.x, cur.y, cur.z, 0.28, theme.success, theme.success, "→", "#000");
+          } else if (u < 0.78) {
+            const p = (u - 0.56) / 0.22;
+            const targetZ = (a.nextId - 4.5) * 0.62, targetY = Math.max(0.5, S3.visProbs[a.nextId] * 4.5) + 0.55;
+            const sweepZ = -2.8 + (targetZ + 2.8) * p, dropY = 3.9 - (3.9 - targetY) * p;
+            M.pushOrb(dl, ctx, project, POS.sm.x, dropY, sweepZ, 0.34, theme.warning, theme.warning, VOCAB[a.nextId], "#000");
+            M.pushLabel3D(dl, ctx, project, POS.sm.x, dropY + 0.65, sweepZ, `🎲 抽中「${VOCAB[a.nextId]}」`, theme.success, "bold 12px sans-serif", -0.5);
           } else {
-            const p = (u - 0.56) / 0.44;
+            const p = (u - 0.78) / 0.22;
             const from = { x: POS.sm.x, y: Math.max(0.6, S3.visProbs[a.nextId] * 4.5) + 0.4, z: (a.nextId - 4.5) * 0.62 };
             const to = { x: POS.seq.x, y: 1.1, z: seqZ(T - 1) + 0.6 };
             M.drawBezierArc3D(ctx, project, from, to, 4.6, p, theme.warning, 3.0, true);
