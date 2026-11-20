@@ -2729,9 +2729,18 @@
 
       // Next Step Button & AutoPlay Button
       const maxSt = stObj.stageNames.length;
-      const nextSt = stObj.stage >= maxSt ? 1 : stObj.stage + 1;
-      document.getElementById("btnNextAction").textContent = `${stObj.stage >= maxSt ? "⏭ 下一轮：" : "⏭ 下一步："}${stObj.stageNames[nextSt - 1]} (${nextSt}/${maxSt})`;
-      document.getElementById("btnAutoPlay").textContent = stObj.mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
+      const btnNext = document.getElementById("btnNextAction");
+      const btnAuto = document.getElementById("btnAutoPlay");
+      if (activeStep === 0 && stObj.stage >= maxSt) {
+        btnNext.textContent = "✓ 建表完成 → 进入 Step 01";
+        btnAuto.disabled = true;
+        btnAuto.textContent = "✓ 已完成";
+      } else {
+        const nextSt = stObj.stage >= maxSt ? 1 : stObj.stage + 1;
+        btnNext.textContent = `${stObj.stage >= maxSt ? "⏭ 下一轮：" : "⏭ 下一步："}${stObj.stageNames[nextSt - 1]} (${nextSt}/${maxSt})`;
+        btnAuto.disabled = false;
+        btnAuto.textContent = stObj.mode === "autoplay" ? "⏸ 暂停连播" : "▶ 自动连播";
+      }
     }
 
     function renderCorpusAndHuds() {
@@ -3166,6 +3175,10 @@
     document.getElementById("btnNextAction").onclick = () => {
       morph = null;
       const st = [S0, S1, S2, S3][activeStep];
+      if (activeStep === 0 && st.stage >= st.stageNames.length) {
+        switchStep(1, true);
+        return;
+      }
       st.viewMode = "train"; st.mode = "step";
       const next = st.stage >= st.stageNames.length ? 1 : st.stage + 1;
       st.enterStage(next, performance.now());
