@@ -15,7 +15,11 @@
 //!          并在模型预测出 `<|eos|>` 时立刻自动闭嘴！
 
 use std::collections::{BTreeSet, HashMap};
+use std::env;
 use std::f32::consts::PI;
+use std::fs::{self, File};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use mini_core::{load_poems, load_sft_dataset, sample_from_logits, softmax, Rng};
@@ -60,6 +64,19 @@ impl ChatTokenizer {
         }
     }
 
+    fn from_vocab(id_to_token: Vec<String>) -> Self {
+        let mut char_to_id = HashMap::new();
+        for (id, tok) in id_to_token.iter().enumerate().skip(4) {
+            if let Some(c) = tok.chars().next() {
+                char_to_id.insert(c, id);
+            }
+        }
+        Self {
+            id_to_token,
+            char_to_id,
+        }
+    }
+
     fn vocab_size(&self) -> usize {
         self.id_to_token.len()
     }
@@ -72,11 +89,23 @@ impl ChatTokenizer {
 
     /// 把用户问题打包成推理前缀：`<|user|> 问题 <|assistant|>`
     fn encode_prompt(&self, question: &str) -> Vec<usize> {
+        self.encode_prompt_checked(question).0
+    }
+
+    /// 返回 `(prompt_ids, oov_chars)`，便于控制台交互时明确提示哪些生僻字不在当前词表中
+    fn encode_prompt_checked(&self, question: &str) -> (Vec<usize>, Vec<char>) {
         let mut ids = Vec::with_capacity(question.chars().count() + 2);
+        let mut oov = Vec::new();
         ids.push(USER_ID);
-        ids.extend(self.encode_plain(question));
+        for c in question.chars() {
+            if let Some(&id) = self.char_to_id.get(&c) {
+                ids.push(id);
+            } else {
+                oov.push(c);
+            }
+        }
         ids.push(ASST_ID);
-        ids
+        (ids, oov)
     }
 
     /// 把一条 (问题, 回答) 打包成 SFT 训练样本：
@@ -1342,10 +1371,284 @@ fn cosine_lr(step: usize, total_steps: usize, warmup_steps: usize, max_lr: f32, 
 }
 
 // ============================================================================
-// 4. 主程序：从 data/ 加载预训练与 SFT JSONL 数据 -> 对比 Base vs SFT + KV Cache 测速
+// 4. 零依赖二进制模型存档（MGPT v1：一次保存词表 + 超参 + 全部权重，毫秒级重载）
 // ============================================================================
 
-fn main() {
+const CHECKPOINT_MAGIC: &[u8; 4] = b"MGPT";
+const CHECKPOINT_VERSION: u32 = 1;
+
+fn default_checkpoint_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../checkpoints/step05-chat.mgpt")
+}
+
+fn write_u32(w: &mut impl Write, v: u32) -> io::Result<()> {
+    w.write_all(&v.to_le_bytes())
+}
+
+fn read_u32(r: &mut impl Read) -> io::Result<u32> {
+    let mut buf = [0u8; 4];
+    r.read_exact(&mut buf)?;
+    Ok(u32::from_le_bytes(buf))
+}
+
+fn write_param(w: &mut impl Write, p: &Param) -> io::Result<()> {
+    write_u32(w, p.data.len() as u32)?;
+    for &x in &p.data {
+        w.write_all(&x.to_le_bytes())?;
+    }
+    Ok(())
+}
+
+fn read_param_into(r: &mut impl Read, p: &mut Param) -> io::Result<()> {
+    let len = read_u32(r)? as usize;
+    if len != p.data.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("权重长度不匹配: 期望 {}，文件为 {}", p.data.len(), len),
+        ));
+    }
+    let mut buf = [0u8; 4];
+    for slot in &mut p.data {
+        r.read_exact(&mut buf)?;
+        *slot = f32::from_le_bytes(buf);
+    }
+    Ok(())
+}
+
+fn save_checkpoint(path: &Path, tok: &ChatTokenizer, model: &MiniGpt) -> io::Result<u64> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let file = File::create(path)?;
+    let mut w = BufWriter::new(file);
+
+    w.write_all(CHECKPOINT_MAGIC)?;
+    write_u32(&mut w, CHECKPOINT_VERSION)?;
+    write_u32(&mut w, model.vocab_size as u32)?;
+    write_u32(&mut w, model.block_size as u32)?;
+    write_u32(&mut w, model.d_model as u32)?;
+    write_u32(&mut w, model.n_head as u32)?;
+    write_u32(&mut w, model.blocks.len() as u32)?;
+
+    // 写入词表（加载推理时不再依赖原语料文件！）
+    for s in &tok.id_to_token {
+        let bytes = s.as_bytes();
+        write_u32(&mut w, bytes.len() as u32)?;
+        w.write_all(bytes)?;
+    }
+
+    // 按固定顺序写入全部模型权重
+    write_param(&mut w, &model.tok_emb)?;
+    write_param(&mut w, &model.pos_emb)?;
+    for blk in &model.blocks {
+        write_param(&mut w, &blk.ln1_gamma)?;
+        write_param(&mut w, &blk.ln1_beta)?;
+        write_param(&mut w, &blk.wq)?;
+        write_param(&mut w, &blk.wk)?;
+        write_param(&mut w, &blk.wv)?;
+        write_param(&mut w, &blk.wo)?;
+        write_param(&mut w, &blk.ln2_gamma)?;
+        write_param(&mut w, &blk.ln2_beta)?;
+        write_param(&mut w, &blk.ffn_w1)?;
+        write_param(&mut w, &blk.ffn_b1)?;
+        write_param(&mut w, &blk.ffn_w2)?;
+        write_param(&mut w, &blk.ffn_b2)?;
+    }
+    write_param(&mut w, &model.ln_f_gamma)?;
+    write_param(&mut w, &model.ln_f_beta)?;
+    write_param(&mut w, &model.w_lm)?;
+    write_param(&mut w, &model.b_lm)?;
+    w.flush()?;
+
+    Ok(fs::metadata(path)?.len())
+}
+
+fn load_checkpoint(path: &Path) -> io::Result<(ChatTokenizer, MiniGpt)> {
+    let file = File::open(path)?;
+    let mut r = BufReader::new(file);
+
+    let mut magic = [0u8; 4];
+    r.read_exact(&mut magic)?;
+    if &magic != CHECKPOINT_MAGIC {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "无效的模型文件头（期望 MGPT）",
+        ));
+    }
+    let ver = read_u32(&mut r)?;
+    if ver != CHECKPOINT_VERSION {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("不支持的模型版本: {}", ver),
+        ));
+    }
+
+    let vocab_size = read_u32(&mut r)? as usize;
+    let block_size = read_u32(&mut r)? as usize;
+    let d_model = read_u32(&mut r)? as usize;
+    let n_head = read_u32(&mut r)? as usize;
+    let n_layer = read_u32(&mut r)? as usize;
+
+    let mut id_to_token = Vec::with_capacity(vocab_size);
+    for _ in 0..vocab_size {
+        let len = read_u32(&mut r)? as usize;
+        let mut bytes = vec![0u8; len];
+        r.read_exact(&mut bytes)?;
+        let s = String::from_utf8(bytes)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        id_to_token.push(s);
+    }
+    let tok = ChatTokenizer::from_vocab(id_to_token);
+
+    let mut dummy_rng = Rng::new(1);
+    let mut model = MiniGpt::new(vocab_size, block_size, d_model, n_head, n_layer, &mut dummy_rng);
+    read_param_into(&mut r, &mut model.tok_emb)?;
+    read_param_into(&mut r, &mut model.pos_emb)?;
+    for blk in &mut model.blocks {
+        read_param_into(&mut r, &mut blk.ln1_gamma)?;
+        read_param_into(&mut r, &mut blk.ln1_beta)?;
+        read_param_into(&mut r, &mut blk.wq)?;
+        read_param_into(&mut r, &mut blk.wk)?;
+        read_param_into(&mut r, &mut blk.wv)?;
+        read_param_into(&mut r, &mut blk.wo)?;
+        read_param_into(&mut r, &mut blk.ln2_gamma)?;
+        read_param_into(&mut r, &mut blk.ln2_beta)?;
+        read_param_into(&mut r, &mut blk.ffn_w1)?;
+        read_param_into(&mut r, &mut blk.ffn_b1)?;
+        read_param_into(&mut r, &mut blk.ffn_w2)?;
+        read_param_into(&mut r, &mut blk.ffn_b2)?;
+    }
+    read_param_into(&mut r, &mut model.ln_f_gamma)?;
+    read_param_into(&mut r, &mut model.ln_f_beta)?;
+    read_param_into(&mut r, &mut model.w_lm)?;
+    read_param_into(&mut r, &mut model.b_lm)?;
+
+    Ok((tok, model))
+}
+
+// ============================================================================
+// 5. 控制台流式对话交互（REPL）：毫秒级加载权重 + Prefill/Decode KV Cache 实时吐字
+// ============================================================================
+
+fn run_chat_repl(tok: &ChatTokenizer, model: &MiniGpt) {
+    println!("\n======================================================================");
+    println!("💬 迷你唐诗 ChatGPT 控制台交互模式（Prefill + Decode KV Cache 流式输出）");
+    println!("提示：直接输入问题回车对话，如「你好」「背一首静夜思」「白日依山尽的下一句」");
+    println!("命令：/temp <温度> (默认 0.0 贪心最稳，可调如 /temp 0.4) | /help | /quit");
+    println!("======================================================================");
+
+    let mut temp = 0.0f32;
+    let mut rng = Rng::new(2026);
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
+
+    loop {
+        print!("\n你 > ");
+        let _ = stdout.flush();
+
+        let mut line = String::new();
+        match stdin.lock().read_line(&mut line) {
+            Ok(0) => {
+                println!("\n👋 已退出对话。");
+                break;
+            }
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("读取输入失败: {}", e);
+                break;
+            }
+        }
+
+        let input = line.trim();
+        if input.is_empty() {
+            continue;
+        }
+        if matches!(input, "/quit" | "/exit" | "quit" | "exit") {
+            println!("👋 再见！");
+            break;
+        }
+        if input == "/help" {
+            println!("试试问这些（来自 data/sft_poems.jsonl）：");
+            println!("  · 你好 / 你是谁");
+            println!("  · 背一首静夜思 / 背一首春晓 / 背一首登鹳雀楼 / 背一首相思");
+            println!("  · 白日依山尽的下一句 / 飞流直下三千尺的下一句 / 锄禾日当午的下一句");
+            println!("  · /temp 0.0（确定性回答）或 /temp 0.5（带随机性） | /quit 退出");
+            continue;
+        }
+        if let Some(arg) = input.strip_prefix("/temp") {
+            match arg.trim().parse::<f32>() {
+                Ok(t) if (0.0..=2.5).contains(&t) => {
+                    temp = t;
+                    println!("✅ 采样温度已调整为 T = {:.2}", temp);
+                }
+                _ => println!("⚠️ 用法: /temp <0.0 ~ 2.5>，例如 /temp 0.0 或 /temp 0.4"),
+            }
+            continue;
+        }
+
+        let (mut prompt_ids, oov) = tok.encode_prompt_checked(input);
+        if !oov.is_empty() {
+            let uniq: String = oov.iter().collect();
+            println!(
+                "  [提示: 字符「{}」不在当前字符级词表(V={})中，已跳过]",
+                uniq,
+                tok.vocab_size()
+            );
+        }
+        if prompt_ids.len() >= model.block_size - 1 {
+            // 截断过长问题并保留末尾 <|assistant|>
+            prompt_ids.truncate(model.block_size - 2);
+            prompt_ids.push(ASST_ID);
+        }
+
+        // Phase 1: Prefill（一次性吃掉整句提问并填满 KV Cache）
+        let t_pre = Instant::now();
+        let (mut logits, mut cache) = model.prefill(&prompt_ids);
+        let prefill_ms = t_pre.elapsed().as_secs_f64() * 1000.0;
+
+        // Phase 2: Decode（逐字解码流式打印，遇到 <|eos|> 自动闭嘴）
+        print!("助手 > ");
+        let _ = stdout.flush();
+        let t_dec = Instant::now();
+        let max_gen = model.block_size.saturating_sub(prompt_ids.len());
+        let mut gen_tokens = 0usize;
+        let mut hit_eos = false;
+
+        for _ in 0..max_gen {
+            let next_id = if temp <= 1e-4 {
+                argmax(&logits)
+            } else {
+                sample_from_logits(&logits, temp, &mut rng)
+            };
+            gen_tokens += 1;
+            if next_id == EOS_ID {
+                hit_eos = true;
+                break;
+            }
+            if next_id >= 4 {
+                if let Some(ch) = tok.id_to_token.get(next_id) {
+                    print!("{}", ch);
+                    let _ = stdout.flush();
+                }
+            }
+            if cache.seq_len >= model.block_size {
+                break;
+            }
+            logits = model.decode_step(next_id, &mut cache);
+        }
+        let decode_ms = t_dec.elapsed().as_secs_f64() * 1000.0;
+        println!(
+            "\n  [Prefill {:.2}ms | Decode {:.2}ms ({} tokens) | KV Cache {} 槽位 | hit_eos={}]",
+            prefill_ms, decode_ms, gen_tokens, cache.seq_len, hit_eos
+        );
+    }
+}
+
+// ============================================================================
+// 6. 训练流程与命令行入口（支持 train / chat / train --chat / --model <path>）
+// ============================================================================
+
+fn train_and_save(model_path: &Path) -> (ChatTokenizer, MiniGpt) {
     let poems = load_poems();
     let qa_pairs = load_sft_dataset();
 
@@ -1564,6 +1867,90 @@ fn main() {
         kv_ms,
         naive_ms / kv_ms.max(1e-6)
     );
+
+    // ------------------------------------------------------------------------
+    // 保存模型权重与词表到二进制 Checkpoint，供日后毫秒级加载对话！
+    // ------------------------------------------------------------------------
+    match save_checkpoint(model_path, &tok, &model) {
+        Ok(bytes) => {
+            println!(
+                "\n💾 模型已保存至: {} ({:.1} KB，含词表 V={} + 全部 {} 个 f32 权重)",
+                model_path.display(),
+                bytes as f64 / 1024.0,
+                tok.vocab_size(),
+                model.num_params()
+            );
+            println!("👉 下次无需重新训练，直接运行以下命令即可秒开控制台对话：");
+            println!("   cargo run --release -p step05-sft-chat -- chat");
+        }
+        Err(e) => eprintln!("⚠️ 保存模型失败 {:?}: {}", model_path, e),
+    }
+
+    (tok, model)
+}
+
+fn main() {
+    let args: Vec<String> = env::args().skip(1).collect();
+    let mut mode = "train";
+    let mut chat_after_train = false;
+    let mut model_path = default_checkpoint_path();
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "chat" => mode = "chat",
+            "train" => mode = "train",
+            "--chat" => chat_after_train = true,
+            "--model" => {
+                if i + 1 < args.len() {
+                    model_path = PathBuf::from(&args[i + 1]);
+                    i += 1;
+                } else {
+                    eprintln!("⚠️ --model 需要指定文件路径");
+                    return;
+                }
+            }
+            "-h" | "--help" => {
+                println!("用法:");
+                println!("  cargo run --release -p step05-sft-chat                  # 训练并保存模型到 checkpoints/step05-chat.mgpt");
+                println!("  cargo run --release -p step05-sft-chat -- chat          # 直接加载已保存模型进入控制台交互对话");
+                println!("  cargo run --release -p step05-sft-chat -- train --chat  # 训练保存后直接进入控制台交互对话");
+                println!("  可选参数: --model <path> 指定自定义模型保存/加载路径");
+                return;
+            }
+            other => {
+                eprintln!("⚠️ 未知参数: {}（用 --help 查看用法）", other);
+                return;
+            }
+        }
+        i += 1;
+    }
+
+    if mode == "chat" {
+        let t0 = Instant::now();
+        match load_checkpoint(&model_path) {
+            Ok((tok, model)) => {
+                println!(
+                    "✅ 已加载模型: {}（耗时 {:.2} ms | V={} | {} 参数）",
+                    model_path.display(),
+                    t0.elapsed().as_secs_f64() * 1000.0,
+                    tok.vocab_size(),
+                    model.num_params()
+                );
+                run_chat_repl(&tok, &model);
+            }
+            Err(e) => {
+                eprintln!("❌ 无法加载模型 {}: {}", model_path.display(), e);
+                eprintln!("请先运行一次训练生成模型文件：");
+                eprintln!("  cargo run --release -p step05-sft-chat -- train --chat");
+            }
+        }
+    } else {
+        let (tok, model) = train_and_save(&model_path);
+        if chat_after_train {
+            run_chat_repl(&tok, &model);
+        }
+    }
 }
 
 // ============================================================================
@@ -1695,5 +2082,27 @@ mod tests {
         check("blk0.wq", &g_wq0, |m| &mut m.blocks[0].wq.data, &mut model);
         check("blk1.ffn_w1", &g_ffn, |m| &mut m.blocks[1].ffn_w1.data, &mut model);
         check("w_lm", &g_wlm, |m| &mut m.w_lm.data, &mut model);
+    }
+
+    #[test]
+    fn test_checkpoint_save_and_load_roundtrip() {
+        let mut rng = Rng::new(999);
+        let tok = ChatTokenizer::from_texts(&["床前明月光", "你好！"]);
+        let model = MiniGpt::new(tok.vocab_size(), 16, 8, 2, 2, &mut rng);
+
+        let tmp_path = env::temp_dir().join("learn_ai_step05_ckpt_test.mgpt");
+        let written = save_checkpoint(&tmp_path, &tok, &model).expect("保存 checkpoint 失败");
+        assert!(written > 100);
+
+        let (tok2, model2) = load_checkpoint(&tmp_path).expect("加载 checkpoint 失败");
+        let _ = fs::remove_file(&tmp_path);
+
+        assert_eq!(tok.id_to_token, tok2.id_to_token);
+        assert_eq!(model.num_params(), model2.num_params());
+
+        let prompt = tok.encode_prompt("你好");
+        let (z1, _) = model.prefill(&prompt);
+        let (z2, _) = model2.prefill(&prompt);
+        assert_eq!(z1, z2, "保存并重载后的模型 logits 必须逐位完全一致！");
     }
 }

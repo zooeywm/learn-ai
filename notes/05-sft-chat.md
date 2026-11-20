@@ -116,10 +116,26 @@ cargo run --release -p step05-sft-chat
 
 ---
 
-## 六、单元测试验证（全仓库 14/14 通过）
+## 六、模型保存（二进制 Checkpoint）与控制台流式交互对话
 
-Step 05 与 `mini-core` 新增 4 个核心单测：
+训练好的模型默认以零依赖二进制格式 `MGPT v1` 保存到 `checkpoints/step05-chat.mgpt`（约 **210 KB**，内含超参数 + 完整词表 `V=403` + 全部 `52,947` 个 `f32` 权重），日后调用无需重新训练，也不再依赖原始语料文件，**毫秒级加载即可对话**：
+
+```bash
+# 1) 训练并保存权重到 checkpoints/step05-chat.mgpt
+cargo run --release -p step05-sft-chat
+
+# 2) 直接加载已保存的模型进入控制台流式交互（支持 /temp <T>、/help、/quit）
+cargo run --release -p step05-sft-chat -- chat
+
+# 3) 或者训练保存后立刻进入交互对话
+cargo run --release -p step05-sft-chat -- train --chat
+```
+
+## 七、单元测试验证（全仓库 15/15 通过）
+
+Step 05 与 `mini-core` 新增 5 个核心单测：
 1. `test_load_and_parse_sft_jsonl`（`mini-core`）：校验零依赖 JSONL 解析器（含转义引号/换行）与真实 `data/sft_poems.jsonl` 文件加载；
 2. `test_masked_cross_entropy_ignores_prompt`：篡改 `mask=0` 位置的 target，验证 Loss 与有效位置梯度不变，且被屏蔽位置梯度**严格为 0.0**；
 3. `test_kv_cache_matches_full_forward`：验证 `prefill(seq[..4]) + decode_step(seq[4..])` 每一步的 logits 与完整 `forward` 误差 `< 1e-5`；
-4. `test_sft_masked_gradient_check`：在带 0/1 掩码与 padding 的 2 层 Mini-GPT 上完成有限差分数值梯度检验（相对误差 `< 3e-3`）。
+4. `test_sft_masked_gradient_check`：在带 0/1 掩码与 padding 的 2 层 Mini-GPT 上完成有限差分数值梯度检验（相对误差 `< 3e-3`）；
+5. `test_checkpoint_save_and_load_roundtrip`：验证二进制模型存档保存并重新加载后，词表与 `prefill` 输出 logits **逐位 100% 相等**。
